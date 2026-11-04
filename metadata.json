@@ -1,0 +1,6 @@
+{
+  "name": "Casio fx-570 Scientific Calculator",
+  "description": "Interactive, mobile-first scientific web calculator modeled after the Casio fx-570 EX / ES Plus with natural textbook display, tactile keypads, and swipeable advanced mode drawers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
