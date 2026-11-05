@@ -7,7 +7,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Volume2, VolumeX, Maximize2, Minimize2, 
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Sliders, Vibrate, VibrateOff, Lock, Clock, Power
+  Sliders, Vibrate, VibrateOff, Lock, Clock, Power,
+  Settings, CheckSquare, Undo2, Play, Pause, RotateCcw,
+  Sparkles, ShieldCheck, GraduationCap
 } from 'lucide-react';
 import { 
   AngleMode, DisplayFormat, HistoryItem,
@@ -23,22 +25,54 @@ import {
 import { 
   MathAstState, createInitialAstState,
   insertToken, insertFraction, insertIntegral, insertSqrt,
-  insertPower, insertLogBase, navigateAst, deleteAst,
+  insertPower, insertPostfix, PostfixOp, insertLogBase, navigateAst, deleteAst,
   astToExpression, astToDisplayText, parseStringToAst
 } from './mathAst';
 import { NaturalDisplay } from './components/NaturalDisplay';
 import { AdvancedModesDrawer, ModeTab } from './components/AdvancedModesDrawer';
 import { HistoryModal } from './components/HistoryModal';
 import { ClassWizQrModal } from './components/ClassWizQrModal';
+import { SettingsModal, CalculatorMode } from './components/SettingsModal';
+import { CalibrationModal } from './components/CalibrationModal';
+import { TestHarnessModal } from './components/TestHarnessModal';
 
 export type AspectRatioMode = 'OPPO' | '9:19.5' | 'FIT';
 
 export default function App() {
+  // Operating Mode: 'EXAM' (Default, strict 1:1 clone) vs 'STUDY' (Practice Tools & History)
+  const [calcMode, setCalcMode] = useState<CalculatorMode>(() => {
+    try {
+      const saved = localStorage.getItem('casio_mode');
+      if (saved === 'STUDY' || saved === 'EXAM') return saved;
+    } catch {}
+    return 'EXAM';
+  });
+
+  // Physical card calibration mm scale factor (matches phone to real calculator in mm)
+  const [calibrationScale, setCalibrationScale] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('casio_calibration_scale');
+      if (saved) return parseFloat(saved);
+    } catch {}
+    return 1.0;
+  });
+
   // Calculator Power State (Hardware Standby Simulation)
   const [isPoweredOff, setIsPoweredOff] = useState(false);
 
   // 2D Math AST Template Engine State
   const [astState, setAstState] = useState<MathAstState>(() => createInitialAstState());
+
+  // Multi-level Undo stack (Study Mode)
+  const [undoStack, setUndoStack] = useState<MathAstState[]>([]);
+
+  // Practice drills in Study Mode
+  const [keystrokes, setKeystrokes] = useState<number>(0);
+  const [practiceSeconds, setPracticeSeconds] = useState<number>(0);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
+
+  // Key-Path Trainer message (shows real physical route e.g. "SHIFT → 7 = CONST")
+  const [trainerRoute, setTrainerRoute] = useState<string | null>(null);
 
   // Calculator Output State
   const [result, setResult] = useState('0');
@@ -46,22 +80,43 @@ export default function App() {
   const [isCalculated, setIsCalculated] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Engineering Notation step offset (toggled by ENG and SHIFT+ENG in steps of 3)
+  const [engStep, setEngStep] = useState<number>(0);
+
   // Hardware Indicators & Status Modes
   const [shiftActive, setShiftActive] = useState(false);
   const [alphaActive, setAlphaActive] = useState(false);
   const [angleMode, setAngleMode] = useState<AngleMode>('DEG');
   const [displayFormat, setDisplayFormat] = useState<DisplayFormat>('NORM1');
   const [fixDigits, setFixDigits] = useState(2);
-  const [sciDigits, setSciDigits] = useState(5);
+  const [sciDigits, setSciDigits] = useState(3);
   const [memoryM, setMemoryM] = useState<number>(0);
-  const [lastAns, setLastAns] = useState<number>(0);
+  const [lastAns, setLastAns] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('casio_last_ans');
+      if (saved) return parseFloat(saved);
+    } catch {}
+    return 0;
+  });
   const [isStoreMode, setIsStoreMode] = useState(false);
   const [sdCycleState, setSdCycleState] = useState(0);
 
-  // Variables A, B, C, D, E, F, X, Y, M
-  const [variables, setVariables] = useState<Record<string, number>>({
-    A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, X: 0, Y: 0, M: 0,
+  // Persistent Variables A, B, C, D, E, F, X, Y, M
+  const [variables, setVariables] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('casio_variables');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, X: 0, Y: 0, M: 0,
+    };
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('casio_variables', JSON.stringify(variables));
+    } catch {}
+  }, [variables]);
 
   // History state with localStorage persistence
   const [history, setHistory] = useState<HistoryItem[]>(() => {
@@ -101,6 +156,11 @@ export default function App() {
   }, [history]);
 
   // Modals & Panels
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isCalibrationModalOpen, setIsCalibrationModalOpen] = useState(false);
+  const [isTestHarnessOpen, setIsTestHarnessOpen] = useState(() => {
+    return typeof window !== 'undefined' && window.location.search.includes('test=1');
+  });
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -113,6 +173,43 @@ export default function App() {
   const [hapticOn, setHapticOn] = useState(true);
   const [isPhoneFrame, setIsPhoneFrame] = useState(true);
 
+  // Result scroll container ref and horizontal overflow arrow states
+  const resultContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  const checkResultOverflow = () => {
+    const el = resultContainerRef.current;
+    if (!el) return;
+    if (el.scrollWidth > el.clientWidth) {
+      setShowLeftArrow(el.scrollLeft > 2);
+      setShowRightArrow(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+    } else {
+      setShowLeftArrow(false);
+      setShowRightArrow(false);
+    }
+  };
+
+  useEffect(() => {
+    checkResultOverflow();
+    if (resultContainerRef.current) {
+      resultContainerRef.current.scrollLeft = resultContainerRef.current.scrollWidth;
+    }
+  }, [result]);
+
+  // Practice timer in Study Mode
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (calcMode === 'STUDY' && isTimerRunning) {
+      interval = setInterval(() => {
+        setPracticeSeconds((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [calcMode, isTimerRunning]);
+
   // Swipe Gesture detection
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -123,6 +220,7 @@ export default function App() {
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (calcMode === 'EXAM') return;
     if (touchStartX.current === null || touchStartY.current === null) return;
     const diffX = touchStartX.current - e.changedTouches[0].clientX;
     const diffY = touchStartY.current - e.changedTouches[0].clientY;
@@ -197,6 +295,10 @@ export default function App() {
         handleToken(')');
       } else if (e.key === '^') {
         handlePowerKey();
+      } else if (e.key === '!') {
+        handlePostfixKey('!');
+      } else if (e.key === '%') {
+        handlePostfixKey('%');
       } else if (e.key === 'x' || e.key === 'X') {
         handleToken('x');
       } else if (e.key === 'Enter' || e.key === '=') {
@@ -221,11 +323,38 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [astState, isCalculated, isPoweredOff, shiftActive, alphaActive, lastAns, historyIndex, history]);
 
+  // Push state to undo stack (Study Mode)
+  const pushUndoState = (stateToSave: MathAstState) => {
+    if (calcMode === 'STUDY') {
+      setUndoStack((prev) => [...prev.slice(-25), stateToSave]);
+    }
+  };
+
+  const handleUndo = () => {
+    if (isPoweredOff || undoStack.length === 0) return;
+    playKeyClick('action');
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, -1));
+    setAstState(prev);
+    setIsCalculated(false);
+  };
+
+  // Show Key-Path Trainer route (e.g. "SHIFT → 7 = CONST")
+  const showTrainer = (route: string) => {
+    if (calcMode === 'STUDY') {
+      setTrainerRoute(route);
+      setTimeout(() => setTrainerRoute((cur) => (cur === route ? null : cur)), 3500);
+    }
+  };
+
   // Insert general token
   const handleToken = (tokenVal: string, keyType: HapticKeyType = 'num') => {
     if (isPoweredOff) return;
     playKeyClick(keyType);
+    setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+
+    pushUndoState(astState);
 
     let currentState = astState;
     if (isCalculated) {
@@ -236,6 +365,7 @@ export default function App() {
       }
       setIsCalculated(false);
       setSdCycleState(0);
+      setEngStep(0);
     }
 
     setAstState(insertToken(currentState, tokenVal));
@@ -247,7 +377,9 @@ export default function App() {
   const handleFractionKey = () => {
     if (isPoweredOff) return;
     playKeyClick('func');
+    setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    pushUndoState(astState);
 
     let currentState = astState;
     if (isCalculated) {
@@ -264,7 +396,9 @@ export default function App() {
   const handleIntegralKey = () => {
     if (isPoweredOff) return;
     playKeyClick('func');
+    setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    pushUndoState(astState);
 
     let currentState = astState;
     if (isCalculated) {
@@ -281,7 +415,9 @@ export default function App() {
   const handleSqrtKey = () => {
     if (isPoweredOff) return;
     playKeyClick('func');
+    setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    pushUndoState(astState);
 
     let currentState = astState;
     if (isCalculated) {
@@ -298,7 +434,9 @@ export default function App() {
   const handlePowerKey = () => {
     if (isPoweredOff) return;
     playKeyClick('func');
+    setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    pushUndoState(astState);
 
     let currentState = astState;
     if (isCalculated) {
@@ -311,11 +449,32 @@ export default function App() {
     if (alphaActive) setAlphaActive(false);
   };
 
+  // Rule 1: Postfix Operators (x², x³, x⁻¹, x!, °, %)
+  const handlePostfixKey = (op: PostfixOp) => {
+    if (isPoweredOff) return;
+    playKeyClick('func');
+    setKeystrokes((k) => k + 1);
+    if (errorMessage) setErrorMessage(null);
+    pushUndoState(astState);
+
+    let currentState = astState;
+    if (isCalculated) {
+      currentState = parseStringToAst('Ans');
+      setIsCalculated(false);
+    }
+
+    setAstState(insertPostfix(currentState, op));
+    if (shiftActive) setShiftActive(false);
+    if (alphaActive) setAlphaActive(false);
+  };
+
   // Natural Display: Logarithm with Custom Base Key (log□■)
   const handleLogBaseKey = () => {
     if (isPoweredOff) return;
     playKeyClick('func');
+    setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    pushUndoState(astState);
 
     let currentState = astState;
     if (isCalculated) {
@@ -326,6 +485,53 @@ export default function App() {
     setAstState(insertLogBase(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
+  };
+
+  // DMS Key Handler (° ' "):
+  // Successive presses type °, then ', then "
+  // If pressed immediately after calculation, converts to d°m's" form, then back to decimal
+  const handleDmsKey = () => {
+    if (isPoweredOff) return;
+    playKeyClick('func');
+    setKeystrokes((k) => k + 1);
+
+    if (isCalculated) {
+      const isCurrentlyDms = result.includes('°');
+      if (isCurrentlyDms) {
+        setResult(formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, engStep));
+      } else {
+        setResult(decimalToDms(rawNumericVal));
+      }
+      return;
+    }
+
+    pushUndoState(astState);
+    const currentExpr = astToDisplayText(astState.root);
+    const lastOp = Math.max(
+      currentExpr.lastIndexOf('+'),
+      currentExpr.lastIndexOf('-'),
+      currentExpr.lastIndexOf('×'),
+      currentExpr.lastIndexOf('÷'),
+      currentExpr.lastIndexOf('(')
+    );
+    const currentChunk = lastOp >= 0 ? currentExpr.slice(lastOp + 1) : currentExpr;
+
+    let nextSymbol = '°';
+    if (!currentChunk.includes('°')) {
+      nextSymbol = '°';
+    } else if (!currentChunk.includes('\'')) {
+      nextSymbol = '\'';
+    } else if (!currentChunk.includes('"')) {
+      nextSymbol = '"';
+    } else {
+      nextSymbol = '°';
+    }
+
+    if (nextSymbol === '°') {
+      handlePostfixKey('°');
+    } else {
+      handleToken(nextSymbol);
+    }
   };
 
   // D-Pad Navigation Engine
@@ -376,10 +582,12 @@ export default function App() {
   const handleDelete = () => {
     if (isPoweredOff) return;
     playKeyClick('action');
+    setKeystrokes((k) => k + 1);
     if (errorMessage) {
       setErrorMessage(null);
       return;
     }
+    pushUndoState(astState);
     setAstState((prev) => deleteAst(prev));
     setIsCalculated(false);
   };
@@ -388,6 +596,8 @@ export default function App() {
   const handleAllClear = () => {
     if (isPoweredOff) return;
     playKeyClick('action');
+    setKeystrokes((k) => k + 1);
+    pushUndoState(astState);
     setAstState(createInitialAstState());
     setResult('0');
     setErrorMessage(null);
@@ -419,6 +629,7 @@ export default function App() {
   // Power OFF (Shift + AC)
   const handlePowerOff = () => {
     playKeyClick('action');
+    showTrainer('SHIFT → AC = OFF');
     setIsPoweredOff(true);
     setShiftActive(false);
     setAlphaActive(false);
@@ -445,6 +656,7 @@ export default function App() {
   const handleEqual = () => {
     if (isPoweredOff) return;
     playKeyClick('equal');
+    setKeystrokes((k) => k + 1);
     const exprStr = astToExpression(astState.root);
     if (!exprStr.trim()) return;
 
@@ -460,9 +672,13 @@ export default function App() {
     setLastAns(num);
     setIsCalculated(true);
     setSdCycleState(0);
+    setEngStep(0);
 
-    const formatted = formatResult(num, displayFormat, fixDigits, sciDigits);
-    setResult(formatted);
+    try {
+      localStorage.setItem('casio_last_ans', num.toString());
+    } catch {}
+
+    const formatted = formatResult(num, displayFormat, fixDigits, sciDigits, 0);
 
     // Compute standard fraction / exact surd representation
     let exactForm: string | undefined = undefined;
@@ -480,7 +696,7 @@ export default function App() {
     const historyItem: HistoryItem = {
       id: Date.now().toString(),
       expression: astToDisplayText(astState.root) || exprStr,
-      result: formatted,
+      result: exactForm || formatted,
       exactResult: exactForm,
       numericVal: num,
       timestamp: Date.now(),
@@ -491,6 +707,8 @@ export default function App() {
     if (exactForm) {
       setResult(exactForm);
       setSdCycleState(1);
+    } else {
+      setResult(formatted);
     }
   };
 
@@ -498,6 +716,7 @@ export default function App() {
   const handleSolve = () => {
     if (isPoweredOff) return;
     playKeyClick('action');
+    showTrainer('SHIFT → CALC = SOLVE');
     const exprStr = astToExpression(astState.root);
     if (!exprStr.trim()) return;
 
@@ -533,39 +752,43 @@ export default function App() {
   const handleSdToggle = () => {
     if (isPoweredOff) return;
     playKeyClick('sd');
+    setKeystrokes((k) => k + 1);
     if (!isCalculated && rawNumericVal === 0) return;
 
     const num = rawNumericVal;
-    const nextState = (sdCycleState + 1) % 4;
+    const nextState = (sdCycleState + 1) % 3;
     setSdCycleState(nextState);
 
     if (nextState === 0) {
-      setResult(formatResult(num, displayFormat, fixDigits, sciDigits));
-    } else if (nextState === 1) {
       const surd = recognizeExactSurd(num);
       if (surd) {
         setResult(surd);
-      } else {
-        const frac = toFraction(num);
-        setResult(frac && frac.den > 1 ? `${frac.num}/${frac.den}` : formatResult(num, displayFormat));
+        return;
       }
-    } else if (nextState === 2) {
+      const frac = toFraction(num);
+      if (frac && frac.den > 1 && frac.den <= 1000) {
+        setResult(`${frac.num}/${frac.den}`);
+        return;
+      }
+      setResult(formatResult(num, displayFormat, fixDigits, sciDigits, engStep));
+    } else if (nextState === 1) {
+      setResult(formatResult(num, displayFormat, fixDigits, sciDigits, engStep));
+    } else {
       const frac = toFraction(num);
       if (frac && frac.den > 1 && Math.abs(frac.num) > frac.den) {
         const whole = Math.floor(Math.abs(frac.num) / frac.den) * (frac.num < 0 ? -1 : 1);
         const rem = Math.abs(frac.num) % frac.den;
         setResult(`${whole} ${rem}/${frac.den}`);
       } else {
-        setResult(toEngineering(num));
+        setResult(formatResult(num, displayFormat, fixDigits, sciDigits, engStep));
       }
-    } else {
-      setResult(toEngineering(num));
     }
   };
 
   const handleMemoryAdd = () => {
     if (isPoweredOff) return;
     playKeyClick('action');
+    setKeystrokes((k) => k + 1);
     if (isCalculated) {
       setMemoryM((prev) => prev + rawNumericVal);
     } else {
@@ -576,6 +799,8 @@ export default function App() {
   const handleMemorySub = () => {
     if (isPoweredOff) return;
     playKeyClick('action');
+    showTrainer('SHIFT → M+ = M-');
+    setKeystrokes((k) => k + 1);
     if (isCalculated) {
       setMemoryM((prev) => prev - rawNumericVal);
     } else {
@@ -583,11 +808,14 @@ export default function App() {
     }
   };
 
-  const handleEng = () => {
+  const handleEng = (delta: number) => {
     if (isPoweredOff) return;
     playKeyClick('func');
+    setKeystrokes((k) => k + 1);
     if (isCalculated) {
-      setResult(toEngineering(rawNumericVal));
+      const nextStep = engStep + delta;
+      setEngStep(nextStep);
+      setResult(formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, nextStep));
     }
   };
 
@@ -618,81 +846,72 @@ export default function App() {
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full bg-[#08080A] flex flex-col items-center justify-between text-slate-100 selection:bg-amber-400/20 overflow-hidden pt-[env(safe-area-inset-top,0)]">
       
-      {/* Top Utility Controls Bar: Deducted cleanly so it never collides with anything */}
-      <header className="w-full max-w-[430px] h-8 px-2.5 flex items-center justify-between text-xs text-slate-400 shrink-0 select-none z-10 border-b border-slate-900/40">
-        <div className="flex items-center gap-1.5">
-          <span className="font-mono font-bold tracking-tight text-slate-100 text-xs">CASIO</span>
-          <span className="text-[10px] text-[#E6007E] font-mono font-bold">CLASSWIZ</span>
+      {/* Top Controls Bar: ONLY rendered in Study Mode. In Exam Mode, strict 1:1 hardware faceplate with no software bars */}
+      {calcMode === 'STUDY' ? (
+        <header className="w-full max-w-[430px] h-8 px-2.5 flex items-center justify-between text-xs text-slate-400 shrink-0 select-none z-10 border-b border-purple-900/40 bg-[#0E0E14]">
+          <div className="flex items-center gap-1.5">
+            <span className="px-1.5 py-0.5 rounded bg-purple-950/80 border border-purple-600/50 text-[10px] font-mono text-purple-300 font-bold flex items-center gap-1">
+              <GraduationCap className="w-3 h-3 text-purple-400" />
+              <span>STUDY</span>
+            </span>
 
-          {/* Aspect Ratio Mode Lock Indicator */}
-          <button
-            onClick={cycleAspectMode}
-            title={`OPPO Find X9 Pro Ratio Lock: ${aspectMode}. Tap to toggle.`}
-            className="px-2 py-0.5 rounded bg-slate-800/90 hover:bg-slate-700 text-[10px] font-mono text-[#E5A93C] border border-slate-700/60 flex items-center gap-1 transition-colors active:scale-95 ml-1"
-          >
-            <Lock className="w-2.5 h-2.5 text-[#E5A93C]" />
-            <span>{aspectMode === 'OPPO' ? 'OPPO 19.8:9' : aspectMode}</span>
-          </button>
-        </div>
+            {/* Drill Timer */}
+            <div className="flex items-center gap-1 text-[10px] font-mono text-slate-300 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+              <Clock className="w-2.5 h-2.5 text-amber-400" />
+              <span>
+                {String(Math.floor(practiceSeconds / 60)).padStart(2, '0')}:
+                {String(practiceSeconds % 60).padStart(2, '0')}
+              </span>
+            </div>
 
-        <div className="flex items-center gap-1.5">
-          {/* History Log Direct Button */}
-          <button
-            onClick={() => {
-              playKeyClick('action');
-              setIsHistoryModalOpen(true);
-            }}
-            title="Open Calculation History Log"
-            className="px-2 py-0.5 rounded bg-[#1A1A24] hover:bg-slate-700 text-[10px] font-mono text-amber-300 border border-amber-400/30 flex items-center gap-1 transition-colors active:scale-95"
-          >
-            <Clock className="w-3 h-3 text-[#E5A93C]" />
-            <span>Tape ({history.length})</span>
-          </button>
+            {/* Keystrokes Counter */}
+            <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
+              {keystrokes} keys
+            </span>
+          </div>
 
-          {/* Sound Toggle */}
-          <button
-            onClick={toggleSound}
-            title={soundOn ? 'Key Audio Clicks: ON' : 'Key Audio Clicks: MUTED'}
-            className="p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
-          >
-            {soundOn ? <Volume2 className="w-3.5 h-3.5 text-[#E5A93C]" /> : <VolumeX className="w-3.5 h-3.5 text-slate-500" />}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {/* Multi-Level Undo Button */}
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              title="Undo Last Action"
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 transition-colors ${
+                undoStack.length > 0
+                  ? 'bg-slate-800 hover:bg-slate-700 text-pink-300 border border-pink-500/30'
+                  : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
+              }`}
+            >
+              <Undo2 className="w-3 h-3 text-pink-400" />
+              <span>Undo</span>
+            </button>
 
-          {/* Haptic Vibration Toggle */}
-          <button
-            onClick={toggleHaptic}
-            title={hapticOn ? 'Haptic Vibration: ON' : 'Haptic Vibration: OFF'}
-            className="p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
-          >
-            {hapticOn ? <Vibrate className="w-3.5 h-3.5 text-[#E5A93C]" /> : <VibrateOff className="w-3.5 h-3.5 text-slate-500" />}
-          </button>
+            {/* History Tape Button */}
+            <button
+              onClick={() => {
+                playKeyClick('action');
+                setIsHistoryModalOpen(true);
+              }}
+              title="Open Calculation Tape"
+              className="px-1.5 py-0.5 rounded bg-[#1A1A24] hover:bg-slate-700 text-[10px] font-mono text-amber-300 border border-amber-400/30 flex items-center gap-1 transition-colors active:scale-95"
+            >
+              <span>Tape ({history.length})</span>
+            </button>
 
-          {/* Advanced Drawer Button */}
-          <button
-            onClick={() => {
-              playKeyClick('action');
-              setIsDrawerOpen(true);
-            }}
-            title="Open Advanced Modes Drawer (Statistics, Matrix, Vector)"
-            className="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-[10px] font-mono text-slate-300 flex items-center gap-1 transition-colors"
-          >
-            <Sliders className="w-3 h-3 text-cyan-400" />
-            <span>FX</span>
-          </button>
-
-          {/* Device Frame Viewport Toggle */}
-          <button
-            onClick={() => {
-              playKeyClick('action');
-              setIsPhoneFrame(!isPhoneFrame);
-            }}
-            title={isPhoneFrame ? 'Full Height View' : 'Device Bezel View'}
-            className="hidden sm:flex p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-          >
-            {isPhoneFrame ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-      </header>
+            {/* Settings Gear Modal Button */}
+            <button
+              onClick={() => {
+                playKeyClick('action');
+                setIsSettingsModalOpen(true);
+              }}
+              title="Open Settings & Mode Menu"
+              className="p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5 text-[#E5A93C]" />
+            </button>
+          </div>
+        </header>
+      ) : null}
 
       {/* Main Flagship Smartphone / Calculator Chassis constrained to OPPO Find X9 Pro Aspect Ratio */}
       <main 
@@ -700,7 +919,9 @@ export default function App() {
         onTouchEnd={handleTouchEnd}
         style={{
           aspectRatio: aspectMode === 'OPPO' ? '9 / 19.8' : aspectMode === '9:19.5' ? '9 / 19.5' : undefined,
-          maxHeight: 'calc(100dvh - 36px)',
+          maxHeight: calcMode === 'EXAM' ? '100dvh' : 'calc(100dvh - 36px)',
+          transform: calibrationScale !== 1.0 ? `scale(${calibrationScale})` : undefined,
+          transformOrigin: 'top center',
         }}
         className={`h-full w-auto max-w-full flex flex-col justify-between bg-[#0E0E12] border border-slate-800/90 shadow-2xl overflow-hidden select-none transition-all duration-150 relative ${
           isPhoneFrame 
@@ -712,19 +933,44 @@ export default function App() {
         <div className="absolute inset-y-12 -left-[3px] w-[3px] bg-slate-300/40 rounded-l-full pointer-events-none"></div>
         <div className="absolute inset-y-12 -right-[3px] w-[3px] bg-slate-300/40 rounded-r-full pointer-events-none"></div>
 
-        {/* 1. Casio Brand & Authentic CLASSWIZ Header */}
-        <div className="shrink-0 pt-2 pb-1 px-4 flex items-center justify-between bg-[#121217] border-b border-slate-900/60">
-          <span className="font-extrabold text-sm tracking-widest text-slate-100 font-mono">
-            CASIO
-          </span>
+        {/* Key-Path Trainer Floating Pill (Study Mode) */}
+        {calcMode === 'STUDY' && trainerRoute && (
+          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-mono font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+            <Sparkles className="w-3 h-3 text-slate-950" />
+            <span>Path: {trainerRoute}</span>
+          </div>
+        )}
 
-          <span className="font-black text-xs sm:text-sm tracking-wider font-mono text-[#E6007E] drop-shadow-sm">
-            CLASSWIZ
-          </span>
+        {/* 1. Casio Authentic Faceplate Header: CASIO top-left, fx-570EX top-right, CLASSWIZ centered below */}
+        <div className="shrink-0 pt-2 pb-1.5 px-4 flex flex-col bg-[#121217] border-b border-slate-900/60 select-none">
+          <div className="flex items-center justify-between">
+            <span className="font-extrabold text-sm sm:text-base tracking-widest text-slate-100 font-mono">
+              CASIO
+            </span>
 
-          <span className="font-mono text-xs font-bold text-slate-200 tracking-wider">
-            fx-570EX
-          </span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-xs sm:text-sm font-bold text-slate-200 tracking-wider">
+                fx-570EX
+              </span>
+              {/* Subtle Settings Gear Button for Mode Switching & Calibration */}
+              <button
+                onClick={() => {
+                  playKeyClick('action');
+                  setIsSettingsModalOpen(true);
+                }}
+                title="ClassWiz Settings & Mode Switch"
+                className="p-1 rounded-md hover:bg-slate-800 text-slate-500 hover:text-[#E5A93C] transition-colors ml-0.5 active:scale-90"
+              >
+                <Settings className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-center -mt-0.5">
+            <span className="font-black text-xs sm:text-sm tracking-[0.25em] font-mono text-[#E6007E] drop-shadow-[0_0_6px_rgba(230,0,126,0.3)]">
+              CLASSWIZ
+            </span>
+          </div>
         </div>
 
         {/* 2. DUAL-LINE DOT-MATRIX OLED DISPLAY SCREEN (2D Math AST Natural Display) */}
@@ -760,18 +1006,20 @@ export default function App() {
                     M
                   </span>
 
-                  {/* History Tape Quick Indicator */}
-                  <button
-                    onClick={() => {
-                      playKeyClick('action');
-                      setIsHistoryModalOpen(true);
-                    }}
-                    title="View History Tape"
-                    className="px-1 rounded text-[9px] font-mono text-[#E5A93C] hover:bg-slate-800 transition-colors flex items-center gap-0.5"
-                  >
-                    <span>HIST</span>
-                    <span className="text-[8px] bg-slate-800 px-1 rounded text-[#E5A93C]">{history.length}</span>
-                  </button>
+                  {/* History Tape Quick Indicator: Study Mode only */}
+                  {calcMode === 'STUDY' && (
+                    <button
+                      onClick={() => {
+                        playKeyClick('action');
+                        setIsHistoryModalOpen(true);
+                      }}
+                      title="View History Tape"
+                      className="px-1 rounded text-[9px] font-mono text-[#E5A93C] hover:bg-slate-800 transition-colors flex items-center gap-0.5"
+                    >
+                      <span>HIST</span>
+                      <span className="text-[8px] bg-slate-800 px-1 rounded text-[#E5A93C]">{history.length}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1.5">
@@ -797,7 +1045,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Upper Line: 2D Math Box AST Natural Display */}
+              {/* Upper Line: 2D Math Box AST Natural Display (Left-aligned input) */}
               <NaturalDisplay
                 nodes={astState.root}
                 cursor={astState.cursor}
@@ -811,26 +1059,51 @@ export default function App() {
                 }}
               />
 
-              {/* Lower Line: Live/Final Output with dot matrix font */}
-              <div className="flex items-end justify-between pt-0.5 border-t border-emerald-950/40">
-                {errorMessage ? (
-                  <span className="text-xs font-mono text-red-400 font-semibold tracking-wide animate-pulse">
-                    [{errorMessage}]
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-mono text-slate-500">
-                    {isCalculated && (
-                      <span>
-                        Ans = {lastAns}
-                      </span>
-                    )}
-                  </span>
-                )}
+              {/* Lower Line: Right-aligned result with horizontal scroll and ◄ ► overflow indicators */}
+              <div className="flex items-end justify-between pt-0.5 border-t border-emerald-950/40 relative min-h-[30px] overflow-hidden">
+                {/* Left Status: Previous Ans in Study Mode */}
+                <div className="shrink-0 text-[9px] font-mono text-slate-500 pr-1 select-none">
+                  {calcMode === 'STUDY' && isCalculated && !errorMessage && (
+                    <span>Ans = {lastAns}</span>
+                  )}
+                </div>
 
-                <div className="text-right">
-                  <span className="text-xl sm:text-2xl font-mono font-bold text-slate-100 tracking-tight lcd-dot-text">
-                    {result}
-                  </span>
+                {/* Right-aligned Result Container */}
+                <div className="flex-1 min-w-0 flex items-center justify-end">
+                  {errorMessage ? (
+                    <div className="text-right">
+                      <span className="text-xs sm:text-sm font-mono text-red-400 font-bold tracking-wide animate-pulse">
+                        [{errorMessage}]
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="relative flex items-center justify-end max-w-full">
+                      {/* Left scroll overflow arrow */}
+                      {showLeftArrow && (
+                        <span className="text-[10px] font-bold text-emerald-400 mr-1 select-none animate-pulse shrink-0">
+                          ◄
+                        </span>
+                      )}
+
+                      {/* Scrollable Result Text */}
+                      <div
+                        ref={resultContainerRef}
+                        onScroll={checkResultOverflow}
+                        className="overflow-x-auto no-scrollbar whitespace-nowrap text-right max-w-full px-0.5 scroll-smooth"
+                      >
+                        <span className="text-xl sm:text-2xl font-mono font-bold text-slate-100 tracking-tight lcd-dot-text select-text">
+                          {result}
+                        </span>
+                      </div>
+
+                      {/* Right scroll overflow arrow */}
+                      {showRightArrow && (
+                        <span className="text-[10px] font-bold text-emerald-400 ml-1 select-none animate-pulse shrink-0">
+                          ►
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </>
@@ -884,22 +1157,24 @@ export default function App() {
           </div>
         )}
 
-        {/* Swipe Affordance Bar */}
-        <div 
-          onClick={() => {
-            playKeyClick('action');
-            setIsDrawerOpen(true);
-          }}
-          className="shrink-0 mx-2.5 sm:mx-3 mb-0.5 px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-800/80 flex items-center justify-between text-[9px] font-mono text-slate-400 cursor-pointer hover:bg-slate-800/80 transition-colors"
-        >
-          <span className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E5A93C]"></span>
-            <span>Modes: Stat · Matrix · Vector · Eqn</span>
-          </span>
-          <span className="text-[#E5A93C] font-bold flex items-center gap-0.5">
-            Swipe ◄ or Tap
-          </span>
-        </div>
+        {/* Swipe Affordance Bar: Only rendered in Study Mode */}
+        {calcMode === 'STUDY' && (
+          <div 
+            onClick={() => {
+              playKeyClick('action');
+              setIsDrawerOpen(true);
+            }}
+            className="shrink-0 mx-2.5 sm:mx-3 mb-0.5 px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-800/80 flex items-center justify-between text-[9px] font-mono text-slate-400 cursor-pointer hover:bg-slate-800/80 transition-colors"
+          >
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E5A93C]"></span>
+              <span>Modes: Stat · Matrix · Vector · Eqn</span>
+            </span>
+            <span className="text-[#E5A93C] font-bold flex items-center gap-0.5">
+              Swipe ◄ or Tap
+            </span>
+          </div>
+        )}
 
         {/* 3. KEYPAD SECTION (Authentic Physical fx-570EX Key Matrix & Dual Secondary Label System) */}
         <div className="flex-1 min-h-0 px-2 sm:px-3 pb-1 pt-0.5 flex flex-col justify-between gap-1 bg-[#121217]">
@@ -971,12 +1246,8 @@ export default function App() {
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
-                {/* Center REPLAY Label */}
-                <div className="w-5 h-3.5 rounded bg-slate-900 border border-slate-600 flex items-center justify-center pointer-events-none">
-                  <span className="text-[6.5px] font-mono text-slate-300 font-bold tracking-tighter">
-                    REP
-                  </span>
-                </div>
+                {/* Center Pivot: Authentic metallic concave pivot (NO center label) */}
+                <div className="w-4 h-4 rounded-full bg-gradient-to-b from-[#1C1C24] to-[#0D0D12] border border-slate-600/70 shadow-inner pointer-events-none"></div>
               </div>
             </div>
 
@@ -1130,7 +1401,7 @@ export default function App() {
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#00E5FF]">DEC</span>
               </div>
               <button
-                onClick={() => handleSmartKey(() => handleToken('²'), () => handleToken('³'))}
+                onClick={() => handleSmartKey(() => handlePostfixKey('²'), () => handlePostfixKey('³'))}
                 className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold text-[clamp(9.5px,1.35vh,11.5px)]"
               >
                 x²
@@ -1207,13 +1478,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => {
-                    if (isCalculated) {
-                      setResult(decimalToDms(rawNumericVal));
-                    } else {
-                      handleToken('°');
-                    }
-                  },
+                  () => handleDmsKey(),
                   () => {
                     if (rawNumericVal > 0) {
                       setResult(primeFactorization(rawNumericVal));
@@ -1235,8 +1500,8 @@ export default function App() {
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleToken('⁻¹'),
-                  () => handleToken('!'),
+                  () => handlePostfixKey('⁻¹'),
+                  () => handlePostfixKey('!'),
                   () => handleToken('C')
                 )}
                 className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] font-bold"
@@ -1331,9 +1596,9 @@ export default function App() {
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleEng(),
-                  () => handleToken('i'),
-                  () => handleToken('∠')
+                  () => handleEng(-1),
+                  () => handleEng(1),
+                  () => handleToken('i')
                 )}
                 className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
               >
@@ -1582,7 +1847,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleToken('÷', 'func'),
+                  () => handleFractionKey(),
                   () => handleToken(' C ')
                 )}
                 className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(15px,2.5vh,20px)] font-bold flex items-center justify-center"
@@ -1742,7 +2007,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('Ans'),
-                  () => handleToken('%')
+                  () => handlePostfixKey('%')
                 )}
                 className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(11px,1.7vh,13px)] font-black flex items-center justify-center"
               >
@@ -1819,6 +2084,63 @@ export default function App() {
           setIsCalculated(true);
         }}
         onClearHistory={() => setHistory([])}
+      />
+
+      {/* SETTINGS & OPERATING MODE SELECTION MODAL */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        calcMode={calcMode}
+        onSetCalcMode={(mode) => {
+          setCalcMode(mode);
+          localStorage.setItem('casio_mode', mode);
+        }}
+        onOpenCalibration={() => setIsCalibrationModalOpen(true)}
+        onOpenTestHarness={() => setIsTestHarnessOpen(true)}
+        soundOn={soundOn}
+        onToggleSound={toggleSound}
+        hapticOn={hapticOn}
+        onToggleHaptic={toggleHaptic}
+        angleMode={angleMode}
+        onSetAngleMode={(mode) => setAngleMode(mode)}
+        displayFormat={displayFormat}
+        onSetDisplayFormat={(fmt) => {
+          setDisplayFormat(fmt);
+          if (isCalculated) {
+            setResult(formatResult(rawNumericVal, fmt, fixDigits, sciDigits, engStep));
+          }
+        }}
+        onResetCalculator={() => {
+          localStorage.clear();
+          handleAllClear();
+          setVariables({ A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, X: 0, Y: 0, M: 0 });
+          setMemoryM(0);
+          setLastAns(0);
+          setCalcMode('EXAM');
+          setCalibrationScale(1.0);
+          setIsSettingsModalOpen(false);
+        }}
+      />
+
+      {/* ISO CARD CALIBRATION MODAL (1:1 MM SCALE) */}
+      <CalibrationModal
+        isOpen={isCalibrationModalOpen}
+        onClose={() => setIsCalibrationModalOpen(false)}
+        scale={calibrationScale}
+        onScaleChange={(scale) => {
+          setCalibrationScale(scale);
+          localStorage.setItem('casio_calibration_scale', scale.toString());
+        }}
+        onReset={() => {
+          setCalibrationScale(1.0);
+          localStorage.setItem('casio_calibration_scale', '1.0');
+        }}
+      />
+
+      {/* TEST SUITE HARNESS MODAL (?test=1) */}
+      <TestHarnessModal
+        isOpen={isTestHarnessOpen}
+        onClose={() => setIsTestHarnessOpen(false)}
       />
     </div>
   );

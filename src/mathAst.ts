@@ -1,16 +1,19 @@
 /**
  * Casio fx-570EX 2D Math AST Template System
  * Implements Natural-V.P.A.M. 2D templates for Fractions, Definite Integrals,
- * Radicals (Square Root), Logarithms with Custom Base, and Powers with dynamic
- * placeholders and D-Pad navigation.
+ * Radicals (Square Root), Logarithms with Custom Base, Powers, and Postfix operators
+ * with dynamic placeholders, operand wrapping rules, and D-Pad navigation.
  */
+
+export type PostfixOp = '²' | '³' | '⁻¹' | '!' | '°' | '%';
 
 export type MathNode =
   | { type: 'token'; id: string; val: string }
   | { type: 'frac'; id: string; num: MathNode[]; den: MathNode[] }
   | { type: 'int'; id: string; integrand: MathNode[]; lower: MathNode[]; upper: MathNode[] }
   | { type: 'sqrt'; id: string; content: MathNode[] }
-  | { type: 'power'; id: string; exp: MathNode[] }
+  | { type: 'power'; id: string; base: MathNode[]; exp: MathNode[] }
+  | { type: 'postfix'; id: string; op: PostfixOp; target: MathNode[] }
   | { type: 'logBase'; id: string; base: MathNode[]; arg: MathNode[] };
 
 export interface CursorPosition {
@@ -61,8 +64,13 @@ export function getSlotNodes(root: MathNode[], slotId: string): MathNode[] | nul
       const sub = getSlotNodes(node.content, slotId);
       if (sub) return sub;
     } else if (node.type === 'power') {
+      if (`${node.id}_base` === slotId) return node.base;
       if (`${node.id}_exp` === slotId) return node.exp;
-      const sub = getSlotNodes(node.exp, slotId);
+      const sub = getSlotNodes(node.base, slotId) || getSlotNodes(node.exp, slotId);
+      if (sub) return sub;
+    } else if (node.type === 'postfix') {
+      if (`${node.id}_target` === slotId) return node.target;
+      const sub = getSlotNodes(node.target, slotId);
       if (sub) return sub;
     } else if (node.type === 'logBase') {
       if (`${node.id}_base` === slotId) return node.base;
@@ -119,10 +127,18 @@ export function findSlotParentInfo(
       const deeper = findSlotParentInfo(root, targetSlotId, `${node.id}_content`);
       if (deeper) return deeper;
     } else if (node.type === 'power') {
-      if (`${node.id}_exp` === targetSlotId) {
+      if (`${node.id}_base` === targetSlotId || `${node.id}_exp` === targetSlotId) {
         return { parentNode: node, parentSlotId, parentIndex: i };
       }
-      const deeper = findSlotParentInfo(root, targetSlotId, `${node.id}_exp`);
+      const deeper =
+        findSlotParentInfo(root, targetSlotId, `${node.id}_base`) ||
+        findSlotParentInfo(root, targetSlotId, `${node.id}_exp`);
+      if (deeper) return deeper;
+    } else if (node.type === 'postfix') {
+      if (`${node.id}_target` === targetSlotId) {
+        return { parentNode: node, parentSlotId, parentIndex: i };
+      }
+      const deeper = findSlotParentInfo(root, targetSlotId, `${node.id}_target`);
       if (deeper) return deeper;
     } else if (node.type === 'logBase') {
       if (`${node.id}_base` === targetSlotId || `${node.id}_arg` === targetSlotId) {
@@ -140,6 +156,105 @@ export function findSlotParentInfo(
 // Deep clone AST
 export function cloneAst(root: MathNode[]): MathNode[] {
   return JSON.parse(JSON.stringify(root));
+}
+
+export interface ExtractedOperand {
+  startIndex: number;
+  endIndex: number;
+  nodes: MathNode[];
+  hasImpliedMult: boolean;
+}
+
+/**
+ * Extract the previous operand before current cursor:
+ * 3a. Walks back over all postfix wrappers (x², x³, x⁻¹, x!, °, %, and completed power nodes).
+ * 3b. Takes the primary beneath them: a number (whole, including decimal), a bracket group,
+ *     a function call with its argument (sin(30)), a root, or a fraction.
+ * 3e. Identifies implied multiplication before the operand: e.g. (6)2 -> implied mult before 2.
+ */
+export function extractPreviousOperand(
+  slotNodes: MathNode[],
+  offset: number
+): ExtractedOperand | null {
+  if (offset <= 0 || slotNodes.length === 0) return null;
+
+  const endIndex = Math.min(offset - 1, slotNodes.length - 1);
+  const lastNode = slotNodes[endIndex];
+
+  let startIndex = endIndex;
+  let hasImpliedMult = false;
+
+  // Case 1: Structured non-token node (postfix, power, frac, sqrt, int, logBase)
+  if (lastNode.type !== 'token') {
+    startIndex = endIndex;
+  }
+  // Case 2: Closing parenthesis ')'
+  else if (lastNode.val === ')') {
+    let depth = 0;
+    let foundStart = -1;
+    for (let i = endIndex; i >= 0; i--) {
+      const node = slotNodes[i];
+      if (node.type === 'token') {
+        if (node.val === ')') {
+          depth++;
+        } else if (node.val === '(' || node.val.endsWith('(')) {
+          depth--;
+          if (depth === 0) {
+            foundStart = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (foundStart !== -1) {
+      startIndex = foundStart;
+      // Check if preceding token is a function name like 'sin', 'cos', 'tan', etc.
+      if (startIndex > 0 && slotNodes[startIndex - 1].type === 'token') {
+        const prevVal = (slotNodes[startIndex - 1] as { type: 'token'; val: string }).val;
+        if (/^(sin|cos|tan|sin⁻¹|cos⁻¹|tan⁻¹|ln|log|sinh|cosh|tanh|Abs|Pol|Rec|d\/dx)$/.test(prevVal)) {
+          startIndex--;
+        }
+      }
+    } else {
+      startIndex = endIndex;
+    }
+  }
+  // Case 3: Number sequence (digits and decimal point)
+  else if (/^[0-9.]$/.test(lastNode.val)) {
+    let i = endIndex;
+    while (i >= 0 && slotNodes[i].type === 'token' && /^[0-9.]$/.test((slotNodes[i] as { type: 'token'; val: string }).val)) {
+      i--;
+    }
+    startIndex = i + 1;
+  }
+  // Case 4: Identifier, variable or constant (x, A, B, C, D, E, F, X, Y, M, π, e, Ans)
+  else if (/^[a-zA-Zπe]|Ans$/.test(lastNode.val)) {
+    startIndex = endIndex;
+  }
+  // Case 5: Single operator or unknown token
+  else {
+    startIndex = endIndex;
+  }
+
+  // Check if there was implied multiplication immediately preceding startIndex:
+  // e.g. (6)2 -> startIndex is at '2', preceding node is ')'!
+  // or 2(3) -> startIndex is at '(', preceding node is '2'!
+  // or (6)(2) -> startIndex is at second '(', preceding node is ')'!
+  if (startIndex > 0) {
+    const prevNode = slotNodes[startIndex - 1];
+    if (prevNode.type !== 'token') {
+      hasImpliedMult = true;
+    } else {
+      const pv = prevNode.val;
+      if (pv === ')' || /^[0-9.a-zA-Zπe]|Ans$/.test(pv)) {
+        hasImpliedMult = true;
+      }
+    }
+  }
+
+  const nodes = slotNodes.slice(startIndex, endIndex + 1);
+  return { startIndex, endIndex, nodes, hasImpliedMult };
 }
 
 /**
@@ -170,10 +285,97 @@ export function insertToken(state: MathAstState, tokenVal: string): MathAstState
 }
 
 /**
- * Natural Display: Fraction Key (■/□)
- * Rule 1: If an expression/number precedes cursor, wrap preceding token into numerator
- * and place cursor directly into denominator box: \frac{preceding}{[\vert]}.
- * Rule 2: If no selection/preceding token: Insert \frac{[\vert]}{[\quad]}, focus numerator.
+ * Rule 1: POSTFIX KEYS: x², x³, x⁻¹, x!, °, % are postfix operators.
+ * Pressing one wraps the previous operand in a postfix node and leaves the cursor
+ * AFTER the node (not inside the exponent). They chain: (6)²! is a postfix of a postfix.
+ */
+export function insertPostfix(state: MathAstState, op: PostfixOp): MathAstState {
+  const newRoot = cloneAst(state.root);
+  const slotNodes = getSlotNodes(newRoot, state.cursor.slotId);
+  if (!slotNodes) return state;
+
+  const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
+  const operandInfo = extractPreviousOperand(slotNodes, offset);
+
+  let targetNodes: MathNode[] = [];
+  let insertIndex = offset;
+
+  if (operandInfo && operandInfo.nodes.length > 0) {
+    targetNodes = operandInfo.nodes;
+    slotNodes.splice(operandInfo.startIndex, operandInfo.nodes.length);
+    insertIndex = operandInfo.startIndex;
+  } else {
+    // If no previous operand, e.g. at start, default to Ans
+    targetNodes = [{ type: 'token', id: generateUniqueId('tok'), val: 'Ans' }];
+  }
+
+  const postfixNode: MathNode = {
+    type: 'postfix',
+    id: generateUniqueId('post'),
+    op,
+    target: targetNodes,
+  };
+
+  slotNodes.splice(insertIndex, 0, postfixNode);
+
+  // Leaves the cursor AFTER the node (not inside any exponent)
+  return {
+    root: newRoot,
+    cursor: { slotId: state.cursor.slotId, offset: insertIndex + 1 },
+    pendingDeleteTemplateId: null,
+  };
+}
+
+/**
+ * Rule 2: POWER KEY (x□): creates a power node with the cursor inside the empty exponent slot.
+ * Any key typed goes into the exponent, including ÷ (fraction inside the exponent).
+ * The right arrow exits the slot to after the power node.
+ */
+export function insertPower(state: MathAstState): MathAstState {
+  const newRoot = cloneAst(state.root);
+  const slotNodes = getSlotNodes(newRoot, state.cursor.slotId);
+  if (!slotNodes) return state;
+
+  const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
+  const operandInfo = extractPreviousOperand(slotNodes, offset);
+
+  let baseNodes: MathNode[] = [];
+  let insertIndex = offset;
+
+  if (operandInfo && operandInfo.nodes.length > 0) {
+    baseNodes = operandInfo.nodes;
+    slotNodes.splice(operandInfo.startIndex, operandInfo.nodes.length);
+    insertIndex = operandInfo.startIndex;
+  } else {
+    baseNodes = [{ type: 'token', id: generateUniqueId('tok'), val: 'Ans' }];
+  }
+
+  const powerId = generateUniqueId('power');
+  const powerNode: MathNode = {
+    type: 'power',
+    id: powerId,
+    base: baseNodes,
+    exp: [],
+  };
+
+  slotNodes.splice(insertIndex, 0, powerNode);
+
+  // Focus empty exponent slot
+  return {
+    root: newRoot,
+    cursor: { slotId: `${powerId}_exp`, offset: 0 },
+    pendingDeleteTemplateId: null,
+  };
+}
+
+/**
+ * Rule 3: FRACTION KEY OPERAND: on ÷ (and the a b/c key), take the previous operand:
+ * a. Walk back over all postfix wrappers (x², x³, x⁻¹, x!, °, %, and completed power nodes).
+ * b. Take the primary beneath them: a number (whole, including decimal), a bracket group,
+ *    a function call with its argument (sin(30)), a root, or a fraction.
+ * c. Put that whole thing in the numerator; cursor goes into the empty denominator.
+ * d. Drop outer brackets only if the bracket group is the entire operand. If a postfix wraps it, keep them.
+ * e. Implied multiplication stays outside: (6)2÷ gives (6)×(2/□).
  */
 export function insertFraction(state: MathAstState): MathAstState {
   const newRoot = cloneAst(state.root);
@@ -183,31 +385,65 @@ export function insertFraction(state: MathAstState): MathAstState {
   const fracId = generateUniqueId('frac');
   const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
 
-  // Check if preceding token or group exists
+  const operandInfo = extractPreviousOperand(slotNodes, offset);
+
   let numNodes: MathNode[] = [];
   let insertIndex = offset;
 
-  if (offset > 0) {
-    // Extract preceding token(s)
-    // If preceded by a number sequence or variable or bracketed expression
-    const prevNode = slotNodes[offset - 1];
-    if (prevNode.type === 'token') {
-      // Gather consecutive alphanumeric/digit characters preceding cursor
-      let startIdx = offset - 1;
-      while (startIdx > 0 && slotNodes[startIdx - 1].type === 'token') {
-        const prevChar = (slotNodes[startIdx - 1] as { type: 'token'; val: string }).val;
-        if (/^[0-9.a-zA-Z]$/.test(prevChar)) {
-          startIdx--;
-        } else {
-          break;
+  if (operandInfo && operandInfo.nodes.length > 0) {
+    const rawNodes = operandInfo.nodes;
+
+    // Rule 3d: Drop outer brackets ONLY if the bracket group is the entire operand.
+    // If a postfix wraps it, keep them.
+    let isPlainBracketGroup = false;
+    const firstNode = rawNodes[0];
+    const lastNode = rawNodes[rawNodes.length - 1];
+    if (
+      rawNodes.length >= 2 &&
+      firstNode.type === 'token' &&
+      firstNode.val === '(' &&
+      lastNode.type === 'token' &&
+      lastNode.val === ')'
+    ) {
+      let depth = 0;
+      let matchedAtEnd = false;
+      for (let i = 0; i < rawNodes.length; i++) {
+        const n = rawNodes[i];
+        if (n.type === 'token') {
+          if (n.val === '(') depth++;
+          else if (n.val === ')') {
+            depth--;
+            if (depth === 0 && i === rawNodes.length - 1) {
+              matchedAtEnd = true;
+            }
+          }
         }
       }
-      numNodes = slotNodes.splice(startIdx, offset - startIdx);
-      insertIndex = startIdx;
+      if (matchedAtEnd) {
+        isPlainBracketGroup = true;
+      }
+    }
+
+    if (isPlainBracketGroup) {
+      // Drop outer brackets
+      numNodes = rawNodes.slice(1, -1);
     } else {
-      // Single previous complex node (e.g. sqrt or power)
-      numNodes = slotNodes.splice(offset - 1, 1);
-      insertIndex = offset - 1;
+      numNodes = rawNodes;
+    }
+
+    // Remove extracted operand from slotNodes
+    slotNodes.splice(operandInfo.startIndex, operandInfo.nodes.length);
+    insertIndex = operandInfo.startIndex;
+
+    // Rule 3e: Implied multiplication stays outside: (6)2÷ gives (6)×(2/□)
+    if (operandInfo.hasImpliedMult) {
+      const timesToken: MathNode = {
+        type: 'token',
+        id: generateUniqueId('tok'),
+        val: '×',
+      };
+      slotNodes.splice(insertIndex, 0, timesToken);
+      insertIndex++;
     }
   }
 
@@ -220,27 +456,17 @@ export function insertFraction(state: MathAstState): MathAstState {
 
   slotNodes.splice(insertIndex, 0, fracNode);
 
-  // If we wrapped preceding into numerator, cursor goes directly to denominator!
-  if (numNodes.length > 0) {
-    return {
-      root: newRoot,
-      cursor: { slotId: `${fracId}_den`, offset: 0 },
-      pendingDeleteTemplateId: null,
-    };
-  } else {
-    // Otherwise focus numerator box
-    return {
-      root: newRoot,
-      cursor: { slotId: `${fracId}_num`, offset: 0 },
-      pendingDeleteTemplateId: null,
-    };
-  }
+  // Cursor goes into the empty denominator
+  return {
+    root: newRoot,
+    cursor: { slotId: `${fracId}_den`, offset: 0 },
+    pendingDeleteTemplateId: null,
+  };
 }
 
 /**
  * Natural Display: Integral Key (∫dx)
  * Insert full definite integral structure: \int_{[\quad]}^{[\quad]} ([\vert])\,dx
- * Primary focus placed inside the integrand box ([\vert]).
  */
 export function insertIntegral(state: MathAstState): MathAstState {
   const newRoot = cloneAst(state.root);
@@ -269,7 +495,6 @@ export function insertIntegral(state: MathAstState): MathAstState {
 
 /**
  * Natural Display: Square Root (√■)
- * Insert \sqrt{[\vert]} with cursor inside root container.
  */
 export function insertSqrt(state: MathAstState): MathAstState {
   const newRoot = cloneAst(state.root);
@@ -295,35 +520,7 @@ export function insertSqrt(state: MathAstState): MathAstState {
 }
 
 /**
- * Natural Display: Power (xⁿ)
- * Insert exponent box superscript.
- */
-export function insertPower(state: MathAstState): MathAstState {
-  const newRoot = cloneAst(state.root);
-  const slotNodes = getSlotNodes(newRoot, state.cursor.slotId);
-  if (!slotNodes) return state;
-
-  const powerId = generateUniqueId('power');
-  const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
-
-  const powerNode: MathNode = {
-    type: 'power',
-    id: powerId,
-    exp: [],
-  };
-
-  slotNodes.splice(offset, 0, powerNode);
-
-  return {
-    root: newRoot,
-    cursor: { slotId: `${powerId}_exp`, offset: 0 },
-    pendingDeleteTemplateId: null,
-  };
-}
-
-/**
  * Natural Display: Log Base (log□■)
- * Insert \log_{[\quad]}([\vert]), focusing base box first.
  */
 export function insertLogBase(state: MathAstState): MathAstState {
   const newRoot = cloneAst(state.root);
@@ -342,7 +539,6 @@ export function insertLogBase(state: MathAstState): MathAstState {
 
   slotNodes.splice(offset, 0, logNode);
 
-  // Focus base box first
   return {
     root: newRoot,
     cursor: { slotId: `${logId}_base`, offset: 0 },
@@ -353,7 +549,7 @@ export function insertLogBase(state: MathAstState): MathAstState {
 /**
  * D-Pad Navigation Engine:
  * Maps LEFT, RIGHT, UP, DOWN across active template child boxes.
- * Pressing RIGHT when at the end of a denominator or integrand breaks out of template into main line flow.
+ * Pressing RIGHT when at the end of a denominator or power exponent breaks out of template into main line flow.
  */
 export function navigateAst(state: MathAstState, direction: 'left' | 'right' | 'up' | 'down'): MathAstState {
   const { root, cursor } = state;
@@ -374,7 +570,12 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
       const baseId = slotId.replace(/_(integrand|lower)$/, '');
       return { ...state, cursor: { slotId: `${baseId}_upper`, offset: 0 }, pendingDeleteTemplateId: null };
     }
-    // 3. LogBase: In base, UP moves to argument
+    // 3. Power: In base, UP moves to exponent
+    if (slotId.endsWith('_base')) {
+      const baseId = slotId.replace(/_base$/, '');
+      return { ...state, cursor: { slotId: `${baseId}_exp`, offset: 0 }, pendingDeleteTemplateId: null };
+    }
+    // 4. LogBase: In base, UP moves to argument
     if (slotId.endsWith('_base')) {
       const baseId = slotId.replace(/_base$/, '');
       return { ...state, cursor: { slotId: `${baseId}_arg`, offset: 0 }, pendingDeleteTemplateId: null };
@@ -393,7 +594,7 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
       const baseId = slotId.replace(/_(integrand|upper)$/, '');
       return { ...state, cursor: { slotId: `${baseId}_lower`, offset: 0 }, pendingDeleteTemplateId: null };
     }
-    // 3. Power: In exponent, DOWN breaks out to parent base line
+    // 3. Power: In exponent, DOWN breaks out to parent slot after power node
     if (slotId.endsWith('_exp')) {
       const parentInfo = findSlotParentInfo(root, slotId);
       if (parentInfo) {
@@ -431,17 +632,15 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
 
     // At the end of the current slot: Break out or transition to next sibling slot
     if (slotId === 'root') {
-      return state; // Already at the end of expression
+      return state;
     }
 
     // Fraction:
     if (slotId.endsWith('_num')) {
-      // Step from numerator to denominator
       const baseId = slotId.replace(/_num$/, '');
       return { ...state, cursor: { slotId: `${baseId}_den`, offset: 0 }, pendingDeleteTemplateId: null };
     }
     if (slotId.endsWith('_den')) {
-      // Break out to main line flow
       const parentInfo = findSlotParentInfo(root, slotId);
       if (parentInfo) {
         return {
@@ -452,7 +651,30 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
       }
     }
 
-    // Integral:
+    // Power: Rule 2 specifies "The right arrow exits the slot to after the power node"
+    if (slotId.endsWith('_exp')) {
+      const parentInfo = findSlotParentInfo(root, slotId);
+      if (parentInfo) {
+        return {
+          ...state,
+          cursor: { slotId: parentInfo.parentSlotId, offset: parentInfo.parentIndex + 1 },
+          pendingDeleteTemplateId: null,
+        };
+      }
+    }
+
+    // Sqrt / Log / Integral breakout
+    if (slotId.endsWith('_content') || slotId.endsWith('_integrand') || slotId.endsWith('_arg')) {
+      const parentInfo = findSlotParentInfo(root, slotId);
+      if (parentInfo) {
+        return {
+          ...state,
+          cursor: { slotId: parentInfo.parentSlotId, offset: parentInfo.parentIndex + 1 },
+          pendingDeleteTemplateId: null,
+        };
+      }
+    }
+
     if (slotId.endsWith('_lower')) {
       const baseId = slotId.replace(/_lower$/, '');
       return { ...state, cursor: { slotId: `${baseId}_upper`, offset: 0 }, pendingDeleteTemplateId: null };
@@ -461,42 +683,9 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
       const baseId = slotId.replace(/_upper$/, '');
       return { ...state, cursor: { slotId: `${baseId}_integrand`, offset: 0 }, pendingDeleteTemplateId: null };
     }
-    if (slotId.endsWith('_integrand')) {
-      // Break out of integral into main line flow
-      const parentInfo = findSlotParentInfo(root, slotId);
-      if (parentInfo) {
-        return {
-          ...state,
-          cursor: { slotId: parentInfo.parentSlotId, offset: parentInfo.parentIndex + 1 },
-          pendingDeleteTemplateId: null,
-        };
-      }
-    }
-
-    // Sqrt / Power / Log:
-    if (slotId.endsWith('_content') || slotId.endsWith('_exp')) {
-      const parentInfo = findSlotParentInfo(root, slotId);
-      if (parentInfo) {
-        return {
-          ...state,
-          cursor: { slotId: parentInfo.parentSlotId, offset: parentInfo.parentIndex + 1 },
-          pendingDeleteTemplateId: null,
-        };
-      }
-    }
     if (slotId.endsWith('_base')) {
       const baseId = slotId.replace(/_base$/, '');
       return { ...state, cursor: { slotId: `${baseId}_arg`, offset: 0 }, pendingDeleteTemplateId: null };
-    }
-    if (slotId.endsWith('_arg')) {
-      const parentInfo = findSlotParentInfo(root, slotId);
-      if (parentInfo) {
-        return {
-          ...state,
-          cursor: { slotId: parentInfo.parentSlotId, offset: parentInfo.parentIndex + 1 },
-          pendingDeleteTemplateId: null,
-        };
-      }
     }
 
     return state;
@@ -539,25 +728,7 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
       return { ...state, cursor: { slotId: `${baseId}_num`, offset: numNodes.length }, pendingDeleteTemplateId: null };
     }
 
-    if (slotId.endsWith('_integrand')) {
-      const baseId = slotId.replace(/_integrand$/, '');
-      const upNodes = getSlotNodes(root, `${baseId}_upper`) || [];
-      return { ...state, cursor: { slotId: `${baseId}_upper`, offset: upNodes.length }, pendingDeleteTemplateId: null };
-    }
-
-    if (slotId.endsWith('_upper')) {
-      const baseId = slotId.replace(/_upper$/, '');
-      const lowNodes = getSlotNodes(root, `${baseId}_lower`) || [];
-      return { ...state, cursor: { slotId: `${baseId}_lower`, offset: lowNodes.length }, pendingDeleteTemplateId: null };
-    }
-
-    if (slotId.endsWith('_arg')) {
-      const baseId = slotId.replace(/_arg$/, '');
-      const bNodes = getSlotNodes(root, `${baseId}_base`) || [];
-      return { ...state, cursor: { slotId: `${baseId}_base`, offset: bNodes.length }, pendingDeleteTemplateId: null };
-    }
-
-    // Break out to parent left (before template)
+    // Break out to parent left
     const parentInfo = findSlotParentInfo(root, slotId);
     if (parentInfo) {
       return {
@@ -575,26 +746,34 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
 
 /**
  * DEL Key Engine:
- * - If slot has items before cursor: deletes preceding node.
- * - If inside an empty template box:
- *   1st DEL: Highlights the entire template container (pendingDeleteTemplateId).
- *   2nd DEL: Deletes the template unit entirely and restores cursor to parent line.
+ * - If immediately after a postfix operator: unwrap the target nodes.
+ * - If at offset 0 inside power exp: remove power node and restore base.
+ * - If inside an empty template box: highlight then delete container.
  */
 export function deleteAst(state: MathAstState): MathAstState {
   const { root, cursor, pendingDeleteTemplateId } = state;
   const currentSlot = getSlotNodes(root, cursor.slotId);
   if (!currentSlot) return state;
 
-  // Case 1: If cursor is not at 0, delete preceding node
+  // Case 1: Cursor has items before it
   if (cursor.offset > 0) {
     const newRoot = cloneAst(root);
     const targetSlot = getSlotNodes(newRoot, cursor.slotId)!;
     const removedNode = targetSlot[cursor.offset - 1];
 
+    // If removing a postfix node: unwrap its target!
+    if (removedNode && removedNode.type === 'postfix') {
+      targetSlot.splice(cursor.offset - 1, 1, ...removedNode.target);
+      return {
+        root: newRoot,
+        cursor: { slotId: cursor.slotId, offset: cursor.offset - 1 + removedNode.target.length },
+        pendingDeleteTemplateId: null,
+      };
+    }
+
     // If removing a template node directly from parent
     if (removedNode && removedNode.type !== 'token') {
       if (pendingDeleteTemplateId !== removedNode.id) {
-        // Highlight first
         return { ...state, pendingDeleteTemplateId: removedNode.id };
       }
     }
@@ -621,10 +800,21 @@ export function deleteAst(state: MathAstState): MathAstState {
         };
       }
 
-      // 2nd press: delete template unit entirely!
+      // 2nd press: delete template unit entirely
       const newRoot = cloneAst(root);
       const parentSlot = getSlotNodes(newRoot, parentInfo.parentSlotId);
       if (parentSlot) {
+        // If deleting a power node from within its exp, restore its base!
+        if (parentInfo.parentNode.type === 'power') {
+          const baseNodes = parentInfo.parentNode.base;
+          parentSlot.splice(parentInfo.parentIndex, 1, ...baseNodes);
+          return {
+            root: newRoot,
+            cursor: { slotId: parentInfo.parentSlotId, offset: parentInfo.parentIndex + baseNodes.length },
+            pendingDeleteTemplateId: null,
+          };
+        }
+
         parentSlot.splice(parentInfo.parentIndex, 1);
         return {
           root: newRoot,
@@ -652,6 +842,25 @@ export function astToExpression(nodes: MathNode[]): string {
       const numExpr = astToExpression(node.num) || '0';
       const denExpr = astToExpression(node.den) || '1';
       expr += `((${numExpr})/(${denExpr}))`;
+    } else if (node.type === 'postfix') {
+      const targetExpr = astToExpression(node.target);
+      if (node.op === '²') {
+        expr += `((${targetExpr})^2)`;
+      } else if (node.op === '³') {
+        expr += `((${targetExpr})^3)`;
+      } else if (node.op === '⁻¹') {
+        expr += `((${targetExpr})^(-1))`;
+      } else if (node.op === '!') {
+        expr += `(${targetExpr})!`;
+      } else if (node.op === '°') {
+        expr += `(${targetExpr})°`;
+      } else if (node.op === '%') {
+        expr += `(${targetExpr})%`;
+      }
+    } else if (node.type === 'power') {
+      const baseExpr = astToExpression(node.base) || '0';
+      const expExpr = astToExpression(node.exp) || '1';
+      expr += `((${baseExpr})^(${expExpr}))`;
     } else if (node.type === 'int') {
       const integrandExpr = astToExpression(node.integrand) || 'x';
       const lowerExpr = astToExpression(node.lower) || '0';
@@ -660,9 +869,6 @@ export function astToExpression(nodes: MathNode[]): string {
     } else if (node.type === 'sqrt') {
       const radExpr = astToExpression(node.content) || '0';
       expr += `√(${radExpr})`;
-    } else if (node.type === 'power') {
-      const expExpr = astToExpression(node.exp) || '1';
-      expr += `^(${expExpr})`;
     } else if (node.type === 'logBase') {
       const baseExpr = astToExpression(node.base) || '10';
       const argExpr = astToExpression(node.arg) || '1';
@@ -686,6 +892,13 @@ export function astToDisplayText(nodes: MathNode[]): string {
       const numText = astToDisplayText(node.num) || '□';
       const denText = astToDisplayText(node.den) || '□';
       text += `[${numText}/${denText}]`;
+    } else if (node.type === 'postfix') {
+      const targetText = astToDisplayText(node.target);
+      text += `${targetText}${node.op}`;
+    } else if (node.type === 'power') {
+      const baseText = astToDisplayText(node.base);
+      const expText = astToDisplayText(node.exp) || '□';
+      text += `${baseText}^(${expText})`;
     } else if (node.type === 'int') {
       const intText = astToDisplayText(node.integrand) || '□';
       const lowText = astToDisplayText(node.lower) || '□';
@@ -694,9 +907,6 @@ export function astToDisplayText(nodes: MathNode[]): string {
     } else if (node.type === 'sqrt') {
       const radText = astToDisplayText(node.content) || '□';
       text += `√(${radText})`;
-    } else if (node.type === 'power') {
-      const expText = astToDisplayText(node.exp) || '□';
-      text += `^(${expText})`;
     } else if (node.type === 'logBase') {
       const bText = astToDisplayText(node.base) || '□';
       const aText = astToDisplayText(node.arg) || '□';
@@ -708,13 +918,98 @@ export function astToDisplayText(nodes: MathNode[]): string {
 }
 
 /**
+ * Structure description formatter for unit testing and physical verification.
+ * e.g. "fraction(num=(6)², den=empty), cursor in den"
+ */
+export function astToStructureDescription(state: MathAstState): string {
+  function nodeToStructure(node: MathNode): string {
+    if (node.type === 'token') return node.val;
+    if (node.type === 'frac') {
+      const numStr = node.num.length === 0 ? 'empty' : node.num.map(nodeToStructure).join('');
+      const denStr = node.den.length === 0 ? 'empty' : node.den.map(nodeToStructure).join('');
+      return `fraction(num=${numStr}, den=${denStr})`;
+    }
+    if (node.type === 'postfix') {
+      const targetStr = node.target.map(nodeToStructure).join('');
+      return `${targetStr}${node.op}`;
+    }
+    if (node.type === 'power') {
+      const baseStr = node.base.map(nodeToStructure).join('');
+      const expStr = node.exp.length === 0 ? 'empty' : node.exp.map(nodeToStructure).join('');
+      return `power(${baseStr}, ${expStr})`;
+    }
+    if (node.type === 'sqrt') {
+      const cStr = node.content.map(nodeToStructure).join('');
+      return `sqrt(${cStr})`;
+    }
+    if (node.type === 'int') {
+      return `int(...)`;
+    }
+    if (node.type === 'logBase') {
+      return `logBase(...)`;
+    }
+    return '';
+  }
+
+  let desc = state.root.map(nodeToStructure).join('');
+  if (state.cursor.slotId.endsWith('_den')) {
+    desc += ', cursor in den';
+  } else if (state.cursor.slotId.endsWith('_num')) {
+    desc += ', cursor in num';
+  } else if (state.cursor.slotId.endsWith('_exp')) {
+    desc += ', cursor in exp';
+  }
+  return desc;
+}
+
+/**
+ * Simulate a sequence of interactive keystrokes through the AST engine
+ */
+export function simulateKeystrokes(keys: string[]): MathAstState {
+  let state = createInitialAstState();
+
+  for (const k of keys) {
+    if (k === '÷' || k === '/' || k === 'frac' || k === '■/□') {
+      state = insertFraction(state);
+    } else if (k === 'x□' || k === '^') {
+      state = insertPower(state);
+    } else if (k === 'x²' || k === '²') {
+      state = insertPostfix(state, '²');
+    } else if (k === 'x³' || k === '³') {
+      state = insertPostfix(state, '³');
+    } else if (k === 'x⁻¹' || k === '⁻¹') {
+      state = insertPostfix(state, '⁻¹');
+    } else if (k === 'x!' || k === '!') {
+      state = insertPostfix(state, '!');
+    } else if (k === '°') {
+      state = insertPostfix(state, '°');
+    } else if (k === '%') {
+      state = insertPostfix(state, '%');
+    } else if (k === 'RIGHT' || k === '->') {
+      state = navigateAst(state, 'right');
+    } else if (k === 'LEFT' || k === '<-') {
+      state = navigateAst(state, 'left');
+    } else if (k === 'UP') {
+      state = navigateAst(state, 'up');
+    } else if (k === 'DOWN') {
+      state = navigateAst(state, 'down');
+    } else if (k === 'DEL') {
+      state = deleteAst(state);
+    } else {
+      state = insertToken(state, k);
+    }
+  }
+
+  return state;
+}
+
+/**
  * Convert plain string (from history or paste) into basic AST nodes
  */
 export function parseStringToAst(exprStr: string): MathAstState {
   if (!exprStr) return createInitialAstState();
 
   const nodes: MathNode[] = [];
-  // Match standard multi-char tokens first, or single characters
   const tokenRegex = /(sin⁻¹|cos⁻¹|tan⁻¹|sinh|cosh|tanh|sin|cos|tan|ln|log|Ans|Pol|Rec|d\/dx|×10\^|√|³√|\d+(\.\d+)?|[a-zA-Z]|[-+×÷=()²³⁻¹^!%,.])/g;
   let match: RegExpExecArray | null;
   let lastIndex = 0;

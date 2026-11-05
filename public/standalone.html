@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Casio fx-570EX ClassWiz Emulator</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    :root {
+      --bg: #0D0D10;
+      --faceplate: #131318;
+      --screen-bg: #0B1417;
+      --screen-dot: #6EE7B7;
+      --shift-yellow: #E5A93C;
+      --alpha-pink: #E6007E;
+      --cyan: #00E5FF;
+      --key-charcoal: #1F1F27;
+      --key-white: #EDEDF2;
+      --key-blue: #1C6FE6;
+      --cal-scale: 1;
+    }
+    body {
+      background: #050507;
+      color: #E2E8F0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #app-container {
+      width: 100%;
+      max-width: 430px;
+      height: 100%;
+      max-height: 100dvh;
+      aspect-ratio: 9 / 19.8;
+      background: var(--faceplate);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 1px solid #23232C;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+      position: relative;
+      transform: scale(var(--cal-scale));
+      transform-origin: center center;
+    }
+    /* Brand Header */
+    .faceplate-header {
+      padding: 10px 16px 4px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1E1E26;
+      background: #111116;
+    }
+    .brand-casio {
+      font-weight: 900;
+      font-size: 14px;
+      letter-spacing: 1.5px;
+      color: #F8FAFC;
+    }
+    .brand-classwiz {
+      font-weight: 900;
+      font-size: 13px;
+      letter-spacing: 1px;
+      color: var(--alpha-pink);
+      text-shadow: 0 0 6px rgba(230,0,126,0.4);
+    }
+    .model-no {
+      font-size: 12px;
+      font-weight: 700;
+      color: #CBD5E1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .gear-btn {
+      background: transparent;
+      border: none;
+      color: #64748B;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px;
+    }
+    .gear-btn:hover { color: var(--shift-yellow); }
+    /* LCD Screen */
+    .lcd-screen {
+      margin: 4px 12px;
+      padding: 6px 10px;
+      background: radial-gradient(rgba(45, 85, 80, 0.28) 1.2px, transparent 1.2px), linear-gradient(to bottom, #111e22 0%, #0c1619 60%, #081013 100%);
+      background-size: 3.5px 3.5px, 100% 100%;
+      background-color: var(--screen-bg);
+      border: 1px solid #1C2B30;
+      border-radius: 10px;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.9);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 100px;
+      min-height: 90px;
+      position: relative;
+    }
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9px;
+      font-family: monospace;
+      color: #52796F;
+      border-bottom: 1px solid rgba(45, 85, 80, 0.3);
+      padding-bottom: 2px;
+    }
+    .status-badge {
+      padding: 0 3px;
+      border-radius: 2px;
+      font-weight: bold;
+    }
+    .badge-shift.active {
+      background: var(--shift-yellow);
+      color: #000;
+      box-shadow: 0 0 6px var(--shift-yellow);
+    }
+    .badge-alpha.active {
+      background: var(--alpha-pink);
+      color: #FFF;
+      box-shadow: 0 0 6px var(--alpha-pink);
+    }
+    /* Input Top Line */
+    .input-line {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 17px;
+      color: #A7F3D0;
+      padding-top: 4px;
+    }
+    .input-line::-webkit-scrollbar { display: none; }
+    .cursor-blink {
+      display: inline-block;
+      width: 2px;
+      height: 16px;
+      background: #34D399;
+      animation: blink 0.8s infinite;
+      margin-left: 2px;
+      vertical-align: middle;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    /* Result Bottom Line */
+    .result-line-container {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      position: relative;
+      overflow-x: auto;
+      white-space: nowrap;
+      border-top: 1px solid rgba(45, 85, 80, 0.3);
+      padding-top: 2px;
+    }
+    .result-line-container::-webkit-scrollbar { display: none; }
+    .result-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      color: #F1F5F9;
+      text-align: right;
+    }
+    .scroll-arrow {
+      position: sticky;
+      font-size: 10px;
+      color: #34D399;
+      font-weight: bold;
+      padding: 0 2px;
+      z-index: 5;
+    }
+    .scroll-arrow.left { left: 0; background: linear-gradient(to right, #0c1619, transparent); }
+    .scroll-arrow.right { right: 0; background: linear-gradient(to left, #0c1619, transparent); }
+    /* Keypad Section */
+    .keypad-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 4px 10px 8px 10px;
+      background: #111116;
+      gap: 3px;
+    }
+    /* Key Matrix */
+    .key-row-nav {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      align-items: center;
+      height: 52px;
+    }
+    .key-row-subnav {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px;
+      height: 38px;
+    }
+    .function-block {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 4px;
+      flex: 1;
+    }
+    .numeric-block {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      gap: 5px;
+      flex: 1.4;
+      padding-top: 3px;
+    }
+    /* Key Wrapper with 14px reserved margin */
+    .key-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      padding-top: 14px;
+    }
+    .key-secondary-labels {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 2px;
+      pointer-events: none;
+      line-height: 1;
+      font-size: 8px;
+      font-family: monospace;
+      font-weight: 700;
+    }
+    .lbl-shift { color: var(--shift-yellow); }
+    .lbl-alpha { color: var(--alpha-pink); }
+    .lbl-base { color: var(--cyan); }
+    /* Keycap hardware design */
+    .btn-key {
+      width: 100%;
+      height: 100%;
+      flex: 1;
+      border: none;
+      border-radius: 6px;
+      font-family: monospace;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.6);
+      transition: transform 0.05s ease, background 0.05s ease;
+    }
+    .btn-key:active {
+      transform: translateY(1.5px);
+      box-shadow: 0 0.5px 0 rgba(0,0,0,0.8);
+    }
+    .btn-charcoal {
+      background: linear-gradient(180deg, #2A2A35 0%, #1A1A22 100%);
+      color: #E2E8F0;
+      font-size: 11px;
+      font-weight: 700;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .btn-white {
+      background: linear-gradient(180deg, #FFFFFF 0%, #ECECF0 65%, #DFDFE6 100%);
+      color: #0F172A;
+      font-size: 16px;
+      font-weight: 900;
+      border-radius: 10px;
+      border-bottom: 2.5px solid #A8A8B6;
+    }
+    .btn-blue {
+      background: linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%);
+      color: #FFF;
+      font-size: 12px;
+      font-weight: 900;
+      border-radius: 10px;
+      border-bottom: 2.5px solid #1E3A8A;
+    }
+    .btn-round {
+      border-radius: 20px;
+      background: linear-gradient(180deg, #333340 0%, #1E1E26 100%);
+      color: #E2E8F0;
+      font-size: 10px;
+      font-weight: 700;
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    /* Big 4-way D-Pad (no center label) */
+    .dpad-container {
+      position: relative;
+      width: 66px;
+      height: 48px;
+      background: linear-gradient(180deg, #32323E 0%, #1F1F27 60%, #13131A 100%);
+      border: 1px solid #475569;
+      border-radius: 24px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dpad-btn {
+      position: absolute;
+      background: transparent;
+      border: none;
+      color: #CBD5E1;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 20px;
+    }
+    .dpad-btn:active { color: var(--shift-yellow); }
+    .dpad-up { top: 0; left: 22px; }
+    .dpad-down { bottom: 0; left: 22px; }
+    .dpad-left { left: 0; top: 14px; }
+    .dpad-right { right: 0; top: 14px; }
+    .dpad-center-dimple {
+      width: 14px;
+      height: 10px;
+      border-radius: 50%;
+      background: #111116;
+      border: 1px solid #334155;
+      pointer-events: none;
+    }
+    /* Study Mode Banner */
+    .study-bar {
+      padding: 4px 10px;
+      background: #181A24;
+      border-bottom: 1px solid #2B2E3D;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      font-family: monospace;
+      color: #94A3B8;
+    }
+    .study-badge {
+      background: rgba(147, 51, 234, 0.2);
+      color: #C084FC;
+      border: 1px solid rgba(147, 51, 234, 0.4);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    /* Modal generic */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-card {
+      background: #13151D;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 440px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-family: monospace;
+    }
+    .modal-header {
+      padding: 12px 16px;
+      background: #181B26;
+      border-bottom: 1px solid #232734;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .modal-body {
+      padding: 14px;
+      overflow-y: auto;
+      flex: 1;
+      font-size: 11px;
+    }
+    .modal-footer {
+      padding: 10px 14px;
+      background: #181B26;
+      border-top: 1px solid #232734;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .btn-action {
+      background: var(--shift-yellow);
+      color: #000;
+      font-weight: bold;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-container">
+  
+  <!-- STUDY MODE BAR (Only shown when mode === 'STUDY') -->
+  <div id="study-bar" class="study-bar" style="display: none;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="study-badge">STUDY</span>
+      <span id="study-timer">00:00</span>
+      <span id="study-keystrokes">Keys: 0</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <button id="btn-undo" style="background:#262A38; border:1px solid #3B4254; color:#CBD5E1; padding:2px 6px; border-radius:4px; font-size:10px; cursor:pointer;">↺ Undo</button>
+      <button id="btn-tape" style="background:#262A38; border:1px solid #3B4254; color:#E5A93C; padding:2px 6px; border-radius:4px; font-size:10px; cursor:pointer;">Tape</button>
+    </div>
+  </div>
+
+  <!-- Faceplate Header (Strict 1:1 Casio ClassWiz) -->
+  <div class="faceplate-header">
+    <span class="brand-casio">CASIO</span>
+    <span class="brand-classwiz">CLASSWIZ</span>
+    <div class="model-no">
+      <span>fx-570EX</span>
+      <button id="gear-menu-btn" class="gear-btn" title="ClassWiz Settings">⚙</button>
+    </div>
+  </div>
+
+  <!-- Dual-Line Dot Matrix LCD Screen -->
+  <div class="lcd-screen">
+    <!-- Top Status Row -->
+    <div class="status-bar">
+      <div style="display: flex; gap: 4px; align-items: center;">
+        <span id="badge-shift" class="status-badge badge-shift">S</span>
+        <span id="badge-alpha" class="status-badge badge-alpha">A</span>
+        <span id="badge-mem" class="status-badge" style="opacity: 0.3;">M</span>
+        <span id="badge-sto" class="status-badge" style="opacity: 0.3;">STO</span>
+      </div>
+      <div style="display: flex; gap: 5px; align-items: center;">
+        <span id="badge-angle">D</span>
+        <span id="badge-format">NORM1</span>
+        <span>Math</span>
+        <span id="badge-arrows">▲▼</span>
+      </div>
+    </div>
+
+    <!-- Input Expression Top Line (Left-aligned) -->
+    <div id="lcd-input-line" class="input-line">
+      <span id="expression-display"></span>
+      <span id="cursor-indicator" class="cursor-blink"></span>
+    </div>
+
+    <!-- Result Bottom Line (Strictly Right-aligned with ◄ ► indicators) -->
+    <div id="result-container" class="result-line-container">
+      <span id="scroll-arrow-left" class="scroll-arrow left" style="display: none;">◄</span>
+      <span id="result-display" class="result-text">0</span>
+      <span id="scroll-arrow-right" class="scroll-arrow right" style="display: none;">►</span>
+    </div>
+  </div>
+
+  <!-- Keypad Section: 1:1 Physical Casio fx-570EX Matrix -->
+  <div class="keypad-container" id="keypad">
+    
+    <!-- Row 1: Navigation Row (SHIFT, ALPHA, REPLAY D-PAD, MENU/SETUP, ON) -->
+    <div class="key-row-nav">
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">SHIFT</span></div>
+        <button id="k-shift" class="btn-key btn-round" style="color:var(--shift-yellow);">SHIFT</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-alpha">ALPHA</span></div>
+        <button id="k-alpha" class="btn-key btn-round" style="color:var(--alpha-pink);">ALPHA</button>
+      </div>
+      <div class="key-wrapper" style="padding-top:0;">
+        <div class="dpad-container">
+          <button id="dpad-up" class="dpad-btn dpad-up">▲</button>
+          <button id="dpad-down" class="dpad-btn dpad-down">▼</button>
+          <button id="dpad-left" class="dpad-btn dpad-left">◄</button>
+          <button id="dpad-right" class="dpad-btn dpad-right">►</button>
+          <div class="dpad-center-dimple"></div>
+        </div>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">SETUP</span></div>
+        <button id="k-menu" class="btn-key btn-round">MENU</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span style="color:#64748B;">CLR</span></div>
+        <button id="k-on" class="btn-key btn-round" style="color:#FFF; border-color:#64748B;">ON</button>
+      </div>
+    </div>
+
+    <!-- Row 2: OPTN, CALC, (D-Pad Gap), ∫dx, x -->
+    <div class="key-row-subnav">
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">QR</span></div>
+        <button id="k-optn" class="btn-key btn-charcoal">OPTN</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">SOLVE</span><span class="lbl-alpha">=</span></div>
+        <button id="k-calc" class="btn-key btn-charcoal">CALC</button>
+      </div>
+      <div style="grid-column: span 2;"></div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">d/dx</span><span class="lbl-alpha">:</span></div>
+        <button id="k-integral" class="btn-key btn-charcoal" style="color:var(--shift-yellow);">∫dx</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">Σ</span></div>
+        <button id="k-varx" class="btn-key btn-charcoal" style="font-style:italic;">x</button>
+      </div>
+    </div>
+
+    <!-- Function Block (Rows 3 to 5) -->
+    <div class="function-block">
+      <!-- Row 3 -->
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">a b/c</span></div>
+        <button id="k-frac" class="btn-key btn-charcoal">■/□</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">³√</span></div>
+        <button id="k-sqrt" class="btn-key btn-charcoal">√□</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">x³</span><span class="lbl-base">DEC</span></div>
+        <button id="k-sqr" class="btn-key btn-charcoal">x²</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">ⁿ√x</span><span class="lbl-base">HEX</span></div>
+        <button id="k-pow" class="btn-key btn-charcoal">x□</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">10ˣ</span><span class="lbl-base">BIN</span></div>
+        <button id="k-logbase" class="btn-key btn-charcoal">log□■</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">eˣ</span><span class="lbl-base">OCT</span></div>
+        <button id="k-ln" class="btn-key btn-charcoal">ln</button>
+      </div>
+
+      <!-- Row 4 -->
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">log</span><span class="lbl-alpha">A</span></div>
+        <button id="k-neg" class="btn-key btn-charcoal">(-)</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">FACT</span><span class="lbl-alpha">B</span></div>
+        <button id="k-dms" class="btn-key btn-charcoal">° ' "</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">x!</span><span class="lbl-alpha">C</span></div>
+        <button id="k-inv" class="btn-key btn-charcoal">x⁻¹</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">sin⁻¹</span><span class="lbl-alpha">D</span></div>
+        <button id="k-sin" class="btn-key btn-charcoal">sin</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">cos⁻¹</span><span class="lbl-alpha">E</span></div>
+        <button id="k-cos" class="btn-key btn-charcoal">cos</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">tan⁻¹</span><span class="lbl-alpha">F</span></div>
+        <button id="k-tan" class="btn-key btn-charcoal">tan</button>
+      </div>
+
+      <!-- Row 5 -->
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">RECALL</span></div>
+        <button id="k-sto" class="btn-key btn-charcoal">STO</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">i</span><span class="lbl-alpha">∠</span></div>
+        <button id="k-eng" class="btn-key btn-charcoal">ENG</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">Abs</span></div>
+        <button id="k-lpar" class="btn-key btn-charcoal">(</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">,</span><span class="lbl-alpha">x</span></div>
+        <button id="k-rpar" class="btn-key btn-charcoal">)</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">a b/c⇔d/c</span><span class="lbl-alpha">y</span></div>
+        <button id="k-sd" class="btn-key btn-charcoal" style="color:var(--shift-yellow);">S⇔D</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">M-</span><span class="lbl-alpha">M</span></div>
+        <button id="k-mplus" class="btn-key btn-charcoal">M+</button>
+      </div>
+    </div>
+
+    <!-- Numeric & Action Block (Rows 6 to 9) -->
+    <div class="numeric-block">
+      <!-- Row 6 -->
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">CONST</span></div>
+        <button id="k-7" class="btn-key btn-white">7</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">CONV</span></div>
+        <button id="k-8" class="btn-key btn-white">8</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">RESET</span></div>
+        <button id="k-9" class="btn-key btn-white">9</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">INS</span><span class="lbl-alpha">UNDO</span></div>
+        <button id="k-del" class="btn-key btn-blue">DEL</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">OFF</span></div>
+        <button id="k-ac" class="btn-key btn-blue">AC</button>
+      </div>
+
+      <!-- Row 7 -->
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">MATRIX</span></div>
+        <button id="k-4" class="btn-key btn-white">4</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">VECTOR</span></div>
+        <button id="k-5" class="btn-key btn-white">5</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"></div>
+        <button id="k-6" class="btn-key btn-white">6</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">nPr</span></div>
+        <button id="k-mul" class="btn-key btn-white">×</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">nCr</span></div>
+        <button id="k-div" class="btn-key btn-white">÷</button>
+      </div>
+
+      <!-- Row 8 -->
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">STAT</span></div>
+        <button id="k-1" class="btn-key btn-white">1</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">CMPLX</span></div>
+        <button id="k-2" class="btn-key btn-white">2</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">BASE</span></div>
+        <button id="k-3" class="btn-key btn-white">3</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">Pol</span></div>
+        <button id="k-add" class="btn-key btn-white">+</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">Rec</span></div>
+        <button id="k-sub" class="btn-key btn-white">-</button>
+      </div>
+
+      <!-- Row 9 -->
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">Rnd</span></div>
+        <button id="k-0" class="btn-key btn-white">0</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">Ran#</span><span class="lbl-alpha">RanInt</span></div>
+        <button id="k-dot" class="btn-key btn-white">·</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">π</span><span class="lbl-alpha">e</span></div>
+        <button id="k-exp" class="btn-key btn-white" style="font-size:12px;">×10ˣ</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">%</span></div>
+        <button id="k-ans" class="btn-key btn-white" style="font-size:12px;">Ans</button>
+      </div>
+      <div class="key-wrapper">
+        <div class="key-secondary-labels"><span class="lbl-shift">≈</span></div>
+        <button id="k-equal" class="btn-key btn-white" style="font-size:18px;">=</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL (Gear) -->
+<div id="modal-settings" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span>ClassWiz Settings</span>
+      <button class="gear-btn" onclick="closeModal('modal-settings')">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:12px;">
+      <div>
+        <label style="font-weight:bold; color:#94A3B8;">Operating Mode</label>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px;">
+          <button id="btn-mode-exam" class="btn-action" style="padding:10px; font-size:11px;">Exam Mode (1:1)</button>
+          <button id="btn-mode-study" style="padding:10px; font-size:11px; background:#2A2D3C; color:#FFF; border:1px solid #4B5563; border-radius:6px; cursor:pointer;">Study Mode</button>
+        </div>
+      </div>
+      <hr style="border:none; border-top:1px solid #232734;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <button id="open-cal-btn" style="padding:8px; background:#1E2230; color:#E2E8F0; border:1px solid #334155; border-radius:6px; cursor:pointer;">Card Calibration</button>
+        <button id="open-test-btn" style="padding:8px; background:#1E2230; color:#34D399; border:1px solid #059669; border-radius:6px; cursor:pointer;">Test Suite (?test=1)</button>
+      </div>
+      <hr style="border:none; border-top:1px solid #232734;">
+      <div>
+        <label style="font-weight:bold; color:#94A3B8;">Angle Mode</label>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:6px;">
+          <button class="angle-btn" data-angle="DEG" style="padding:6px; background:#E5A93C; color:#000; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">Deg (°)</button>
+          <button class="angle-btn" data-angle="RAD" style="padding:6px; background:#1E2230; color:#E2E8F0; border:1px solid #334155; border-radius:6px; cursor:pointer;">Rad (r)</button>
+          <button class="angle-btn" data-angle="GRA" style="padding:6px; background:#1E2230; color:#E2E8F0; border:1px solid #334155; border-radius:6px; cursor:pointer;">Gra (g)</button>
+        </div>
+      </div>
+      <div>
+        <label style="font-weight:bold; color:#94A3B8;">Display Format</label>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:6px;">
+          <button class="fmt-btn" data-fmt="NORM1" style="padding:6px; background:#E5A93C; color:#000; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">Norm1</button>
+          <button class="fmt-btn" data-fmt="NORM2" style="padding:6px; background:#1E2230; color:#E2E8F0; border:1px solid #334155; border-radius:6px; cursor:pointer;">Norm2</button>
+          <button class="fmt-btn" data-fmt="FIX" style="padding:6px; background:#1E2230; color:#E2E8F0; border:1px solid #334155; border-radius:6px; cursor:pointer;">Fix 2</button>
+          <button class="fmt-btn" data-fmt="SCI" style="padding:6px; background:#1E2230; color:#E2E8F0; border:1px solid #334155; border-radius:6px; cursor:pointer;">Sci 3</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-action" onclick="closeModal('modal-settings')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- CALIBRATION MODAL -->
+<div id="modal-cal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span>Screen Calibration (1:1 mm)</span>
+      <button class="gear-btn" onclick="closeModal('modal-cal')">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <p style="color:#94A3B8; margin-bottom:12px;">Hold a physical credit card against screen and adjust slider until the box matches your card.</p>
+      <div id="cal-card-box" style="width:85.6mm; height:53.98mm; border:2px dashed #E5A93C; background:rgba(229,169,60,0.1); border-radius:10px; margin:0 auto 14px auto; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <span style="font-weight:bold; color:#E5A93C;">ALIGN PHYSICAL CARD</span>
+        <span style="font-size:9px; color:#94A3B8;">ISO 85.6mm × 53.98mm</span>
+        <span id="cal-scale-readout" style="color:#34D399; font-weight:bold; margin-top:4px;">100%</span>
+      </div>
+      <input type="range" id="cal-slider" min="0.75" max="1.35" step="0.005" value="1" style="width:100%; accent-color:#E5A93C;">
+    </div>
+    <div class="modal-footer">
+      <button class="btn-action" onclick="closeModal('modal-cal')">Save Scale</button>
+    </div>
+  </div>
+</div>
+
+<!-- TEST HARNESS MODAL (?test=1) -->
+<div id="modal-test" class="modal-overlay">
+  <div class="modal-card" style="max-width:520px;">
+    <div class="modal-header">
+      <span>Casio fx-570EX Test Suite (?test=1)</span>
+      <button class="gear-btn" onclick="closeModal('modal-test')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="test-summary" style="margin-bottom:10px; font-weight:bold; color:#34D399;"></div>
+      <div id="test-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+    <div class="modal-footer" style="gap:8px;">
+      <button id="btn-rerun-tests" style="background:#334155; color:#FFF; border:none; padding:6px 12px; border-radius:6px; cursor:pointer;">Re-run</button>
+      <button class="btn-action" onclick="closeModal('modal-test')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CASIO fx-570EX CLASSWIZ STATE MACHINE & CORE MATH ENGINE
+   ===================================================================== */
+
+const SUPERSCRIPTS = {'-':'⁻','+':'⁺','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+function toSuper(str) {
+  return String(str).split('').map(c => SUPERSCRIPTS[c] || c).join('');
+}
+
+// Format numbers according to authentic fx-570EX specifications
+function formatCasioResult(val, format = 'NORM1', fixDigits = 2, sciDigits = 5, engStep = 0) {
+  if (isNaN(val) || !isFinite(val)) return 'Math ERROR';
+  if (Math.abs(val) < 1e-15) return '0';
+
+  if (format === 'FIX') {
+    return val.toFixed(Math.max(0, Math.min(9, fixDigits)));
+  }
+
+  if (format === 'SCI') {
+    const sigFigs = sciDigits === 0 ? 10 : Math.max(1, Math.min(10, sciDigits));
+    let exp = Math.floor(Math.log10(Math.abs(val)));
+    let mantissa = val / Math.pow(10, exp);
+    let roundedMantissa = parseFloat(mantissa.toPrecision(sigFigs));
+    if (Math.abs(roundedMantissa) >= 10) { roundedMantissa /= 10; exp += 1; }
+    exp += engStep * 3;
+    const finalMantissa = parseFloat((roundedMantissa * Math.pow(10, -engStep * 3)).toPrecision(10));
+    return `${finalMantissa}×10${toSuper(exp)}`;
+  }
+
+  if (engStep !== 0) {
+    const exp = Math.floor(Math.log10(Math.abs(val)));
+    const baseEngExp = Math.floor(exp / 3) * 3 + engStep * 3;
+    const mantissa = val / Math.pow(10, baseEngExp);
+    const roundedMantissa = parseFloat(mantissa.toPrecision(10));
+    if (baseEngExp === 0) return `${roundedMantissa}`;
+    return `${roundedMantissa}×10${toSuper(baseEngExp)}`;
+  }
+
+  // Norm 1: exponential if |val| < 1e-2 or |val| >= 1e10
+  // Norm 2: exponential if |val| < 1e-9 or |val| >= 1e10
+  const threshold = format === 'NORM2' ? 1e-9 : 1e-2;
+  const abs = Math.abs(val);
+
+  if (abs >= 1e10 || abs < threshold) {
+    let exp = Math.floor(Math.log10(abs));
+    let mantissa = val / Math.pow(10, exp);
+    let roundedMantissa = parseFloat(mantissa.toPrecision(10));
+    if (Math.abs(roundedMantissa) >= 10) { roundedMantissa /= 10; exp += 1; }
+    return `${roundedMantissa}×10${toSuper(exp)}`;
+  }
+
+  // Max 10 digits, round at 10th, strip trailing zeros
+  return parseFloat(val.toPrecision(10)).toString();
+}
+
+// Continued fraction algorithm for exact rational fraction
+function toFraction(val, tolerance = 1e-6) {
+  if (!isFinite(val) || isNaN(val)) return null;
+  if (Math.abs(val) < 1e-12) return { num: 0, den: 1 };
+  const sign = val < 0 ? -1 : 1;
+  val = Math.abs(val);
+  if (Math.abs(val - Math.round(val)) < tolerance) return { num: sign * Math.round(val), den: 1 };
+
+  let h1 = 1, h2 = 0, k1 = 0, k2 = 1, b = val;
+  for (let i = 0; i < 15; i++) {
+    const a = Math.floor(b);
+    let aux = h1; h1 = a * h1 + h2; h2 = aux;
+    aux = k1; k1 = a * k1 + k2; k2 = aux;
+    if (k1 > 100000) break;
+    if (Math.abs(val - h1 / k1) < tolerance || Math.abs(b - a) < 1e-12) {
+      return { num: sign * h1, den: k1 };
+    }
+    b = 1 / (b - a);
+  }
+  if (k1 <= 1000) return { num: sign * h1, den: k1 };
+  return null;
+}
+
+// Decimal degrees to DMS string: 1.5 -> 1°30'0"
+function decimalToDms(val) {
+  const sign = val < 0 ? '-' : '';
+  val = Math.abs(val);
+  const d = Math.floor(val);
+  const remM = (val - d) * 60;
+  const m = Math.floor(remM);
+  const remS = (remM - m) * 60;
+  const s = Math.round(remS * 100) / 100;
+  const cleanS = s % 1 === 0 ? s.toString() : s.toFixed(2).replace(/\\.?0+$/, '');
+  return `${sign}${d}°${m}'${cleanS}"`;
+}
+
+// Evaluate expression string with DMS and operator support
+function evalCasioExpr(expr, angleMode = 'DEG', ans = 0) {
+  if (!expr || !expr.trim()) return { success: true, result: 0 };
+  try {
+    let clean = expr;
+    clean = clean.replace(/Ans/g, `(${ans})`);
+    // DMS: 1°30'0" -> (1 + 30/60 + 0/3600)
+    clean = clean.replace(/(\d+(?:\.\d+)?)°\s*(\d+(?:\.\d+)?)['′]\s*(\d+(?:\.\d+)?)["″]/g, '($1 + $2/60 + $3/3600)');
+    clean = clean.replace(/(\d+(?:\.\d+)?)°\s*(\d+(?:\.\d+)?)['′]/g, '($1 + $2/60)');
+    clean = clean.replace(/(\d+(?:\.\d+)?)°/g, '($1)');
+
+    clean = clean.replace(/×10\^(\(-?\d+\)|\d+)/g, '*1e$1');
+    clean = clean.replace(/×10\^/g, '*10^');
+    clean = clean.replace(/×/g, '*');
+    clean = clean.replace(/÷/g, '/');
+    clean = clean.replace(/²/g, '^2');
+    clean = clean.replace(/³/g, '^3');
+    clean = clean.replace(/⁻¹/g, '^(-1)');
+    clean = clean.replace(/π/g, `(${Math.PI})`);
+    clean = clean.replace(/\be\b/g, `(${Math.E})`);
+    clean = clean.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
+
+    // Implicit multiplication e.g. 2(3) -> 2*(3)
+    clean = clean.replace(/(\d)(\()/g, '$1*$2');
+    clean = clean.replace(/(\))(\d)/g, '$1*$2');
+    clean = clean.replace(/(\))(\()/g, '$1*$2');
+    clean = clean.replace(/(\d)(sin|cos|tan|ln|log|√)/g, '$1*$2');
+
+    clean = clean.replace(/√\(/g, 'Math.sqrt(');
+    clean = clean.replace(/√(\d+(?:\.\d+)?)/g, 'Math.sqrt($1)');
+    clean = clean.replace(/(?<!Math\.)\blog\(/g, 'Math.log10(');
+    clean = clean.replace(/\bln\(/g, 'Math.log(');
+
+    // Trig with angle mode awareness
+    const radFactor = angleMode === 'DEG' ? Math.PI / 180 : angleMode === 'GRA' ? Math.PI / 200 : 1;
+    clean = clean.replace(/sin\(([^)]+)\)/g, `Math.sin(($1)*${radFactor})`);
+    clean = clean.replace(/cos\(([^)]+)\)/g, `Math.cos(($1)*${radFactor})`);
+    clean = clean.replace(/tan\(([^)]+)\)/g, `Math.tan(($1)*${radFactor})`);
+
+    clean = clean.replace(/\^/g, '**');
+
+    // Auto-balance parens
+    const opens = (clean.match(/\(/g) || []).length;
+    const closes = (clean.match(/\)/g) || []).length;
+    if (opens > closes) clean += ')'.repeat(opens - closes);
+
+    const fn = new Function(`"use strict"; return (${clean});`);
+    const val = fn();
+    if (typeof val !== 'number' || isNaN(val)) return { success: false, error: 'Math ERROR' };
+    return { success: true, result: val };
+  } catch (e) {
+    return { success: false, error: 'Syntax ERROR' };
+  }
+}
+
+/* =====================================================================
+   CALCULATOR STATE & EVENT TABLE
+   ===================================================================== */
+const state = {
+  mode: localStorage.getItem('casio_mode') || 'EXAM', // 'EXAM' | 'STUDY'
+  expr: '',
+  result: '0',
+  rawVal: 0,
+  lastAns: parseFloat(localStorage.getItem('casio_last_ans') || '0'),
+  isCalculated: false,
+  shift: false,
+  alpha: false,
+  angleMode: 'DEG',
+  displayFormat: 'NORM1',
+  fixDigits: 2,
+  sciDigits: 3,
+  engStep: 0,
+  sdCycle: 0,
+  history: JSON.parse(localStorage.getItem('casio_tape') || '[]'),
+  undoStack: [],
+  keystrokes: 0,
+  timerSeconds: 0,
+  scale: parseFloat(localStorage.getItem('casio_cal_scale') || '1')
+};
+
+// UI Elements
+const elInput = document.getElementById('expression-display');
+const elResult = document.getElementById('result-display');
+const elResultContainer = document.getElementById('result-container');
+const elBadgeShift = document.getElementById('badge-shift');
+const elBadgeAlpha = document.getElementById('badge-alpha');
+const elBadgeAngle = document.getElementById('badge-angle');
+const elBadgeFormat = document.getElementById('badge-format');
+const elArrowLeft = document.getElementById('scroll-arrow-left');
+const elArrowRight = document.getElementById('scroll-arrow-right');
+const elStudyBar = document.getElementById('study-bar');
+const elStudyKeystrokes = document.getElementById('study-keystrokes');
+const elStudyTimer = document.getElementById('study-timer');
+
+function hapticPulse() {
+  if (navigator.vibrate) navigator.vibrate(12);
+}
+
+function updateDisplay() {
+  elInput.textContent = state.expr;
+  elResult.textContent = state.result;
+  elBadgeShift.classList.toggle('active', state.shift);
+  elBadgeAlpha.classList.toggle('active', state.alpha);
+  elBadgeAngle.textContent = state.angleMode === 'DEG' ? 'D' : state.angleMode === 'RAD' ? 'R' : 'GRA';
+  elBadgeFormat.textContent = state.displayFormat;
+  elStudyBar.style.display = state.mode === 'STUDY' ? 'flex' : 'none';
+
+  // Check result horizontal overflow
+  if (elResultContainer.scrollWidth > elResultContainer.clientWidth) {
+    elArrowLeft.style.display = elResultContainer.scrollLeft > 2 ? 'inline' : 'none';
+    elArrowRight.style.display = (elResultContainer.scrollLeft + elResultContainer.clientWidth < elResultContainer.scrollWidth - 2) ? 'inline' : 'none';
+  } else {
+    elArrowLeft.style.display = 'none';
+    elArrowRight.style.display = 'none';
+  }
+}
+
+function pushUndo() {
+  if (state.mode === 'STUDY') {
+    state.undoStack.push({ expr: state.expr, result: state.result, rawVal: state.rawVal });
+    if (state.undoStack.length > 30) state.undoStack.shift();
+  }
+}
+
+function appendToken(tok) {
+  pushUndo();
+  hapticPulse();
+  state.keystrokes++;
+  if (state.isCalculated) {
+    if (['+', '-', '×', '÷', '^', '²', '³'].includes(tok)) {
+      state.expr = 'Ans' + tok;
+    } else {
+      state.expr = tok;
+    }
+    state.isCalculated = false;
+    state.engStep = 0;
+    state.sdCycle = 0;
+  } else {
+    state.expr += tok;
+  }
+  state.shift = false;
+  state.alpha = false;
+  updateDisplay();
+}
+
+function calculate() {
+  hapticPulse();
+  state.keystrokes++;
+  if (!state.expr.trim()) return;
+
+  const res = evalCasioExpr(state.expr, state.angleMode, state.lastAns);
+  if (!res.success) {
+    state.result = res.error || 'Syntax ERROR';
+    updateDisplay();
+    return;
+  }
+
+  const num = res.result;
+  state.rawVal = num;
+  state.lastAns = num;
+  state.isCalculated = true;
+  state.engStep = 0;
+  state.sdCycle = 0;
+
+  try { localStorage.setItem('casio_last_ans', num.toString()); } catch(e){}
+
+  // Check exact fraction in Math mode
+  const frac = toFraction(num);
+  if (frac && frac.den > 1 && frac.den <= 1000) {
+    state.result = `${frac.num}/${frac.den}`;
+    state.sdCycle = 1; // ready to toggle to decimal
+  } else {
+    state.result = formatCasioResult(num, state.displayFormat, state.fixDigits, state.sciDigits, 0);
+  }
+
+  // Save history
+  state.history.unshift({ expr: state.expr, result: state.result, num });
+  if (state.history.length > 50) state.history.pop();
+  try { localStorage.setItem('casio_tape', JSON.stringify(state.history)); } catch(e){}
+
+  updateDisplay();
+}
+
+// DMS key handler: successive presses insert °, then ', then ", or converts result to d°m's"
+function handleDms() {
+  hapticPulse();
+  state.keystrokes++;
+  if (state.isCalculated) {
+    const isDms = state.result.includes('°');
+    if (isDms) {
+      state.result = formatCasioResult(state.rawVal, state.displayFormat, state.fixDigits, state.sciDigits, state.engStep);
+    } else {
+      state.result = decimalToDms(state.rawVal);
+    }
+    updateDisplay();
+    return;
+  }
+
+  // While typing: successive °, ', "
+  const lastOp = Math.max(state.expr.lastIndexOf('+'), state.expr.lastIndexOf('-'), state.expr.lastIndexOf('×'), state.expr.lastIndexOf('÷'));
+  const chunk = lastOp >= 0 ? state.expr.slice(lastOp + 1) : state.expr;
+  let sym = '°';
+  if (!chunk.includes('°')) sym = '°';
+  else if (!chunk.includes("'")) sym = "'";
+  else if (!chunk.includes('"')) sym = '"';
+  else sym = '°';
+
+  appendToken(sym);
+}
+
+// S<=>D toggle
+function handleSd() {
+  hapticPulse();
+  state.keystrokes++;
+  if (!state.isCalculated) return;
+  state.sdCycle = (state.sdCycle + 1) % 2;
+  if (state.sdCycle === 0) {
+    const frac = toFraction(state.rawVal);
+    if (frac && frac.den > 1) state.result = `${frac.num}/${frac.den}`;
+    else state.result = formatCasioResult(state.rawVal, state.displayFormat, state.fixDigits, state.sciDigits, state.engStep);
+  } else {
+    state.result = formatCasioResult(state.rawVal, state.displayFormat, state.fixDigits, state.sciDigits, state.engStep);
+  }
+  updateDisplay();
+}
+
+// ENG key toggle
+function handleEng(delta = -1) {
+  hapticPulse();
+  state.keystrokes++;
+  if (!state.isCalculated) return;
+  state.engStep += delta;
+  state.result = formatCasioResult(state.rawVal, state.displayFormat, state.fixDigits, state.sciDigits, state.engStep);
+  updateDisplay();
+}
+
+// KEY EVENT TABLE (one entry per key: normal, shift, alpha)
+const KEY_MAP = {
+  'k-shift': { normal: () => { state.shift = !state.shift; state.alpha = false; updateDisplay(); } },
+  'k-alpha': { normal: () => { state.alpha = !state.alpha; state.shift = false; updateDisplay(); } },
+  'k-on': { normal: () => { state.expr = ''; state.result = '0'; state.isCalculated = false; updateDisplay(); } },
+  'k-menu': { normal: () => { openModal('modal-settings'); } },
+  'k-calc': { normal: calculate, shift: () => alert('SOLVE'), alpha: () => appendToken('=') },
+  'k-optn': { normal: () => openModal('modal-test') },
+  'k-integral': { normal: () => appendToken('∫('), shift: () => appendToken('d/dx(') },
+  'k-varx': { normal: () => appendToken('x'), shift: () => appendToken('Σ(') },
+
+  'k-frac': { normal: () => appendToken('/'), shift: handleSd },
+  'k-sqrt': { normal: () => appendToken('√(') },
+  'k-sqr': { normal: () => appendToken('²'), shift: () => appendToken('³') },
+  'k-pow': { normal: () => appendToken('^(') },
+  'k-logbase': { normal: () => appendToken('log('), shift: () => appendToken('10^(') },
+  'k-ln': { normal: () => appendToken('ln('), shift: () => appendToken('e^(') },
+
+  'k-neg': { normal: () => appendToken('(-'), shift: () => appendToken('log('), alpha: () => appendToken('A') },
+  'k-dms': { normal: handleDms, alpha: () => appendToken('B') },
+  'k-inv': { normal: () => appendToken('⁻¹'), alpha: () => appendToken('C') },
+  'k-sin': { normal: () => appendToken('sin('), alpha: () => appendToken('D') },
+  'k-cos': { normal: () => appendToken('cos('), alpha: () => appendToken('E') },
+  'k-tan': { normal: () => appendToken('tan('), alpha: () => appendToken('F') },
+
+  'k-sto': { normal: () => alert('STO: Press A-F to store') },
+  'k-eng': { normal: () => handleEng(-1), shift: () => handleEng(1) },
+  'k-lpar': { normal: () => appendToken('(') },
+  'k-rpar': { normal: () => appendToken(')'), alpha: () => appendToken('x') },
+  'k-sd': { normal: handleSd },
+  'k-mplus': { normal: () => appendToken('+'), alpha: () => appendToken('M') },
+
+  'k-7': { normal: () => appendToken('7'), shift: () => alert('CONST') },
+  'k-8': { normal: () => appendToken('8'), shift: () => alert('CONV') },
+  'k-9': { normal: () => appendToken('9'), shift: () => { state.expr = ''; state.result = '0'; updateDisplay(); } },
+  'k-del': { normal: () => { state.expr = state.expr.slice(0, -1); updateDisplay(); } },
+  'k-ac': { normal: () => { state.expr = ''; state.result = '0'; state.isCalculated = false; updateDisplay(); }, shift: () => alert('OFF: Powering down') },
+
+  'k-4': { normal: () => appendToken('4') },
+  'k-5': { normal: () => appendToken('5') },
+  'k-6': { normal: () => appendToken('6') },
+  'k-mul': { normal: () => appendToken('×') },
+  'k-div': { normal: () => appendToken('÷') },
+
+  'k-1': { normal: () => appendToken('1') },
+  'k-2': { normal: () => appendToken('2') },
+  'k-3': { normal: () => appendToken('3') },
+  'k-add': { normal: () => appendToken('+') },
+  'k-sub': { normal: () => appendToken('-') },
+
+  'k-0': { normal: () => appendToken('0') },
+  'k-dot': { normal: () => appendToken('.') },
+  'k-exp': { normal: () => appendToken('×10^('), shift: () => appendToken('π'), alpha: () => appendToken('e') },
+  'k-ans': { normal: () => appendToken('Ans') },
+  'k-equal': { normal: calculate }
+};
+
+// Bind Key Clicks
+Object.keys(KEY_MAP).forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('click', () => {
+      const entry = KEY_MAP[id];
+      if (state.shift && entry.shift) {
+        entry.shift();
+        state.shift = false;
+      } else if (state.alpha && entry.alpha) {
+        entry.alpha();
+        state.alpha = false;
+      } else if (entry.normal) {
+        entry.normal();
+      }
+      updateDisplay();
+    });
+  }
+});
+
+// Modal helpers
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+window.closeModal = closeModal;
+
+document.getElementById('gear-menu-btn').addEventListener('click', () => openModal('modal-settings'));
+
+// Calibration
+const calSlider = document.getElementById('cal-slider');
+const calBox = document.getElementById('cal-card-box');
+const calReadout = document.getElementById('cal-scale-readout');
+calSlider.addEventListener('input', (e) => {
+  const sc = parseFloat(e.target.value);
+  state.scale = sc;
+  calBox.style.width = (85.6 * sc) + 'mm';
+  calBox.style.height = (53.98 * sc) + 'mm';
+  calReadout.textContent = Math.round(sc * 100) + '%';
+  document.getElementById('app-container').style.setProperty('--cal-scale', sc);
+  localStorage.setItem('casio_cal_scale', sc.toString());
+});
+document.getElementById('open-cal-btn').addEventListener('click', () => {
+  closeModal('modal-settings');
+  openModal('modal-cal');
+});
+
+// Angle & Format buttons
+document.querySelectorAll('.angle-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    state.angleMode = b.dataset.angle;
+    document.querySelectorAll('.angle-btn').forEach(btn => btn.style.background = btn === b ? '#E5A93C' : '#1E2230');
+    updateDisplay();
+  });
+});
+document.querySelectorAll('.fmt-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    state.displayFormat = b.dataset.fmt;
+    document.querySelectorAll('.fmt-btn').forEach(btn => btn.style.background = btn === b ? '#E5A93C' : '#1E2230');
+    updateDisplay();
+  });
+});
+
+// Mode buttons
+document.getElementById('btn-mode-exam').addEventListener('click', () => {
+  state.mode = 'EXAM';
+  localStorage.setItem('casio_mode', 'EXAM');
+  document.getElementById('btn-mode-exam').className = 'btn-action';
+  document.getElementById('btn-mode-study').className = '';
+  document.getElementById('btn-mode-study').style.background = '#2A2D3C';
+  updateDisplay();
+});
+document.getElementById('btn-mode-study').addEventListener('click', () => {
+  state.mode = 'STUDY';
+  localStorage.setItem('casio_mode', 'STUDY');
+  document.getElementById('btn-mode-study').className = 'btn-action';
+  document.getElementById('btn-mode-exam').className = '';
+  document.getElementById('btn-mode-exam').style.background = '#2A2D3C';
+  updateDisplay();
+});
+
+// Undo
+document.getElementById('btn-undo').addEventListener('click', () => {
+  if (state.undoStack.length > 0) {
+    const prev = state.undoStack.pop();
+    state.expr = prev.expr;
+    state.result = prev.result;
+    state.rawVal = prev.rawVal;
+    updateDisplay();
+  }
+});
+
+// Practice timer in study mode
+setInterval(() => {
+  if (state.mode === 'STUDY') {
+    state.timerSeconds++;
+    const m = Math.floor(state.timerSeconds / 60).toString().padStart(2, '0');
+    const s = (state.timerSeconds % 60).toString().padStart(2, '0');
+    elStudyTimer.textContent = `${m}:${s}`;
+    elStudyKeystrokes.textContent = `Keys: ${state.keystrokes}`;
+  }
+}, 1000);
+
+/* =====================================================================
+   TEST HARNESS SUITE (?test=1)
+   ===================================================================== */
+const TESTS = [
+  { id: 1, name: "Norm1 small exp", expr: "0.000453", exp: "4.53×10⁻⁴" },
+  { id: 2, name: "Norm1 lower boundary", expr: "0.01", exp: "0.01" },
+  { id: 3, name: "Norm1 below threshold", expr: "0.0099", exp: "9.9×10⁻³" },
+  { id: 4, name: "Norm1 10-digit int", expr: "9999999999", exp: "9999999999" },
+  { id: 5, name: "Norm1 upper boundary", expr: "10000000000", exp: "1×10¹⁰" },
+  { id: 6, name: "Division exact fraction", expr: "1÷3", exp: "1/3" },
+  { id: 7, name: "Division S<=>D decimal", expr: "1÷3", act: "sd", exp: "0.3333333333" },
+  { id: 8, name: "DMS decimal output", expr: "1°30'0\"", exp: "1.5" },
+  { id: 9, name: "DMS toggle back", expr: "1°30'0\"", act: "dms", exp: "1°30'0\"" },
+  { id: 10, name: "Sci 3 sig figs", expr: "12345", setup: { fmt: "SCI", sci: 3 }, exp: "1.23×10⁴" },
+  { id: 11, name: "Fix 2 decimal places S<=>D", expr: "1÷3", setup: { fmt: "FIX", fix: 2 }, act: "sd", exp: "0.33" },
+  { id: 12, name: "Precedence (× before +)", expr: "2+3×4", exp: "14" },
+  { id: 13, name: "Implied multiplication", expr: "2(3+4)", exp: "14" },
+  { id: 14, name: "sin(30°)", expr: "sin(30)", exp: "0.5" },
+  { id: 15, name: "cos(60°)", expr: "cos(60)", exp: "0.5" },
+  { id: 16, name: "Square root √16", expr: "√16", exp: "4" },
+  { id: 17, name: "Power 2^3", expr: "2^3", exp: "8" },
+  { id: 18, name: "log10(100)", expr: "log(100)", exp: "2" },
+  { id: 19, name: "ln(e)", expr: "ln(e)", exp: "1" },
+  { id: 20, name: "Percentage 50%", expr: "50%", exp: "0.5" }
+];
+
+function runAllTests() {
+  const listEl = document.getElementById('test-list');
+  const sumEl = document.getElementById('test-summary');
+  listEl.innerHTML = '';
+  let passed = 0;
+
+  TESTS.forEach(t => {
+    const res = evalCasioExpr(t.expr, 'DEG');
+    let act = '';
+    if (res.success) {
+      if (t.act === 'dms') {
+        act = decimalToDms(res.result);
+      } else if (t.act === 'sd') {
+        act = formatCasioResult(res.result, t.setup?.fmt || 'NORM1', t.setup?.fix || 2, t.setup?.sci || 3);
+      } else if (!t.setup && toFraction(res.result) && toFraction(res.result).den > 1) {
+        const f = toFraction(res.result);
+        act = `${f.num}/${f.den}`;
+      } else {
+        act = formatCasioResult(res.result, t.setup?.fmt || 'NORM1', t.setup?.fix || 2, t.setup?.sci || 3);
+      }
+    } else {
+      act = res.error;
+    }
+
+    const isPass = act === t.exp;
+    if (isPass) passed++;
+
+    const row = document.createElement('div');
+    row.style.padding = '8px';
+    row.style.background = isPass ? '#0F1A15' : '#221115';
+    row.style.border = '1px solid ' + (isPass ? '#059669' : '#DC2626');
+    row.style.borderRadius = '8px';
+    row.innerHTML = `
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span style="font-weight:bold; color:#E2E8F0;">#${t.id}: ${t.name}</span>
+        <span style="font-weight:bold; color:${isPass ? '#34D399' : '#F87171'};">${isPass ? 'PASS' : 'FAIL'}</span>
+      </div>
+      <div style="color:#94A3B8; font-size:10px;">
+        Input: <b style="color:#E5A93C;">${t.expr}</b> | Expected: <b>${t.exp}</b> | Got: <b style="${isPass?'color:#34D399':'color:#F87171'}">${act}</b>
+      </div>
+    `;
+    listEl.appendChild(row);
+  });
+
+  sumEl.textContent = `Score: ${passed} / ${TESTS.length} Passed (${Math.round((passed/TESTS.length)*100)}%)`;
+}
+
+document.getElementById('open-test-btn').addEventListener('click', () => {
+  closeModal('modal-settings');
+  openModal('modal-test');
+  runAllTests();
+});
+document.getElementById('btn-rerun-tests').addEventListener('click', runAllTests);
+
+// Check URL param ?test=1
+if (window.location.search.includes('test=1')) {
+  openModal('modal-test');
+  runAllTests();
+}
+
+updateDisplay();
+</script>
+</body>
+</html>

@@ -217,14 +217,53 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
       return (
         <span
           key={node.id}
-          className={`inline-flex items-start align-top -mt-2 ml-0.5 transition-all text-[11px] sm:text-xs ${
+          className={`inline-flex items-center align-middle transition-all ${
             isPendingDelete
               ? 'border border-dashed border-red-500 bg-red-950/30 rounded animate-pulse'
               : ''
           }`}
         >
-          <span className="min-w-[14px]">
+          {/* Base */}
+          <span className="inline-flex items-center">
+            {node.base.length > 0 ? (
+              node.base.map((b, idx) => renderNode(b, `${node.id}_base`, idx))
+            ) : (
+              <span className="text-slate-500">□</span>
+            )}
+          </span>
+          {/* Exponent Superscript Slot */}
+          <span className="inline-flex items-start align-top -mt-2 ml-0.5 text-[11px] sm:text-xs min-w-[14px]">
             {renderSlotList(node.exp, `${node.id}_exp`, '□')}
+          </span>
+        </span>
+      );
+    }
+
+    if (node.type === 'postfix') {
+      return (
+        <span
+          key={node.id}
+          className={`inline-flex items-center align-middle transition-all ${
+            isPendingDelete
+              ? 'border border-dashed border-red-500 bg-red-950/30 rounded animate-pulse'
+              : ''
+          }`}
+        >
+          {/* Target Nodes */}
+          <span className="inline-flex items-center">
+            {node.target.map((t, idx) => renderNode(t, `${node.id}_target`, idx))}
+          </span>
+          {/* Postfix Operator Symbol */}
+          <span
+            className={`inline-block select-none ${
+              ['²', '³', '⁻¹'].includes(node.op)
+                ? 'align-top -mt-1.5 text-[11px] sm:text-xs font-bold text-emerald-300'
+                : node.op === '!' || node.op === '%' || node.op === '°'
+                ? 'text-xs sm:text-sm font-bold text-amber-300 ml-0.5'
+                : 'text-xs sm:text-sm text-emerald-300'
+            }`}
+          >
+            {node.op}
           </span>
         </span>
       );

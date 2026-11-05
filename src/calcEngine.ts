@@ -4,6 +4,8 @@
  * fractions, complex numbers, statistics, matrix, vector, and equations.
  */
 
+import { simulateKeystrokes, astToStructureDescription, astToExpression } from './mathAst';
+
 export type AngleMode = 'DEG' | 'RAD' | 'GRA';
 export type DisplayFormat = 'NORM1' | 'NORM2' | 'FIX' | 'SCI';
 
@@ -130,33 +132,73 @@ export function recognizeExactSurd(val: number, tolerance = 1e-5): string | null
   return null;
 }
 
-// Engineering notation (powers of 3)
-export function toEngineering(val: number): string {
-  if (!isFinite(val) || val === 0) return '0';
-  const exp = Math.floor(Math.log10(Math.abs(val)));
-  const engExp = Math.floor(exp / 3) * 3;
-  const mantissa = val / Math.pow(10, engExp);
-  const roundedMantissa = Math.round(mantissa * 1e8) / 1e8;
-  if (engExp === 0) return `${roundedMantissa}`;
-  return `${roundedMantissa}×10^(${engExp})`;
+// Unicode superscript digits and signs
+export function toSuperscript(str: string | number): string {
+  const map: Record<string, string> = {
+    '-': '⁻',
+    '+': '⁺',
+    '0': '⁰',
+    '1': '¹',
+    '2': '²',
+    '3': '³',
+    '4': '⁴',
+    '5': '⁵',
+    '6': '⁶',
+    '7': '⁷',
+    '8': '⁸',
+    '9': '⁹',
+  };
+  return String(str)
+    .split('')
+    .map((c) => map[c] || c)
+    .join('');
 }
 
-// Format numbers according to fx-570 standard
-export function formatResult(val: number, format: DisplayFormat = 'NORM1', fixDigits = 2, sciDigits = 5): string {
-  if (isNaN(val)) return 'Math ERROR';
-  if (!isFinite(val)) return val > 0 ? 'Infinity' : '-Infinity';
+// Engineering notation (powers of 3)
+export function toEngineering(val: number, engStep = 0): string {
+  if (!isFinite(val) || val === 0) return '0';
+  const exp = Math.floor(Math.log10(Math.abs(val)));
+  const baseEngExp = Math.floor(exp / 3) * 3 + engStep * 3;
+  const mantissa = val / Math.pow(10, baseEngExp);
+  const roundedMantissa = parseFloat(mantissa.toPrecision(10));
+  if (baseEngExp === 0) return `${roundedMantissa}`;
+  return `${roundedMantissa}×10${toSuperscript(baseEngExp)}`;
+}
 
-  if (Math.abs(val) < 1e-14) return '0';
+// Format numbers according to authentic fx-570EX standard
+export function formatResult(
+  val: number,
+  format: DisplayFormat = 'NORM1',
+  fixDigits = 2,
+  sciDigits = 5,
+  engStep = 0
+): string {
+  if (isNaN(val)) return 'Math ERROR';
+  if (!isFinite(val)) return 'Math ERROR';
+
+  if (Math.abs(val) < 1e-15) return '0';
 
   if (format === 'FIX') {
     return val.toFixed(Math.max(0, Math.min(9, fixDigits)));
   }
 
   if (format === 'SCI') {
-    const s = val.toExponential(Math.max(1, Math.min(9, sciDigits)));
-    const [m, e] = s.split('e');
-    const expNum = parseInt(e, 10);
-    return `${m}×10^(${expNum})`;
+    const sigFigs = sciDigits === 0 ? 10 : Math.max(1, Math.min(10, sciDigits));
+    let exp = Math.floor(Math.log10(Math.abs(val)));
+    let mantissa = val / Math.pow(10, exp);
+    let roundedMantissa = parseFloat(mantissa.toPrecision(sigFigs));
+    if (Math.abs(roundedMantissa) >= 10) {
+      roundedMantissa /= 10;
+      exp += 1;
+    }
+    exp += engStep * 3;
+    const finalMantissa = parseFloat((roundedMantissa * Math.pow(10, -engStep * 3)).toPrecision(10));
+    return `${finalMantissa}×10${toSuperscript(exp)}`;
+  }
+
+  // Handle ENG toggles for NORM
+  if (engStep !== 0) {
+    return toEngineering(val, engStep);
   }
 
   // NORM 1: Exponential for |val| < 1e-2 or |val| >= 1e10
@@ -164,15 +206,19 @@ export function formatResult(val: number, format: DisplayFormat = 'NORM1', fixDi
   const threshold = format === 'NORM2' ? 1e-9 : 1e-2;
   const abs = Math.abs(val);
 
-  if (abs >= 1e10 || (abs > 0 && abs < threshold)) {
-    const s = val.toExponential(6);
-    const [m, e] = s.split('e');
-    const expNum = parseInt(e, 10);
-    const cleanM = parseFloat(m).toString();
-    return `${cleanM}×10^(${expNum})`;
+  if (abs >= 1e10 || abs < threshold) {
+    let exp = Math.floor(Math.log10(abs));
+    let mantissa = val / Math.pow(10, exp);
+    let roundedMantissa = parseFloat(mantissa.toPrecision(10));
+    if (Math.abs(roundedMantissa) >= 10) {
+      roundedMantissa /= 10;
+      exp += 1;
+    }
+    return `${roundedMantissa}×10${toSuperscript(exp)}`;
   }
 
-  // Clean decimal, max 10 digits
+  // Normal decimal display within range [threshold, 1e10)
+  // Internal precision 15 digits, displayed mantissa max 10 digits, round at the 10th, strip trailing zeros
   const str = parseFloat(val.toPrecision(10)).toString();
   return str;
 }
@@ -280,15 +326,17 @@ export function dmsToDecimal(d: number, m = 0, s = 0): number {
   return d + m / 60 + s / 3600;
 }
 
-// Decimal degrees to DMS string
+// Decimal degrees to DMS string (e.g. 1°30'0")
 export function decimalToDms(val: number): string {
   const sign = val < 0 ? '-' : '';
   val = Math.abs(val);
   const d = Math.floor(val);
   const remM = (val - d) * 60;
   const m = Math.floor(remM);
-  const s = Math.round((remM - m) * 60 * 100) / 100;
-  return `${sign}${d}° ${m}' ${s}"`;
+  const remS = (remM - m) * 60;
+  const s = Math.round(remS * 100) / 100;
+  const cleanS = s % 1 === 0 ? s.toString() : s.toFixed(2).replace(/\.?0+$/, '');
+  return `${sign}${d}°${m}'${cleanS}"`;
 }
 
 // Physical Constants list (fx-570 standard library)
@@ -585,8 +633,8 @@ export function evaluateMathExpression(
     return { success: true, result: 0 };
   }
 
+  let clean = expr;
   try {
-    let clean = expr;
 
     // Substitute Ans
     clean = clean.replace(/Ans/g, `(${ans})`);
@@ -689,6 +737,11 @@ export function evaluateMathExpression(
     clean = clean.replace(/π/g, `(${Math.PI})`);
     clean = clean.replace(/e\b/g, `(${Math.E})`);
 
+    // Handle DMS (degrees, minutes, seconds) syntax e.g. 1°30'0" or 1°30' or 45°
+    clean = clean.replace(/(\d+(?:\.\d+)?)°\s*(\d+(?:\.\d+)?)['′]\s*(\d+(?:\.\d+)?)["″]/g, '($1 + $2/60 + $3/3600)');
+    clean = clean.replace(/(\d+(?:\.\d+)?)°\s*(\d+(?:\.\d+)?)['′]/g, '($1 + $2/60)');
+    clean = clean.replace(/(\d+(?:\.\d+)?)°/g, '($1)');
+
     // Replace Scientific notation 10^x and ×10^(x) or ×10^x
     clean = clean.replace(/×10\^(\(-?\d+\)|\d+)/g, '*1e$1');
     clean = clean.replace(/×10\^/g, '*10^');
@@ -728,8 +781,8 @@ export function evaluateMathExpression(
     clean = clean.replace(/√(\d+(?:\.\d+)?)/g, 'sqrt($1)');
 
     // Standard Logarithms (single argument log(x))
-    clean = clean.replace(/ln\(/g, 'Math.log(');
-    clean = clean.replace(/log\(/g, 'Math.log10(');
+    clean = clean.replace(/(?<!Math\.)\blog\(/g, 'Math.log10(');
+    clean = clean.replace(/\bln\(/g, 'Math.log(');
 
     // Hyperbolic
     clean = clean.replace(/sinh\(/g, 'Math.sinh(');
@@ -1013,4 +1066,151 @@ export function solveSimultaneous2(
   const x = (c1 * b2 - c2 * b1) / det;
   const y = (a1 * c2 - a2 * c1) / det;
   return { x, y };
+}
+
+export interface TestCase {
+  id: number;
+  name: string;
+  expression?: string;
+  keys?: string[];
+  action?: 'none' | 'sd' | 'dms' | 'structure';
+  setup?: {
+    format?: DisplayFormat;
+    fixDigits?: number;
+    sciDigits?: number;
+    angleMode?: AngleMode;
+  };
+  expected: string;
+}
+
+export const TEST_CASES: TestCase[] = [
+  // 1. Postfix & Fraction Operand Specification Tests
+  {
+    id: 1,
+    name: '(6)x² ÷ → fraction(num=(6)², den=empty)',
+    keys: ['(', '6', ')', 'x²', '÷'],
+    action: 'structure',
+    expected: 'fraction(num=(6)², den=empty), cursor in den',
+  },
+  {
+    id: 2,
+    name: '(6) ÷ → fraction(num=6, den=empty)',
+    keys: ['(', '6', ')', '÷'],
+    action: 'structure',
+    expected: 'fraction(num=6, den=empty)',
+  },
+  {
+    id: 3,
+    name: '(6)x² ÷ 4 = → 9',
+    keys: ['(', '6', ')', 'x²', '÷', '4'],
+    expected: '9',
+  },
+  {
+    id: 4,
+    name: '2 x□ 3 ÷ → power(2, fraction(num=3, den=empty))',
+    keys: ['2', 'x□', '3', '÷'],
+    action: 'structure',
+    expected: 'power(2, fraction(num=3, den=empty)), cursor in den',
+  },
+  {
+    id: 5,
+    name: '5 x! ÷ → fraction(num=5!, den=empty)',
+    keys: ['5', 'x!', '÷'],
+    action: 'structure',
+    expected: 'fraction(num=5!, den=empty)',
+  },
+  {
+    id: 6,
+    name: 'sin(30) ÷ 2 = → 1/4',
+    keys: ['sin', '(', '3', '0', ')', '÷', '2'],
+    expected: '1/4',
+  },
+  {
+    id: 7,
+    name: '30° ÷ 2 → fraction(num=30°, den=empty)',
+    keys: ['3', '0', '°', '÷'],
+    action: 'structure',
+    expected: 'fraction(num=30°, den=empty)',
+  },
+  {
+    id: 8,
+    name: '(2+3) ÷ 4 = → 5/4',
+    keys: ['(', '2', '+', '3', ')', '÷', '4'],
+    expected: '5/4',
+  },
+
+  // 2. Hardware Formatting & Functionality Regression Suite
+  { id: 9, name: 'Norm1 small exponential', expression: '0.000453', expected: '4.53×10⁻⁴' },
+  { id: 10, name: 'Norm1 lower boundary (stays decimal)', expression: '0.01', expected: '0.01' },
+  { id: 11, name: 'Norm1 just below threshold', expression: '0.0099', expected: '9.9×10⁻³' },
+  { id: 12, name: 'Norm1 10-digit integer', expression: '9999999999', expected: '9999999999' },
+  { id: 13, name: 'Norm1 upper boundary (exponential)', expression: '10000000000', expected: '1×10¹⁰' },
+  { id: 14, name: 'Division exact fraction in Math mode', expression: '1÷3', expected: '1/3' },
+  { id: 15, name: 'Division S<=>D decimal 10-digit', expression: '1÷3', action: 'sd', expected: '0.3333333333' },
+  { id: 16, name: 'DMS calculation decimal output', expression: '1°30\'0"', expected: '1.5' },
+  { id: 17, name: 'DMS toggle to d°m\'s"', expression: '1°30\'0"', action: 'dms', expected: '1°30\'0"' },
+  { id: 18, name: 'Sci 3 significant figures', expression: '12345', setup: { format: 'SCI', sciDigits: 3 }, expected: '1.23×10⁴' },
+  { id: 19, name: 'Fix 2 decimal places S<=>D', expression: '1÷3', setup: { format: 'FIX', fixDigits: 2 }, action: 'sd', expected: '0.33' },
+  { id: 20, name: 'Operator precedence (× before +)', expression: '2+3×4', expected: '14' },
+  { id: 21, name: 'Parentheses implied multiplication', expression: '2(3+4)', expected: '14' },
+  { id: 22, name: 'Trigonometry sin(30°)', expression: 'sin(30)', setup: { angleMode: 'DEG' }, expected: '0.5' },
+  { id: 23, name: 'Trigonometry cos(60°)', expression: 'cos(60)', setup: { angleMode: 'DEG' }, expected: '0.5' },
+  { id: 24, name: 'Square root exact', expression: '√16', expected: '4' },
+  { id: 25, name: 'Power exponentiation', expression: '2^3', expected: '8' },
+  { id: 26, name: 'Common logarithm log10(100)', expression: 'log(100)', expected: '2' },
+  { id: 27, name: 'Natural logarithm ln(e)', expression: 'ln(e)', expected: '1' },
+  { id: 28, name: 'Factorial 5!', expression: '5!', expected: '120' },
+  { id: 29, name: 'Permutation 5P2', expression: '5 P 2', expected: '20' },
+  { id: 30, name: 'Combination 5C2', expression: '5 C 2', expected: '10' },
+];
+
+export function runTestCase(tc: TestCase): { passed: boolean; actual: string } {
+  if (tc.action === 'structure' && tc.keys) {
+    const ast = simulateKeystrokes(tc.keys);
+    const actual = astToStructureDescription(ast);
+    const passed =
+      actual === tc.expected ||
+      actual.replace(', cursor in den', '') === tc.expected ||
+      `${actual}, cursor in den` === tc.expected;
+    return { passed, actual };
+  }
+
+  const format = tc.setup?.format || 'NORM1';
+  const fixDigits = tc.setup?.fixDigits ?? 2;
+  const sciDigits = tc.setup?.sciDigits ?? 5;
+  const angleMode = tc.setup?.angleMode || 'DEG';
+
+  let expr = tc.expression || '';
+  if (!expr && tc.keys) {
+    const ast = simulateKeystrokes(tc.keys);
+    expr = astToExpression(ast.root);
+  }
+
+  const res = evaluateMathExpression(expr, angleMode);
+  if (!res.success || res.result === undefined) {
+    return { passed: false, actual: res.error || 'Error' };
+  }
+
+  const num = res.result;
+
+  if (tc.action === 'dms') {
+    const actualDms = decimalToDms(num);
+    return { passed: actualDms === tc.expected, actual: actualDms };
+  }
+
+  // Check exact fraction if in Math mode and no explicit action or decimal requested
+  if (tc.action !== 'sd' && !tc.setup?.format) {
+    const exactSurd = recognizeExactSurd(num);
+    if (exactSurd) {
+      if (exactSurd === tc.expected) return { passed: true, actual: exactSurd };
+    }
+    const frac = toFraction(num);
+    if (frac && frac.den > 1 && Math.abs(frac.den) <= 1000) {
+      const fracStr = `${frac.num}/${frac.den}`;
+      if (fracStr === tc.expected) return { passed: true, actual: fracStr };
+    }
+  }
+
+  const actual = formatResult(num, format, fixDigits, sciDigits);
+  return { passed: actual === tc.expected, actual };
 }
