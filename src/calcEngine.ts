@@ -340,6 +340,141 @@ export const METRIC_CONVERSIONS = [
   { code: '40', name: 'cal ➔ J', fn: (v: number) => v * 4.184 },
 ];
 
+// Helper to evaluate a mathematical sub-expression for a given value of variable x
+export function evaluateSubExprForX(subExpr: string, xVal: number, angleMode: AngleMode = 'DEG'): number {
+  const res = evaluateMathExpression(subExpr, angleMode, { x: xVal, X: xVal });
+  return res.success && typeof res.result === 'number' ? res.result : NaN;
+}
+
+// Numerical Definite Integration using Simpson's 1/3 Rule
+export function computeDefiniteIntegral(
+  fExpr: string,
+  a: number,
+  b: number,
+  angleMode: AngleMode = 'DEG',
+  intervals = 200
+): number {
+  if (a === b) return 0;
+  let sign = 1;
+  if (b < a) {
+    const tmp = a;
+    a = b;
+    b = tmp;
+    sign = -1;
+  }
+
+  // Ensure intervals is even
+  const n = intervals % 2 === 0 ? intervals : intervals + 1;
+  const h = (b - a) / n;
+
+  let sum = evaluateSubExprForX(fExpr, a, angleMode) + evaluateSubExprForX(fExpr, b, angleMode);
+  if (isNaN(sum)) return NaN;
+
+  for (let i = 1; i < n; i++) {
+    const x = a + i * h;
+    const y = evaluateSubExprForX(fExpr, x, angleMode);
+    if (isNaN(y)) return NaN;
+    sum += (i % 2 === 1 ? 4 : 2) * y;
+  }
+
+  return sign * (h / 3) * sum;
+}
+
+// Numerical Derivative at a point using 4-point central difference
+export function computeDerivative(
+  fExpr: string,
+  x0: number,
+  angleMode: AngleMode = 'DEG',
+  h = 1e-5
+): number {
+  const f_plus_2h = evaluateSubExprForX(fExpr, x0 + 2 * h, angleMode);
+  const f_plus_h = evaluateSubExprForX(fExpr, x0 + h, angleMode);
+  const f_minus_h = evaluateSubExprForX(fExpr, x0 - h, angleMode);
+  const f_minus_2h = evaluateSubExprForX(fExpr, x0 - 2 * h, angleMode);
+
+  if (isNaN(f_plus_h) || isNaN(f_minus_h)) return NaN;
+
+  // Fourth-order central difference
+  const diff = (-f_plus_2h + 8 * f_plus_h - 8 * f_minus_h + f_minus_2h) / (12 * h);
+  return diff;
+}
+
+// Numerical Summation: Σ(f(x), a, b)
+export function computeSummation(
+  fExpr: string,
+  a: number,
+  b: number,
+  angleMode: AngleMode = 'DEG'
+): number {
+  const start = Math.round(a);
+  const end = Math.round(b);
+  if (end < start) return 0;
+  if (end - start > 50000) return NaN; // Prevent infinite loops
+
+  let sum = 0;
+  for (let i = start; i <= end; i++) {
+    const val = evaluateSubExprForX(fExpr, i, angleMode);
+    if (isNaN(val)) return NaN;
+    sum += val;
+  }
+  return sum;
+}
+
+// Numerical Root Solver: Newton-Raphson f(x) = 0
+export function solveEquation(
+  expr: string,
+  angleMode: AngleMode = 'DEG',
+  initialX = 1
+): { success: boolean; root?: number; error?: string } {
+  let x = initialX;
+  const maxIter = 100;
+  const tol = 1e-9;
+
+  for (let i = 0; i < maxIter; i++) {
+    const fx = evaluateSubExprForX(expr, x, angleMode);
+    if (isNaN(fx)) break;
+    if (Math.abs(fx) < tol) {
+      return { success: true, root: parseFloat(x.toFixed(8)) };
+    }
+    const dfx = computeDerivative(expr, x, angleMode);
+    if (isNaN(dfx) || Math.abs(dfx) < 1e-12) {
+      // Perturb slightly if stuck at zero derivative
+      x += 0.01;
+      continue;
+    }
+    const nextX = x - fx / dfx;
+    if (Math.abs(nextX - x) < tol) {
+      return { success: true, root: parseFloat(nextX.toFixed(8)) };
+    }
+    x = nextX;
+  }
+
+  // Fallback to bisection around initial guess
+  let a = initialX - 10;
+  let b = initialX + 10;
+  let fa = evaluateSubExprForX(expr, a, angleMode);
+  let fb = evaluateSubExprForX(expr, b, angleMode);
+
+  if (fa * fb < 0) {
+    for (let i = 0; i < 60; i++) {
+      const mid = (a + b) / 2;
+      const fmid = evaluateSubExprForX(expr, mid, angleMode);
+      if (Math.abs(fmid) < tol || (b - a) / 2 < tol) {
+        return { success: true, root: parseFloat(mid.toFixed(8)) };
+      }
+      if (fa * fmid < 0) {
+        b = mid;
+        fb = fmid;
+      } else {
+        a = mid;
+        fa = fmid;
+      }
+    }
+  }
+
+  return { success: false, error: "Can't Solve" };
+}
+
 /**
  * Expression Evaluator with custom token replacement
  */
@@ -359,10 +494,67 @@ export function evaluateMathExpression(
     // Substitute Ans
     clean = clean.replace(/Ans/g, `(${ans})`);
 
+    // Handle Definite Integral syntax: ∫(f(x), a, b) or ∫(f(x),a,b)
+    const integralRegex = /∫\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/g;
+    let intMatch: RegExpExecArray | null;
+    while ((intMatch = integralRegex.exec(clean)) !== null) {
+      const fExpr = intMatch[1].trim();
+      const aValRes = evaluateMathExpression(intMatch[2], angleMode, variables, ans);
+      const bValRes = evaluateMathExpression(intMatch[3], angleMode, variables, ans);
+      if (aValRes.success && bValRes.success && aValRes.result !== undefined && bValRes.result !== undefined) {
+        const intVal = computeDefiniteIntegral(fExpr, aValRes.result, bValRes.result, angleMode);
+        clean = clean.replace(intMatch[0], `(${intVal})`);
+      } else {
+        return { success: false, error: 'Math ERROR' };
+      }
+    }
+
+    // Handle Numerical Derivative syntax: d/dx(f(x), x0) or d/dx(f(x),x0)
+    const diffRegex = /d\/dx\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g;
+    let diffMatch: RegExpExecArray | null;
+    while ((diffMatch = diffRegex.exec(clean)) !== null) {
+      const fExpr = diffMatch[1].trim();
+      const x0Res = evaluateMathExpression(diffMatch[2], angleMode, variables, ans);
+      if (x0Res.success && x0Res.result !== undefined) {
+        const diffVal = computeDerivative(fExpr, x0Res.result, angleMode);
+        clean = clean.replace(diffMatch[0], `(${diffVal})`);
+      } else {
+        return { success: false, error: 'Math ERROR' };
+      }
+    }
+
+    // Handle Summation syntax: Σ(f(x), a, b)
+    const sumRegex = /Σ\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/g;
+    let sumMatch: RegExpExecArray | null;
+    while ((sumMatch = sumRegex.exec(clean)) !== null) {
+      const fExpr = sumMatch[1].trim();
+      const aRes = evaluateMathExpression(sumMatch[2], angleMode, variables, ans);
+      const bRes = evaluateMathExpression(sumMatch[3], angleMode, variables, ans);
+      if (aRes.success && bRes.success && aRes.result !== undefined && bRes.result !== undefined) {
+        const sumVal = computeSummation(fExpr, aRes.result, bRes.result, angleMode);
+        clean = clean.replace(sumMatch[0], `(${sumVal})`);
+      } else {
+        return { success: false, error: 'Math ERROR' };
+      }
+    }
+
+    // Custom Base Logarithm: log_(b)(x) or log(b, x)
+    clean = clean.replace(/log_\s*\(([^)]+)\)\s*\(([^)]+)\)/g, '(Math.log($2)/Math.log($1))');
+    clean = clean.replace(/log\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '(Math.log($2)/Math.log($1))');
+
+    // Absolute value: Abs(x)
+    clean = clean.replace(/Abs\(/gi, 'Math.abs(');
+
     // Substitute Variables A, B, C, D, E, F, X, Y, M if present as standalone tokens
     for (const [varName, varVal] of Object.entries(variables)) {
       const reg = new RegExp(`\\b${varName}\\b`, 'g');
       clean = clean.replace(reg, `(${varVal})`);
+    }
+
+    // Default standalone variable x/X to 0 if not provided
+    if (!('x' in variables) && !('X' in variables)) {
+      clean = clean.replace(/\bx\b/g, '(0)');
+      clean = clean.replace(/\bX\b/g, '(0)');
     }
 
     // Substitute Constants
@@ -393,12 +585,13 @@ export function evaluateMathExpression(
     clean = clean.replace(/(\d+(?:\.\d+)?|\([^)]+\))!/g, 'fact($1)');
 
     // Handle implicit multiplication:
-    // e.g. 2(3), (2)(3), 2sin(30), 2π, 2√4
+    // e.g. 2(3), (2)(3), 2sin(30), 2π, 2√4, 2x
     clean = clean.replace(/(\d)(\()/g, '$1*$2');
     clean = clean.replace(/(\))(\d)/g, '$1*$2');
     clean = clean.replace(/(\))(\()/g, '$1*$2');
-    clean = clean.replace(/(\d)(sin|cos|tan|ln|log|√|³√)/g, '$1*$2');
-    clean = clean.replace(/(\))(sin|cos|tan|ln|log|√|³√)/g, '$1*$2');
+    clean = clean.replace(/(\d)(sin|cos|tan|ln|log|√|³√|Math\.abs)/g, '$1*$2');
+    clean = clean.replace(/(\))(sin|cos|tan|ln|log|√|³√|Math\.abs)/g, '$1*$2');
+    clean = clean.replace(/(\d)([a-zA-Z])/g, '$1*$2');
 
     // Roots
     clean = clean.replace(/³√\(/g, 'cbrt(');
@@ -406,7 +599,7 @@ export function evaluateMathExpression(
     clean = clean.replace(/√\(/g, 'sqrt(');
     clean = clean.replace(/√(\d+(?:\.\d+)?)/g, 'sqrt($1)');
 
-    // Logarithms
+    // Standard Logarithms (single argument log(x))
     clean = clean.replace(/ln\(/g, 'Math.log(');
     clean = clean.replace(/log\(/g, 'Math.log10(');
 
