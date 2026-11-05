@@ -380,6 +380,103 @@ export function computeDefiniteIntegral(
   return sign * (h / 3) * sum;
 }
 
+// Total Geometric Area under curve: ∫ |f(x)| dx from a to b
+export function computeGeometricArea(
+  fExpr: string,
+  a: number,
+  b: number,
+  angleMode: AngleMode = 'DEG',
+  intervals = 240
+): number {
+  if (a === b) return 0;
+  const minX = Math.min(a, b);
+  const maxX = Math.max(a, b);
+
+  const n = intervals % 2 === 0 ? intervals : intervals + 1;
+  const h = (maxX - minX) / n;
+
+  const yA = Math.abs(evaluateSubExprForX(fExpr, minX, angleMode));
+  const yB = Math.abs(evaluateSubExprForX(fExpr, maxX, angleMode));
+  if (isNaN(yA) || isNaN(yB)) return NaN;
+
+  let sum = yA + yB;
+  for (let i = 1; i < n; i++) {
+    const x = minX + i * h;
+    const y = Math.abs(evaluateSubExprForX(fExpr, x, angleMode));
+    if (isNaN(y)) return NaN;
+    sum += (i % 2 === 1 ? 4 : 2) * y;
+  }
+
+  return (h / 3) * sum;
+}
+
+// Bounded Area between two curves: ∫ |f1(x) - f2(x)| dx from a to b
+export function computeAreaBetweenCurves(
+  f1Expr: string,
+  f2Expr: string,
+  a: number,
+  b: number,
+  angleMode: AngleMode = 'DEG',
+  intervals = 240
+): number {
+  if (a === b) return 0;
+  const minX = Math.min(a, b);
+  const maxX = Math.max(a, b);
+
+  const n = intervals % 2 === 0 ? intervals : intervals + 1;
+  const h = (maxX - minX) / n;
+
+  const yA = Math.abs(
+    evaluateSubExprForX(f1Expr, minX, angleMode) - evaluateSubExprForX(f2Expr, minX, angleMode)
+  );
+  const yB = Math.abs(
+    evaluateSubExprForX(f1Expr, maxX, angleMode) - evaluateSubExprForX(f2Expr, maxX, angleMode)
+  );
+  if (isNaN(yA) || isNaN(yB)) return NaN;
+
+  let sum = yA + yB;
+  for (let i = 1; i < n; i++) {
+    const x = minX + i * h;
+    const diff = Math.abs(
+      evaluateSubExprForX(f1Expr, x, angleMode) - evaluateSubExprForX(f2Expr, x, angleMode)
+    );
+    if (isNaN(diff)) return NaN;
+    sum += (i % 2 === 1 ? 4 : 2) * diff;
+  }
+
+  return (h / 3) * sum;
+}
+
+export interface CurvePoint {
+  x: number;
+  y: number;
+  y2?: number;
+}
+
+// Samples points along the curve for visual area graph plotting
+export function sampleFunctionCurve(
+  fExpr: string,
+  f2Expr: string | null,
+  xMin: number,
+  xMax: number,
+  points = 120,
+  angleMode: AngleMode = 'DEG'
+): CurvePoint[] {
+  const res: CurvePoint[] = [];
+  const step = (xMax - xMin) / points;
+  for (let i = 0; i <= points; i++) {
+    const x = xMin + i * step;
+    const yVal = evaluateSubExprForX(fExpr, x, angleMode);
+    const pt: CurvePoint = { x, y: isNaN(yVal) ? 0 : yVal };
+    if (f2Expr && f2Expr.trim() !== '') {
+      const y2Val = evaluateSubExprForX(f2Expr, x, angleMode);
+      pt.y2 = isNaN(y2Val) ? 0 : y2Val;
+    }
+    res.push(pt);
+  }
+  return res;
+}
+
 // Numerical Derivative at a point using 4-point central difference
 export function computeDerivative(
   fExpr: string,
@@ -504,6 +601,37 @@ export function evaluateMathExpression(
       if (aValRes.success && bValRes.success && aValRes.result !== undefined && bValRes.result !== undefined) {
         const intVal = computeDefiniteIntegral(fExpr, aValRes.result, bValRes.result, angleMode);
         clean = clean.replace(intMatch[0], `(${intVal})`);
+      } else {
+        return { success: false, error: 'Math ERROR' };
+      }
+    }
+
+    // Handle Area between two curves: Area(f1(x), f2(x), a, b)
+    const areaBetweenRegex = /Area\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/gi;
+    let areaBtwMatch: RegExpExecArray | null;
+    while ((areaBtwMatch = areaBetweenRegex.exec(clean)) !== null) {
+      const f1Expr = areaBtwMatch[1].trim();
+      const f2Expr = areaBtwMatch[2].trim();
+      const aValRes = evaluateMathExpression(areaBtwMatch[3], angleMode, variables, ans);
+      const bValRes = evaluateMathExpression(areaBtwMatch[4], angleMode, variables, ans);
+      if (aValRes.success && bValRes.success && aValRes.result !== undefined && bValRes.result !== undefined) {
+        const areaVal = computeAreaBetweenCurves(f1Expr, f2Expr, aValRes.result, bValRes.result, angleMode);
+        clean = clean.replace(areaBtwMatch[0], `(${areaVal})`);
+      } else {
+        return { success: false, error: 'Math ERROR' };
+      }
+    }
+
+    // Handle Geometric Area under single curve: Area(f(x), a, b)
+    const areaRegex = /Area\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/gi;
+    let areaMatch: RegExpExecArray | null;
+    while ((areaMatch = areaRegex.exec(clean)) !== null) {
+      const fExpr = areaMatch[1].trim();
+      const aValRes = evaluateMathExpression(areaMatch[2], angleMode, variables, ans);
+      const bValRes = evaluateMathExpression(areaMatch[3], angleMode, variables, ans);
+      if (aValRes.success && bValRes.success && aValRes.result !== undefined && bValRes.result !== undefined) {
+        const areaVal = computeGeometricArea(fExpr, aValRes.result, bValRes.result, angleMode);
+        clean = clean.replace(areaMatch[0], `(${areaVal})`);
       } else {
         return { success: false, error: 'Math ERROR' };
       }

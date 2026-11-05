@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
 import { 
   X, BarChart3, Grid3X3, ArrowRightLeft, 
-  Binary, Atom, History, Calculator, Check, Plus, Trash2 
+  Binary, Atom, History, Calculator, Check, Plus, Trash2, TrendingUp, CornerDownLeft
 } from 'lucide-react';
 import { 
   calculateStatistics, 
   matrixDet, matrixInverse, matrixTranspose, matrixMultiply,
   vectorDot, vectorCross, vectorMag,
   solveQuadratic, solveSimultaneous2,
+  computeGeometricArea, computeDefiniteIntegral, computeAreaBetweenCurves,
   SCIENTIFIC_CONSTANTS, METRIC_CONVERSIONS,
   HistoryItem
 } from '../calcEngine';
 import { playKeyClick } from '../audioFeedback';
 
-export type ModeTab = 'STAT' | 'MATRIX' | 'VECTOR' | 'EQUATION' | 'BASE' | 'CONST' | 'CONV' | 'HISTORY';
+export type ModeTab = 'STAT' | 'MATRIX' | 'VECTOR' | 'EQUATION' | 'BASE' | 'CONST' | 'CONV' | 'HISTORY' | 'AREA';
 
 interface AdvancedModesDrawerProps {
   isOpen: boolean;
@@ -80,6 +81,11 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
   const [constSearch, setConstSearch] = useState('');
   const [convInputVal, setConvInputVal] = useState('100');
 
+  // Area & Definite Integral State
+  const [areaF, setAreaF] = useState('4 - x^2');
+  const [areaA, setAreaA] = useState('-2');
+  const [areaB, setAreaB] = useState('2');
+
   if (!isOpen) return null;
 
   // Compute Statistics
@@ -99,6 +105,12 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
     }
     setMatrixResult(null);
   };
+
+  // Compute Area in Drawer
+  const numAreaA = parseFloat(areaA) || 0;
+  const numAreaB = parseFloat(areaB) || 1;
+  const drawerGeomArea = computeGeometricArea(areaF, numAreaA, numAreaB, 'DEG');
+  const drawerNetIntegral = computeDefiniteIntegral(areaF, numAreaA, numAreaB, 'DEG');
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
@@ -128,6 +140,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
         {/* Tab Navigation Strip */}
         <div className="flex items-center gap-1.5 px-3 py-2 bg-[#0F0F14] border-b border-slate-800/80 overflow-x-auto text-xs no-scrollbar">
           {[
+            { id: 'AREA', label: 'AREA / INT', icon: TrendingUp },
             { id: 'STAT', label: 'STAT', icon: BarChart3 },
             { id: 'MATRIX', label: 'MATRIX', icon: Grid3X3 },
             { id: 'VECTOR', label: 'VECTOR', icon: ArrowRightLeft },
@@ -162,6 +175,107 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
         {/* Tab Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
           
+          {/* DEFINITE INTEGRAL & AREA CALCULATOR MODE */}
+          {activeTab === 'AREA' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                    Definite Integral & Area Calculator
+                    <span className="text-[10px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800">
+                      ∫ |f(x)| dx
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">Calculates geometric area between curve and axis or between curves.</p>
+                </div>
+              </div>
+
+              <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800 space-y-3">
+                <div>
+                  <label className="text-xs font-mono text-emerald-400 font-semibold block mb-1">
+                    Function f(x):
+                  </label>
+                  <input
+                    type="text"
+                    value={areaF}
+                    onChange={(e) => setAreaF(e.target.value)}
+                    placeholder="e.g. 4 - x^2 or sin(x)"
+                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-mono text-xs text-emerald-300"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-mono text-slate-400 block mb-1">
+                      Lower Bound (a):
+                    </label>
+                    <input
+                      type="text"
+                      value={areaA}
+                      onChange={(e) => setAreaA(e.target.value)}
+                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-mono text-xs text-amber-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-mono text-slate-400 block mb-1">
+                      Upper Bound (b):
+                    </label>
+                    <input
+                      type="text"
+                      value={areaB}
+                      onChange={(e) => setAreaB(e.target.value)}
+                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-mono text-xs text-amber-300"
+                    />
+                  </div>
+                </div>
+
+                {/* Results Card */}
+                <div className="bg-[#14141E] p-3 rounded-xl border border-amber-400/30 space-y-2 mt-2">
+                  <div className="flex justify-between items-center text-xs font-mono">
+                    <span className="text-amber-400 font-bold">Total Geometric Area:</span>
+                    <span className="text-lg font-bold text-slate-100">
+                      {isNaN(drawerGeomArea) ? 'Math ERROR' : drawerGeomArea.toFixed(5)} units²
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-mono text-slate-400 border-t border-slate-800 pt-1.5">
+                    <span>Net Definite Integral:</span>
+                    <span className="text-emerald-400 font-semibold">
+                      {isNaN(drawerNetIntegral) ? 'Math ERROR' : drawerNetIntegral.toFixed(5)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      playKeyClick('action');
+                      onInsertValue(`Area(${areaF}, ${areaA}, ${areaB})`);
+                      onClose();
+                    }}
+                    className="flex-1 py-2 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <CornerDownLeft className="w-3.5 h-3.5" />
+                    <span>Insert Area Formula</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      playKeyClick('action');
+                      if (!isNaN(drawerGeomArea)) {
+                        onInsertValue(drawerGeomArea.toFixed(5));
+                      }
+                      onClose();
+                    }}
+                    className="flex-1 py-2 px-3 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <span>Insert Area Result</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* STATISTICS MODE */}
           {activeTab === 'STAT' && (
             <div className="space-y-4">
