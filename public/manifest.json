@@ -1,6 +1,6 @@
 {
-  "name": "FX-570 Calc",
-  "short_name": "FX-570",
+  "name": "CalQlator 算七七",
+  "short_name": "CalQlator",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
