@@ -3,20 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  Volume2, VolumeX, Maximize2, Minimize2, 
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Sliders, Vibrate, VibrateOff, Lock, Clock, Power,
-  Settings, CheckSquare, Undo2, Play, Pause, RotateCcw,
-  Sparkles, ShieldCheck, GraduationCap
+  Power, Settings, Sparkles
 } from 'lucide-react';
 import { 
   AngleMode, DisplayFormat, HistoryItem,
-  evaluateMathExpression, formatResult, toFraction,
-  recognizeExactSurd, toEngineering, decimalToDms, primeFactorization,
-  solveEquation
+  evaluateMathExpression, formatResult,
+  toEngineering, decimalToDms, primeFactorization,
+  solveEquation,
+  SCIENTIFIC_CONSTANTS, METRIC_CONVERSIONS,
+  MENU_PAGES, ALL_MENU_ITEMS, MenuItem,
+  navigateMenuGrid
 } from './calcEngine';
+import { 
+  CalculatorModeId, ModeState, ModeContext, SharedMemory
+} from './modes/types';
+import { 
+  getModeModule, normalizeModeId
+} from './modes/modeRegistry';
 import { 
   playKeyClick, setSoundEnabled,
   triggerHaptic, setHapticEnabled,
@@ -26,20 +32,101 @@ import {
   MathAstState, createInitialAstState,
   insertToken, insertFraction, insertIntegral, insertSqrt,
   insertPower, insertPostfix, PostfixOp, insertLogBase, navigateAst, deleteAst,
-  astToExpression, astToDisplayText, parseStringToAst
+  astToExpression, astToDisplayText, parseStringToAst, TokenType
 } from './mathAst';
 import { NaturalDisplay } from './components/NaturalDisplay';
-import { AdvancedModesDrawer, ModeTab } from './components/AdvancedModesDrawer';
-import { HistoryModal } from './components/HistoryModal';
 import { ClassWizQrModal } from './components/ClassWizQrModal';
 import { SettingsModal, CalculatorMode } from './components/SettingsModal';
 import { CalibrationModal } from './components/CalibrationModal';
 import { TestHarnessModal } from './components/TestHarnessModal';
 
-export type AspectRatioMode = 'OPPO' | '9:19.5' | 'FIT';
+// Display Menu Modes (All in-display, zero external chrome)
+export type DisplayMenuType = 
+  | 'NONE'
+  | 'MENU'
+  | 'SETUP'
+  | 'SETUP_ANGLE'
+  | 'SETUP_FORMAT'
+  | 'SETUP_FIX'
+  | 'SETUP_SCI'
+  | 'SETUP_NORM'
+  | 'SETUP_IO'
+  | 'OPTN'
+  | 'OPTN_HYP'
+  | 'OPTN_ANGLE'
+  | 'OPTN_ENG'
+  | 'CONST_CAT'
+  | 'CONST_LIST'
+  | 'CONV_CAT'
+  | 'CONV_LIST'
+  | 'RESET'
+  | 'RESET_CONFIRM'
+  | 'STAT'
+  | 'MATRIX'
+  | 'VECTOR';
+
+export interface SetupListItem {
+  id: number;
+  key: string;
+  title: string;
+  targetMenu?: DisplayMenuType;
+  action?: () => void;
+}
+
+export const SETUP_PAGES: SetupListItem[][] = [
+  // Page 1
+  [
+    { id: 1, key: '1', title: 'Input/Output', targetMenu: 'SETUP_IO' },
+    { id: 2, key: '2', title: 'Angle Unit', targetMenu: 'SETUP_ANGLE' },
+    { id: 3, key: '3', title: 'Number Format', targetMenu: 'SETUP_FORMAT' },
+    { id: 4, key: '4', title: 'Engineer Symbol' },
+  ],
+  // Page 2
+  [
+    { id: 5, key: '1', title: 'Fraction Result' },
+    { id: 6, key: '2', title: 'Complex' },
+    { id: 7, key: '3', title: 'Statistics' },
+    { id: 8, key: '4', title: 'Spreadsheet' },
+  ],
+  // Page 3
+  [
+    { id: 9, key: '1', title: 'Equation/Func' },
+    { id: 10, key: '2', title: 'Table' },
+    { id: 11, key: '3', title: 'Decimal Mark' },
+    { id: 12, key: '4', title: 'Digit Separator' },
+  ],
+  // Page 4
+  [
+    { id: 13, key: '1', title: 'MultiLine Font' },
+    { id: 14, key: '2', title: 'QR Code' },
+    { id: 15, key: '3', title: 'Contrast' },
+    { id: 16, key: '4', title: 'Auto Power Off' },
+  ],
+];
+
+export const CONST_CATEGORIES = [
+  { id: 1, key: '1', name: 'Universal', items: ['h', 'ħ', 'c', 'ε0', 'μ0', 'G'] },
+  { id: 2, key: '2', name: 'Electromagnetic', items: ['e', 'G0', 'atm'] },
+  { id: 3, key: '3', name: 'Atomic & Nuclear', items: ['mp', 'mn', 'me', 'mu', 'u'] },
+  { id: 4, key: '4', name: 'Physico-Chemical', items: ['NA', 'k', 'Vm', 'R'] },
+  { id: 5, key: '5', name: 'Adopted Values', items: ['g', 'atm'] },
+  { id: 6, key: '6', name: 'Other', items: ['G0'] },
+];
+
+export const CONV_CATEGORIES = [
+  { id: 1, key: '1', name: 'Length', codes: ['01', '02', '03', '04', '05', '06', '07', '08', '17'] },
+  { id: 2, key: '2', name: 'Area', codes: ['01', '02'] },
+  { id: 3, key: '3', name: 'Volume', codes: ['03', '04'] },
+  { id: 4, key: '4', name: 'Mass', codes: ['23', '24', '25', '26'] },
+  { id: 5, key: '5', name: 'Velocity', codes: ['19', '20'] },
+  { id: 6, key: '6', name: 'Pressure', codes: ['33', '34', '35'] },
+  { id: 7, key: '7', name: 'Energy', codes: ['39', '40'] },
+  { id: 8, key: '8', name: 'Power', codes: ['39', '40'] },
+  { id: 9, key: '9', name: 'Temperature', codes: ['37', '38'] },
+];
 
 export default function App() {
-  // Operating Mode: 'EXAM' (Default, strict 1:1 clone) vs 'STUDY' (Practice Tools & History)
+  // Operating Mode: 'EXAM' (Default, strict 1:1 hardware clone) vs 'STUDY'
   const [calcMode, setCalcMode] = useState<CalculatorMode>(() => {
     try {
       const saved = localStorage.getItem('casio_mode');
@@ -48,7 +135,7 @@ export default function App() {
     return 'EXAM';
   });
 
-  // Physical card calibration mm scale factor (matches phone to real calculator in mm)
+  // Physical card calibration mm scale factor
   const [calibrationScale, setCalibrationScale] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('casio_calibration_scale');
@@ -71,7 +158,7 @@ export default function App() {
   const [practiceSeconds, setPracticeSeconds] = useState<number>(0);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
 
-  // Key-Path Trainer message (shows real physical route e.g. "SHIFT → 7 = CONST")
+  // Key-Path Trainer message
   const [trainerRoute, setTrainerRoute] = useState<string | null>(null);
 
   // Calculator Output State
@@ -80,7 +167,7 @@ export default function App() {
   const [isCalculated, setIsCalculated] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Engineering Notation step offset (toggled by ENG and SHIFT+ENG in steps of 3)
+  // Engineering Notation step offset
   const [engStep, setEngStep] = useState<number>(0);
 
   // Hardware Indicators & Status Modes
@@ -100,6 +187,41 @@ export default function App() {
   });
   const [isStoreMode, setIsStoreMode] = useState(false);
   const [sdCycleState, setSdCycleState] = useState(0);
+  const [lastExactResult, setLastExactResult] = useState<string | undefined>(undefined);
+
+  // 12-Mode Architecture Manager: state = { mode, screen, data }
+  // Modes: CALC, CMPLX, BASE, MATRIX, VECTOR, STAT, DIST, SHEET, TABLE, EQN, INEQ, RATIO
+  const [modeState, setModeState] = useState<ModeState>(() => {
+    try {
+      const saved = localStorage.getItem('casio_active_mode');
+      if (saved) {
+        const norm = normalizeModeId(saved);
+        return getModeModule(norm).getInitialState();
+      }
+    } catch {}
+    return getModeModule('CALC').getInitialState();
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('casio_active_mode', modeState.mode);
+    } catch {}
+  }, [modeState.mode]);
+
+  const currentModeModule = getModeModule(modeState.mode);
+  const modeIndicator = currentModeModule.getIndicator(modeState);
+
+  // In-Display Menus (RULE: Everything renders inside display, key block never shifts)
+  const [displayMenu, setDisplayMenu] = useState<DisplayMenuType>('NONE');
+  const [menuHighlightIndex, setMenuHighlightIndex] = useState<number>(0); // 0..11 for MENU
+  const [setupPageIndex, setSetupPageIndex] = useState<number>(0);         // 0..3 for SETUP
+  const [setupRowIndex, setSetupRowIndex] = useState<number>(0);           // 0..3
+  const [constCatIndex, setConstCatIndex] = useState<number>(0);
+  const [constItemIndex, setConstItemIndex] = useState<number>(0);
+  const [convCatIndex, setConvCatIndex] = useState<number>(0);
+  const [convItemIndex, setConvItemIndex] = useState<number>(0);
+  const [optnIndex, setOptnIndex] = useState<number>(0);
+  const [resetIndex, setResetIndex] = useState<number>(0);
 
   // Persistent Variables A, B, C, D, E, F, X, Y, M
   const [variables, setVariables] = useState<Record<string, number>>(() => {
@@ -118,249 +240,575 @@ export default function App() {
     } catch {}
   }, [variables]);
 
-  // History state with localStorage persistence
+  // Mode Switching: MENU selects a mode. Changing modes clears the expression like the real unit,
+  // keeps shared memory (A-F, M, X, Y, Ans), and shows the mode's indicator.
+  const handleSelectMode = (code: string) => {
+    const norm = normalizeModeId(code);
+    const mod = getModeModule(norm);
+    setModeState(mod.getInitialState());
+    setAstState(createInitialAstState());
+    setResult('0');
+    setIsCalculated(false);
+    setDisplayMenu('NONE');
+    setShiftActive(false);
+    setAlphaActive(false);
+  };
+
+  const modeContext: ModeContext = {
+    modeState,
+    setModeState,
+    sharedMemory: {
+      A: variables.A || 0,
+      B: variables.B || 0,
+      C: variables.C || 0,
+      D: variables.D || 0,
+      E: variables.E || 0,
+      F: variables.F || 0,
+      X: variables.X || 0,
+      Y: variables.Y || 0,
+      M: memoryM || 0,
+      Ans: lastAns || 0,
+    },
+    setSharedMemory: (updater) => {
+      setVariables((prev) => {
+        const cur: SharedMemory = {
+          A: prev.A || 0,
+          B: prev.B || 0,
+          C: prev.C || 0,
+          D: prev.D || 0,
+          E: prev.E || 0,
+          F: prev.F || 0,
+          X: prev.X || 0,
+          Y: prev.Y || 0,
+          M: memoryM || 0,
+          Ans: lastAns || 0,
+        };
+        const next = typeof updater === 'function' ? updater(cur) : updater;
+        setMemoryM(next.M);
+        setLastAns(next.Ans);
+        return {
+          A: next.A,
+          B: next.B,
+          C: next.C,
+          D: next.D,
+          E: next.E,
+          F: next.F,
+          X: next.X,
+          Y: next.Y,
+          M: next.M,
+        };
+      });
+    },
+    exitToCalc: () => handleSelectMode('CALC'),
+    openSubMenu: () => {
+      setModeState((prev) => ({
+        ...prev,
+        screen: 'SUBMENU',
+        data: { ...prev.data, subMenuPage: 0 },
+      }));
+    },
+    closeSubMenu: () => {
+      setModeState((prev) => ({
+        ...prev,
+        screen: 'MAIN',
+      }));
+    },
+    triggerHapticFeedback: (type?: string) => triggerHaptic((type as any) || 'func'),
+    playAudioFeedback: (type?: string) => playKeyClick((type as any) || 'func'),
+    angleMode,
+    displayFormat,
+  };
+
+  // Calculation History Log
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
-      const saved = localStorage.getItem('casio_fx570_history');
+      const saved = localStorage.getItem('casio_history');
       if (saved) return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
-    return [
-      {
-        id: 'init-1',
-        expression: '∫_{0}^{3} (x²) dx',
-        result: '9',
-        exactResult: '9',
-        numericVal: 9,
-        timestamp: Date.now() - 3600000,
-      },
-      {
-        id: 'init-2',
-        expression: 'd/dx(x³, 2)',
-        result: '12',
-        exactResult: '12',
-        numericVal: 12,
-        timestamp: Date.now() - 1800000,
-      }
-    ];
+    } catch {}
+    return [];
   });
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
   useEffect(() => {
     try {
-      localStorage.setItem('casio_fx570_history', JSON.stringify(history));
-    } catch {
-      // ignore
-    }
+      localStorage.setItem('casio_history', JSON.stringify(history));
+    } catch {}
   }, [history]);
 
-  // Modals & Panels
+  // History Navigation Index
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+
+  // Modals (Auxiliary developer/practice tools)
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isCalibrationModalOpen, setIsCalibrationModalOpen] = useState(false);
-  const [isTestHarnessOpen, setIsTestHarnessOpen] = useState(() => {
-    return typeof window !== 'undefined' && window.location.search.includes('test=1');
-  });
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [activeDrawerTab, setActiveDrawerTab] = useState<ModeTab>('STAT');
-  const [activeMenu, setActiveMenu] = useState<'NONE' | 'MODE' | 'SETUP'>('NONE');
+  const [isTestHarnessOpen, setIsTestHarnessOpen] = useState(false);
 
-  // UI & Device Settings (OPPO Find X9 Pro 19.8:9 / 20:9 aspect ratio target)
-  const [aspectMode, setAspectMode] = useState<AspectRatioMode>('OPPO');
+  // Sound & Haptic Settings
   const [soundOn, setSoundOn] = useState(true);
   const [hapticOn, setHapticOn] = useState(true);
-  const [isPhoneFrame, setIsPhoneFrame] = useState(true);
 
-  // Result scroll container ref and horizontal overflow arrow states
-  const resultContainerRef = useRef<HTMLDivElement>(null);
-  const [showLeftArrow, setShowLeftArrow] = useState(false);
-  const [showRightArrow, setShowRightArrow] = useState(false);
+  // Performance and Geometry Metrics (?perf=1)
+  const [perfMetrics, setPerfMetrics] = useState<{
+    isPerf: boolean;
+    screenWidth: number;
+    screenHeight: number;
+    dpr: number;
+    keyBlockWidth: number;
+    keyBlockHeight: number;
+    displayWidth: number;
+    displayHeight: number;
+    displayPct: number;
+    visualKeyHeight: number;
+    touchTargetWidth: number;
+    touchTargetHeight: number;
+    minKeyLabel: string;
+    isVisualKeyPass: boolean;
+    isTouchTargetPass: boolean;
+    isDisplayPctPass: boolean;
+  } | null>(null);
 
-  const checkResultOverflow = () => {
-    const el = resultContainerRef.current;
-    if (!el) return;
-    if (el.scrollWidth > el.clientWidth) {
-      setShowLeftArrow(el.scrollLeft > 2);
-      setShowRightArrow(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
-    } else {
-      setShowLeftArrow(false);
-      setShowRightArrow(false);
-    }
-  };
+  // DOM Refs
+  const displayRef = useRef<HTMLDivElement>(null);
+  const keyBlockRef = useRef<HTMLDivElement>(null);
 
+  // Check ?perf=1 and ?test=1 in URL parameters
   useEffect(() => {
-    checkResultOverflow();
-    if (resultContainerRef.current) {
-      resultContainerRef.current.scrollLeft = resultContainerRef.current.scrollWidth;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('test') === '1') {
+      setIsTestHarnessOpen(true);
     }
-  }, [result]);
 
-  // Practice timer in Study Mode
+    const isPerf = params.get('perf') === '1';
+    if (isPerf) {
+      const updateMetrics = () => {
+        const sw = window.innerWidth;
+        const sh = window.innerHeight;
+        const dpr = window.devicePixelRatio || 1;
+        const kb = keyBlockRef.current?.getBoundingClientRect();
+        const dp = displayRef.current?.getBoundingClientRect();
+
+        const displayH = dp?.height || 0;
+        const displayPct = sh > 0 ? (displayH / sh) * 100 : 0;
+
+        let minVisualH = 999;
+        let minTouchW = 999;
+        let minTouchH = 999;
+        let minLabel = '';
+
+        // Measure visual button dimensions and cell touch targets
+        const wrappers = keyBlockRef.current?.querySelectorAll('.key-wrapper');
+        wrappers?.forEach((w) => {
+          const wr = w.getBoundingClientRect();
+          const btn = w.querySelector('button');
+          const br = btn?.getBoundingClientRect();
+
+          if (br && br.width > 0 && br.height > 0) {
+            minVisualH = Math.min(minVisualH, br.height);
+          }
+          if (wr.width > 0 && wr.height > 0) {
+            if (wr.width < minTouchW || wr.height < minTouchH) {
+              minTouchW = Math.min(minTouchW, wr.width);
+              minTouchH = Math.min(minTouchH, wr.height);
+              minLabel = btn?.innerText.trim().replace(/\n/g, ' ') || btn?.getAttribute('aria-label') || 'key';
+            }
+          }
+        });
+
+        // Also check standalone buttons if any (like D-pad center/sectors)
+        const dpadButtons = keyBlockRef.current?.querySelectorAll('.dpad-btn, button[aria-label^="D-pad"]');
+        dpadButtons?.forEach((btn) => {
+          const br = btn.getBoundingClientRect();
+          if (br.width > 0 && br.height > 0) {
+            minTouchW = Math.min(minTouchW, br.width);
+            minTouchH = Math.min(minTouchH, br.height);
+          }
+        });
+
+        const visualH = minVisualH === 999 ? 40 : minVisualH;
+        const touchW = minTouchW === 999 ? 44 : minTouchW;
+        const touchH = minTouchH === 999 ? 44 : minTouchH;
+
+        setPerfMetrics({
+          isPerf: true,
+          screenWidth: sw,
+          screenHeight: sh,
+          dpr,
+          keyBlockWidth: kb?.width || 0,
+          keyBlockHeight: kb?.height || 0,
+          displayWidth: dp?.width || 0,
+          displayHeight: displayH,
+          displayPct,
+          visualKeyHeight: visualH,
+          touchTargetWidth: touchW,
+          touchTargetHeight: touchH,
+          minKeyLabel: minLabel || 'key',
+          isVisualKeyPass: visualH >= 39.5, // 40dp visual target with float tolerance
+          isTouchTargetPass: touchW >= 43.5 && touchH >= 43.5, // 44dp touch target with float tolerance
+          isDisplayPctPass: displayPct >= 19.5, // Target ~24%
+        });
+      };
+
+      updateMetrics();
+      window.addEventListener('resize', updateMetrics);
+      return () => window.removeEventListener('resize', updateMetrics);
+    }
+  }, []);
+
+  // Practice Timer (Study Mode)
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (calcMode === 'STUDY' && isTimerRunning) {
-      interval = setInterval(() => {
-        setPracticeSeconds((prev) => prev + 1);
-      }, 1000);
+    let interval: NodeJS.Timeout;
+    if (calcMode === 'STUDY' && isTimerRunning && !isPoweredOff) {
+      interval = setInterval(() => setPracticeSeconds((s) => s + 1), 1000);
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [calcMode, isTimerRunning]);
-
-  // Swipe Gesture detection
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (calcMode === 'EXAM') return;
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const diffX = touchStartX.current - e.changedTouches[0].clientX;
-    const diffY = touchStartY.current - e.changedTouches[0].clientY;
-
-    if (diffX > 60 && Math.abs(diffY) < 50) {
-      playKeyClick('action');
-      setIsDrawerOpen(true);
-    }
-    touchStartX.current = null;
-    touchStartY.current = null;
-  };
-
-  const cycleAspectMode = () => {
-    playKeyClick('action');
-    setAspectMode((prev) => (prev === 'OPPO' ? '9:19.5' : prev === '9:19.5' ? 'FIT' : 'OPPO'));
-  };
+    return () => clearInterval(interval);
+  }, [calcMode, isTimerRunning, isPoweredOff]);
 
   const toggleSound = () => {
     const next = !soundOn;
     setSoundOn(next);
     setSoundEnabled(next);
-    playKeyClick('action');
   };
 
   const toggleHaptic = () => {
     const next = !hapticOn;
     setHapticOn(next);
     setHapticEnabled(next);
-    if (next) triggerHaptic('action');
   };
 
-  // Keyboard shortcut listener mapping physical keyboard to Casio ClassWiz
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
-        return;
-      }
-
-      if (e.key === 'Shift') {
-        e.preventDefault();
-        handleShift();
-        return;
-      }
-      if (e.key === 'Alt') {
-        e.preventDefault();
-        handleAlpha();
-        return;
-      }
-
-      if (isPoweredOff) {
-        if (e.key === 'Escape' || e.key === 'o' || e.key === 'O') {
-          handleOn();
-        }
-        return;
-      }
-
-      if (e.key >= '0' && e.key <= '9') {
-        handleToken(e.key);
-      } else if (e.key === '.') {
-        handleToken('.');
-      } else if (e.key === '+') {
-        handleToken('+');
-      } else if (e.key === '-') {
-        handleToken('-');
-      } else if (e.key === '*') {
-        handleToken('×');
-      } else if (e.key === '/') {
-        handleFractionKey();
-      } else if (e.key === '(') {
-        handleToken('(');
-      } else if (e.key === ')') {
-        handleToken(')');
-      } else if (e.key === '^') {
-        handlePowerKey();
-      } else if (e.key === '!') {
-        handlePostfixKey('!');
-      } else if (e.key === '%') {
-        handlePostfixKey('%');
-      } else if (e.key === 'x' || e.key === 'X') {
-        handleToken('x');
-      } else if (e.key === 'Enter' || e.key === '=') {
-        e.preventDefault();
-        handleEqual();
-      } else if (e.key === 'Backspace') {
-        handleDelete();
-      } else if (e.key === 'Escape') {
-        handleAllClear();
-      } else if (e.key === 'ArrowLeft') {
-        handleDpad('left');
-      } else if (e.key === 'ArrowRight') {
-        handleDpad('right');
-      } else if (e.key === 'ArrowUp') {
-        handleDpad('up');
-      } else if (e.key === 'ArrowDown') {
-        handleDpad('down');
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [astState, isCalculated, isPoweredOff, shiftActive, alphaActive, lastAns, historyIndex, history]);
-
-  // Push state to undo stack (Study Mode)
-  const pushUndoState = (stateToSave: MathAstState) => {
-    if (calcMode === 'STUDY') {
-      setUndoStack((prev) => [...prev.slice(-25), stateToSave]);
-    }
+  // Push AST to undo stack
+  const pushUndoState = (state: MathAstState) => {
+    setUndoStack((prev) => [...prev.slice(-25), JSON.parse(JSON.stringify(state))]);
   };
 
+  // Undo last action (Study Mode)
   const handleUndo = () => {
-    if (isPoweredOff || undoStack.length === 0) return;
+    if (undoStack.length === 0) return;
     playKeyClick('action');
     const prev = undoStack[undoStack.length - 1];
     setUndoStack((s) => s.slice(0, -1));
     setAstState(prev);
-    setIsCalculated(false);
+    setErrorMessage(null);
   };
 
-  // Show Key-Path Trainer route (e.g. "SHIFT → 7 = CONST")
-  const showTrainer = (route: string) => {
-    if (calcMode === 'STUDY') {
-      setTrainerRoute(route);
-      setTimeout(() => setTrainerRoute((cur) => (cur === route ? null : cur)), 3500);
+  // Clear Trainer Route after 3.5 seconds
+  useEffect(() => {
+    if (trainerRoute) {
+      const timer = setTimeout(() => setTrainerRoute(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [trainerRoute]);
+
+  // Handle hardware ON / Power-Up Key
+  const handleOn = () => {
+    playKeyClick('action');
+    triggerHaptic('action');
+    if (isPoweredOff) {
+      setIsPoweredOff(false);
+      return;
+    }
+    // ON button clears menu or resets input
+    if (displayMenu !== 'NONE') {
+      setDisplayMenu('NONE');
+      return;
+    }
+    setAstState(createInitialAstState());
+    setResult('0');
+    setIsCalculated(false);
+    setShiftActive(false);
+    setAlphaActive(false);
+    setIsStoreMode(false);
+    setSdCycleState(0);
+    setEngStep(0);
+    setHistoryIndex(-1);
+    setErrorMessage(null);
+  };
+
+  // Clear All (AC Key): Exits in-display menus restoring previous screen, or clears expression
+  const handleAllClear = () => {
+    if (isPoweredOff) return;
+    playKeyClick('action');
+    triggerHaptic('action');
+
+    // Rule 1 & 2: In menu mode, AC exits and restores previous screen with expression intact
+    if (displayMenu !== 'NONE') {
+      if (['SETUP_ANGLE', 'SETUP_FORMAT', 'SETUP_FIX', 'SETUP_SCI', 'SETUP_NORM', 'SETUP_IO'].includes(displayMenu)) {
+        setDisplayMenu('SETUP');
+        return;
+      }
+      if (displayMenu === 'CONST_LIST') {
+        setDisplayMenu('CONST_CAT');
+        return;
+      }
+      if (displayMenu === 'CONV_LIST') {
+        setDisplayMenu('CONV_CAT');
+        return;
+      }
+      if (displayMenu === 'RESET_CONFIRM') {
+        setDisplayMenu('RESET');
+        return;
+      }
+      setDisplayMenu('NONE');
+      setShiftActive(false);
+      setAlphaActive(false);
+      return;
+    }
+
+    // If in non-CALC mode, let active mode handle AC
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('AC', modeContext);
+      if (handled) return;
+    }
+
+    setAstState(createInitialAstState());
+    setResult('0');
+    setIsCalculated(false);
+    setShiftActive(false);
+    setAlphaActive(false);
+    setIsStoreMode(false);
+    setSdCycleState(0);
+    setEngStep(0);
+    setHistoryIndex(-1);
+    setErrorMessage(null);
+  };
+
+  // Direct number key selection when inside an in-display menu
+  const handleMenuNumberSelect = (numStr: string) => {
+    const num = parseInt(numStr, 10);
+
+    // 1. MENU: Grid mode selection (1..9, or A, B, C)
+    if (displayMenu === 'MENU') {
+      const item = ALL_MENU_ITEMS.find((it) => it.key === numStr || it.id === num);
+      if (item) {
+        handleSelectMode(item.code);
+      }
+      return;
+    }
+
+    // 2. SETUP: 4 items per page
+    if (displayMenu === 'SETUP') {
+      const pageItems = SETUP_PAGES[setupPageIndex];
+      const item = pageItems[num - 1];
+      if (item) {
+        if (item.targetMenu) {
+          setDisplayMenu(item.targetMenu);
+        } else {
+          setDisplayMenu('NONE');
+        }
+      }
+      return;
+    }
+
+    // 3. SETUP Sub-menus
+    if (displayMenu === 'SETUP_ANGLE') {
+      if (num === 1) setAngleMode('DEG');
+      if (num === 2) setAngleMode('RAD');
+      if (num === 3) setAngleMode('GRA');
+      setDisplayMenu('NONE');
+      return;
+    }
+
+    if (displayMenu === 'SETUP_FORMAT') {
+      if (num === 1) setDisplayMenu('SETUP_FIX');
+      else if (num === 2) setDisplayMenu('SETUP_SCI');
+      else if (num === 3) setDisplayMenu('SETUP_NORM');
+      return;
+    }
+
+    if (displayMenu === 'SETUP_FIX') {
+      const digits = Math.min(Math.max(0, num), 9);
+      setFixDigits(digits);
+      setDisplayFormat('FIX');
+      setDisplayMenu('NONE');
+      if (isCalculated) {
+        setResult(formatResult(rawNumericVal, 'FIX', digits, sciDigits, engStep));
+      }
+      return;
+    }
+
+    if (displayMenu === 'SETUP_SCI') {
+      const digits = num === 0 ? 10 : Math.min(Math.max(1, num), 9);
+      setSciDigits(digits);
+      setDisplayFormat('SCI');
+      setDisplayMenu('NONE');
+      if (isCalculated) {
+        setResult(formatResult(rawNumericVal, 'SCI', fixDigits, digits, engStep));
+      }
+      return;
+    }
+
+    if (displayMenu === 'SETUP_NORM') {
+      if (num === 1) setDisplayFormat('NORM1');
+      if (num === 2) setDisplayFormat('NORM2');
+      setDisplayMenu('NONE');
+      if (isCalculated) {
+        setResult(formatResult(rawNumericVal, num === 1 ? 'NORM1' : 'NORM2', fixDigits, sciDigits, engStep));
+      }
+      return;
+    }
+
+    if (displayMenu === 'SETUP_IO') {
+      setDisplayMenu('NONE');
+      return;
+    }
+
+    // 4. OPTN Sub-menus
+    if (displayMenu === 'OPTN') {
+      if (num === 1) setDisplayMenu('OPTN_HYP');
+      else if (num === 2) setDisplayMenu('OPTN_ANGLE');
+      else if (num === 3) setDisplayMenu('OPTN_ENG');
+      return;
+    }
+
+    if (displayMenu === 'OPTN_HYP') {
+      const hypFuncs = ['sinh(', 'cosh(', 'tanh(', 'sinh⁻¹(', 'cosh⁻¹(', 'tanh⁻¹('];
+      if (num >= 1 && num <= 6) {
+        setDisplayMenu('NONE');
+        handleToken(hypFuncs[num - 1], 'func');
+      }
+      return;
+    }
+
+    if (displayMenu === 'OPTN_ANGLE') {
+      const angleSyms = ['°', 'r', 'g'];
+      if (num >= 1 && num <= 3) {
+        setDisplayMenu('NONE');
+        handleToken(angleSyms[num - 1], 'func');
+      }
+      return;
+    }
+
+    if (displayMenu === 'OPTN_ENG') {
+      const engSyms = ['m', 'μ', 'n', 'p', 'f', 'k', 'M', 'G', 'T'];
+      if (num >= 1 && num <= 9) {
+        setDisplayMenu('NONE');
+        handleToken(engSyms[num - 1], 'func');
+      }
+      return;
+    }
+
+    // 5. CONST: Categories & Item Selection
+    if (displayMenu === 'CONST_CAT') {
+      if (num >= 1 && num <= CONST_CATEGORIES.length) {
+        setConstCatIndex(num - 1);
+        setConstItemIndex(0);
+        setDisplayMenu('CONST_LIST');
+      }
+      return;
+    }
+
+    if (displayMenu === 'CONST_LIST') {
+      const cat = CONST_CATEGORIES[constCatIndex];
+      if (cat && num >= 1 && num <= cat.items.length) {
+        const sym = cat.items[num - 1];
+        const constantObj = SCIENTIFIC_CONSTANTS.find((c) => c.sym === sym);
+        setDisplayMenu('NONE');
+        if (constantObj) {
+          handleToken(constantObj.val.toString(), 'num');
+        } else {
+          handleToken(sym, 'num');
+        }
+      }
+      return;
+    }
+
+    // 6. CONV: Categories & Conversion Selection
+    if (displayMenu === 'CONV_CAT') {
+      if (num >= 1 && num <= CONV_CATEGORIES.length) {
+        setConvCatIndex(num - 1);
+        setConvItemIndex(0);
+        setDisplayMenu('CONV_LIST');
+      }
+      return;
+    }
+
+    if (displayMenu === 'CONV_LIST') {
+      const cat = CONV_CATEGORIES[convCatIndex];
+      if (cat && num >= 1 && num <= cat.codes.length) {
+        const code = cat.codes[num - 1];
+        const conv = METRIC_CONVERSIONS.find((c) => c.code === code);
+        setDisplayMenu('NONE');
+        if (conv) {
+          handleToken(` conv(${conv.name}) `, 'func');
+        }
+      }
+      return;
+    }
+
+    // 7. RESET: 1:Setup, 2:Memory, 3:Initialize All
+    if (displayMenu === 'RESET') {
+      if (num >= 1 && num <= 3) {
+        setResetIndex(num - 1);
+        setDisplayMenu('RESET_CONFIRM');
+      }
+      return;
+    }
+
+    // 8. STAT, MATRIX, VECTOR sub-menus
+    if (displayMenu === 'STAT') {
+      const statSyms = ['1-Var', 'Data', 'Edit', 'Σx', 'x̄', 'minX'];
+      if (num >= 1 && num <= 6) {
+        setDisplayMenu('NONE');
+        handleToken(`stat_${statSyms[num - 1]}`, 'func');
+      }
+      return;
+    }
+
+    if (displayMenu === 'MATRIX') {
+      const matSyms = ['MatA', 'MatB', 'MatC', 'MatD', 'MatAns', 'Det(', 'Trn('];
+      if (num >= 1 && num <= 7) {
+        setDisplayMenu('NONE');
+        handleToken(matSyms[num - 1], 'func');
+      }
+      return;
+    }
+
+    if (displayMenu === 'VECTOR') {
+      const vctSyms = ['VctA', 'VctB', 'VctC', 'VctD', 'VctAns', 'Dot('];
+      if (num >= 1 && num <= 6) {
+        setDisplayMenu('NONE');
+        handleToken(vctSyms[num - 1], 'func');
+      }
+      return;
     }
   };
 
-  // Insert general token
-  const handleToken = (tokenVal: string, keyType: HapticKeyType = 'num') => {
+  // Insert general token (Numbers, Variables, Functions)
+  const handleToken = (tokenVal: string, keyType: HapticKeyType = 'num', tokenType?: TokenType) => {
     if (isPoweredOff) return;
     playKeyClick(keyType);
     setKeystrokes((k) => k + 1);
+
+    // If an in-display menu is active and a digit or letter is typed, intercept for menu selection
+    if (displayMenu !== 'NONE') {
+      if (/^[0-9]$/.test(tokenVal) || ['A', 'B', 'C'].includes(tokenVal)) {
+        handleMenuNumberSelect(tokenVal);
+        return;
+      }
+    }
+
+    // In non-CALC mode, let current mode handle the token input
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey(tokenVal, modeContext);
+      if (handled) return;
+    }
+
     if (errorMessage) setErrorMessage(null);
 
     pushUndoState(astState);
 
     let currentState = astState;
     if (isCalculated) {
-      if (['+', '-', '×', '÷', '^', '²', '³'].includes(tokenVal)) {
+      // Binary and postfix operators start new expression with "Ans"
+      // (+ - × ÷ x² x⁻¹ x^□ nPr nCr etc.)
+      const isBinaryOrPostfix = [
+        '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
+        'P', 'C', 'nPr', 'nCr'
+      ].includes(tokenVal) || tokenType === 'OP_NPR' || tokenType === 'OP_NCR';
+
+      if (isBinaryOrPostfix) {
         currentState = parseStringToAst('Ans');
       } else {
+        // Digits, '(', functions, etc. start a fresh input
         currentState = createInitialAstState();
       }
       setIsCalculated(false);
@@ -368,14 +816,14 @@ export default function App() {
       setEngStep(0);
     }
 
-    setAstState(insertToken(currentState, tokenVal));
+    setAstState(insertToken(currentState, tokenVal, tokenType));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
   };
 
   // Natural Display: Fraction Key (■/□)
   const handleFractionKey = () => {
-    if (isPoweredOff) return;
+    if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
@@ -394,7 +842,7 @@ export default function App() {
 
   // Natural Display: Integral Key (∫dx)
   const handleIntegralKey = () => {
-    if (isPoweredOff) return;
+    if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
@@ -413,7 +861,7 @@ export default function App() {
 
   // Natural Display: Square Root Key (√■)
   const handleSqrtKey = () => {
-    if (isPoweredOff) return;
+    if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
@@ -430,9 +878,9 @@ export default function App() {
     if (alphaActive) setAlphaActive(false);
   };
 
-  // Natural Display: Power Key (xⁿ)
+  // Natural Display: Power Key (x□)
   const handlePowerKey = () => {
-    if (isPoweredOff) return;
+    if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
@@ -449,9 +897,9 @@ export default function App() {
     if (alphaActive) setAlphaActive(false);
   };
 
-  // Rule 1: Postfix Operators (x², x³, x⁻¹, x!, °, %)
+  // Postfix Operator Keys: x², x³, x⁻¹, x!, °, %
   const handlePostfixKey = (op: PostfixOp) => {
-    if (isPoweredOff) return;
+    if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
@@ -468,9 +916,9 @@ export default function App() {
     if (alphaActive) setAlphaActive(false);
   };
 
-  // Natural Display: Logarithm with Custom Base Key (log□■)
+  // Logarithm with arbitrary base: log□(□)
   const handleLogBaseKey = () => {
-    if (isPoweredOff) return;
+    if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
@@ -487,496 +935,393 @@ export default function App() {
     if (alphaActive) setAlphaActive(false);
   };
 
-  // DMS Key Handler (° ' "):
-  // Successive presses type °, then ', then "
-  // If pressed immediately after calculation, converts to d°m's" form, then back to decimal
-  const handleDmsKey = () => {
-    if (isPoweredOff) return;
-    playKeyClick('func');
+  // Backspace Delete Key (DEL)
+  const handleDelete = () => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('action');
     setKeystrokes((k) => k + 1);
 
-    if (isCalculated) {
-      const isCurrentlyDms = result.includes('°');
-      if (isCurrentlyDms) {
-        setResult(formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, engStep));
-      } else {
-        setResult(decimalToDms(rawNumericVal));
-      }
-      return;
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('DEL', modeContext);
+      if (handled) return;
     }
 
     pushUndoState(astState);
-    const currentExpr = astToDisplayText(astState.root);
-    const lastOp = Math.max(
-      currentExpr.lastIndexOf('+'),
-      currentExpr.lastIndexOf('-'),
-      currentExpr.lastIndexOf('×'),
-      currentExpr.lastIndexOf('÷'),
-      currentExpr.lastIndexOf('(')
-    );
-    const currentChunk = lastOp >= 0 ? currentExpr.slice(lastOp + 1) : currentExpr;
+    setAstState(deleteAst(astState));
+    setErrorMessage(null);
+  };
 
-    let nextSymbol = '°';
-    if (!currentChunk.includes('°')) {
-      nextSymbol = '°';
-    } else if (!currentChunk.includes('\'')) {
-      nextSymbol = '\'';
-    } else if (!currentChunk.includes('"')) {
-      nextSymbol = '"';
-    } else {
-      nextSymbol = '°';
-    }
+  // Standard S⇔D Exact/Decimal Format Toggle
+  const handleFormatCycle = () => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('action');
+    if (!isCalculated) return;
 
-    if (nextSymbol === '°') {
-      handlePostfixKey('°');
+    if (lastExactResult) {
+      if (sdCycleState === 0) {
+        setSdCycleState(1);
+        setResult(formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, engStep));
+      } else {
+        setSdCycleState(0);
+        setResult(lastExactResult);
+      }
     } else {
-      handleToken(nextSymbol);
+      setSdCycleState((prev) => (prev === 0 ? 1 : 0));
     }
   };
 
-  // D-Pad Navigation Engine
-  const handleDpad = (dir: 'left' | 'right' | 'up' | 'down') => {
+  // Engineering Notation ENG Key
+  const handleEngKey = (direction: 'forward' | 'backward' = 'forward') => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('func');
+    if (!isCalculated) return;
+
+    const nextStep = direction === 'forward' ? engStep + 1 : engStep - 1;
+    setEngStep(nextStep);
+    setResult(toEngineering(rawNumericVal, nextStep));
+  };
+
+  // D-Pad Arrow Navigation (Left, Right, Up, Down)
+  const handleDpad = (direction: 'LEFT' | 'RIGHT' | 'UP' | 'DOWN') => {
     if (isPoweredOff) return;
     playKeyClick('dpad');
 
-    if (astState.cursor.slotId === 'root' && (dir === 'up' || dir === 'down')) {
-      if (history.length > 0) {
-        if (dir === 'up') {
-          const nextIdx = historyIndex < history.length - 1 ? historyIndex + 1 : historyIndex;
-          setHistoryIndex(nextIdx);
-          const item = history[history.length - 1 - nextIdx];
-          if (item) {
-            setAstState(parseStringToAst(item.expression));
-            setResult(item.result);
-            setRawNumericVal(item.numericVal);
-            setIsCalculated(true);
-          }
-          return;
+    // If an in-display menu is active, D-Pad controls highlight and pagination (2D grid + page wrapping)
+    if (displayMenu === 'MENU') {
+      setMenuHighlightIndex((prev) => navigateMenuGrid(prev, direction, 12, 3, 2));
+      return;
+    }
+
+    if (displayMenu === 'SETUP') {
+      if (direction === 'DOWN') {
+        if (setupRowIndex < 3) {
+          setSetupRowIndex((r) => r + 1);
         } else {
-          if (historyIndex > 0) {
-            const nextIdx = historyIndex - 1;
-            setHistoryIndex(nextIdx);
-            const item = history[history.length - 1 - nextIdx];
-            if (item) {
-              setAstState(parseStringToAst(item.expression));
-              setResult(item.result);
-              setRawNumericVal(item.numericVal);
-              setIsCalculated(true);
-            }
-            return;
-          } else if (historyIndex === 0) {
-            setHistoryIndex(-1);
-            setAstState(createInitialAstState());
-            setResult('0');
-            setIsCalculated(false);
-            return;
-          }
+          setSetupRowIndex(0);
+          setSetupPageIndex((p) => (p + 1) % SETUP_PAGES.length);
+        }
+      } else if (direction === 'UP') {
+        if (setupRowIndex > 0) {
+          setSetupRowIndex((r) => r - 1);
+        } else {
+          setSetupRowIndex(3);
+          setSetupPageIndex((p) => (p - 1 + SETUP_PAGES.length) % SETUP_PAGES.length);
         }
       }
-    }
-
-    setAstState((prev) => navigateAst(prev, dir));
-  };
-
-  // DEL Key: with 2-step template unit deletion
-  const handleDelete = () => {
-    if (isPoweredOff) return;
-    playKeyClick('action');
-    setKeystrokes((k) => k + 1);
-    if (errorMessage) {
-      setErrorMessage(null);
       return;
     }
-    pushUndoState(astState);
-    setAstState((prev) => deleteAst(prev));
-    setIsCalculated(false);
-  };
 
-  // All Clear (AC)
-  const handleAllClear = () => {
-    if (isPoweredOff) return;
-    playKeyClick('action');
-    setKeystrokes((k) => k + 1);
-    pushUndoState(astState);
-    setAstState(createInitialAstState());
-    setResult('0');
-    setErrorMessage(null);
-    setIsCalculated(false);
-    setShiftActive(false);
-    setAlphaActive(false);
-    setIsStoreMode(false);
-    setHistoryIndex(-1);
-    setActiveMenu('NONE');
-  };
-
-  // ON Key (Wakes from standby or clears display)
-  const handleOn = () => {
-    playKeyClick('action');
-    if (isPoweredOff) {
-      setIsPoweredOff(false);
+    if (['OPTN', 'CONST_CAT', 'CONST_LIST', 'CONV_CAT', 'CONV_LIST', 'RESET', 'STAT', 'MATRIX', 'VECTOR'].includes(displayMenu)) {
+      if (direction === 'DOWN') {
+        setOptnIndex((prev) => prev + 1);
+      } else if (direction === 'UP') {
+        setOptnIndex((prev) => Math.max(0, prev - 1));
+      }
+      return;
     }
-    setAstState(createInitialAstState());
-    setResult('0');
-    setErrorMessage(null);
-    setIsCalculated(false);
-    setShiftActive(false);
-    setAlphaActive(false);
-    setIsStoreMode(false);
-    setHistoryIndex(-1);
-    setActiveMenu('NONE');
+
+    // If in non-CALC mode, let active mode handle arrows (e.g. data table navigation)
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey(direction, modeContext);
+      if (handled) return;
+    }
+
+    // Normal calculation: History recall or AST cursor traversal
+    if (direction === 'UP') {
+      if (history.length > 0) {
+        const nextIdx = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
+        setHistoryIndex(nextIdx);
+        const item = history[nextIdx];
+        setAstState(parseStringToAst(item.expression));
+        setResult(item.result);
+        setRawNumericVal(item.numericVal);
+        setIsCalculated(true);
+      }
+      return;
+    }
+
+    if (direction === 'DOWN') {
+      if (historyIndex !== -1) {
+        const nextIdx = historyIndex + 1;
+        if (nextIdx >= history.length) {
+          setHistoryIndex(-1);
+          setAstState(createInitialAstState());
+          setResult('0');
+          setIsCalculated(false);
+        } else {
+          setHistoryIndex(nextIdx);
+          const item = history[nextIdx];
+          setAstState(parseStringToAst(item.expression));
+          setResult(item.result);
+          setRawNumericVal(item.numericVal);
+          setIsCalculated(true);
+        }
+      }
+      return;
+    }
+
+    const dirMap = {
+      LEFT: 'left' as const,
+      RIGHT: 'right' as const,
+      UP: 'up' as const,
+      DOWN: 'down' as const,
+    };
+    setAstState(navigateAst(astState, dirMap[direction]));
   };
 
-  // Power OFF (Shift + AC)
-  const handlePowerOff = () => {
-    playKeyClick('action');
-    showTrainer('SHIFT → AC = OFF');
-    setIsPoweredOff(true);
-    setShiftActive(false);
-    setAlphaActive(false);
-    setActiveMenu('NONE');
-  };
-
-  // Toggle Shift Mode
-  const handleShift = () => {
-    if (isPoweredOff) return;
-    playKeyClick('shift');
-    setShiftActive(!shiftActive);
-    if (alphaActive) setAlphaActive(false);
-  };
-
-  // Toggle Alpha Mode
-  const handleAlpha = () => {
-    if (isPoweredOff) return;
-    playKeyClick('alpha');
-    setAlphaActive(!alphaActive);
-    if (shiftActive) setShiftActive(false);
-  };
-
-  // Evaluate Expression (=)
+  // Evaluate Expression (= Key)
   const handleEqual = () => {
     if (isPoweredOff) return;
-    playKeyClick('equal');
-    setKeystrokes((k) => k + 1);
-    const exprStr = astToExpression(astState.root);
-    if (!exprStr.trim()) return;
+    playKeyClick('action');
+    triggerHaptic('action');
 
-    const evalRes = evaluateMathExpression(exprStr, angleMode, variables, lastAns);
-    if (!evalRes.success || evalRes.result === undefined) {
-      setErrorMessage(evalRes.error || 'Syntax ERROR');
-      playKeyClick('error');
+    // If an in-display menu is open, = confirms the highlighted item
+    if (displayMenu === 'MENU') {
+      const selected = ALL_MENU_ITEMS[menuHighlightIndex];
+      if (selected) {
+        handleSelectMode(selected.code);
+      }
       return;
     }
 
-    const num = evalRes.result;
-    setRawNumericVal(num);
-    setLastAns(num);
-    setIsCalculated(true);
-    setSdCycleState(0);
-    setEngStep(0);
-
-    try {
-      localStorage.setItem('casio_last_ans', num.toString());
-    } catch {}
-
-    const formatted = formatResult(num, displayFormat, fixDigits, sciDigits, 0);
-
-    // Compute standard fraction / exact surd representation
-    let exactForm: string | undefined = undefined;
-    const surd = recognizeExactSurd(num);
-    if (surd) {
-      exactForm = surd;
-    } else {
-      const frac = toFraction(num);
-      if (frac && frac.den > 1 && frac.den <= 1000) {
-        exactForm = `${frac.num}/${frac.den}`;
+    if (displayMenu === 'SETUP') {
+      const pageItems = SETUP_PAGES[setupPageIndex];
+      const item = pageItems[setupRowIndex];
+      if (item?.targetMenu) {
+        setDisplayMenu(item.targetMenu);
+      } else {
+        setDisplayMenu('NONE');
       }
+      return;
     }
 
-    // Add to history tape
-    const historyItem: HistoryItem = {
-      id: Date.now().toString(),
-      expression: astToDisplayText(astState.root) || exprStr,
-      result: exactForm || formatted,
-      exactResult: exactForm,
-      numericVal: num,
-      timestamp: Date.now(),
-    };
-    setHistory((prev) => [historyItem, ...prev.slice(0, 49)]);
-    setHistoryIndex(-1);
-
-    if (exactForm) {
-      setResult(exactForm);
-      setSdCycleState(1);
-    } else {
-      setResult(formatted);
-    }
-  };
-
-  // SOLVE Equation (f(x) = 0) (Shift + CALC)
-  const handleSolve = () => {
-    if (isPoweredOff) return;
-    playKeyClick('action');
-    showTrainer('SHIFT → CALC = SOLVE');
-    const exprStr = astToExpression(astState.root);
-    if (!exprStr.trim()) return;
-
-    let solveExpr = exprStr;
-    if (solveExpr.includes('=')) {
-      const [lhs, rhs] = solveExpr.split('=');
-      solveExpr = `(${lhs}) - (${rhs || '0'})`;
+    if (displayMenu === 'RESET_CONFIRM') {
+      // Execute hardware reset
+      localStorage.clear();
+      setVariables({ A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, X: 0, Y: 0, M: 0 });
+      setMemoryM(0);
+      setLastAns(0);
+      setDisplayFormat('NORM1');
+      setAngleMode('DEG');
+      handleSelectMode('CALC');
+      setAstState(createInitialAstState());
+      setResult('0');
+      setDisplayMenu('NONE');
+      return;
     }
 
-    const solveRes = solveEquation(solveExpr, angleMode, 1);
-    if (solveRes.success && solveRes.root !== undefined) {
-      const rootStr = `${solveRes.root}`;
-      setResult(`x = ${rootStr}`);
-      setRawNumericVal(solveRes.root);
-      setLastAns(solveRes.root);
+    if (['SETUP_ANGLE', 'SETUP_FORMAT', 'SETUP_FIX', 'SETUP_SCI', 'SETUP_NORM', 'SETUP_IO', 'OPTN', 'CONST_CAT', 'CONST_LIST', 'CONV_CAT', 'CONV_LIST', 'RESET', 'STAT', 'MATRIX', 'VECTOR'].includes(displayMenu)) {
+      setDisplayMenu('NONE');
+      return;
+    }
+
+    // In non-CALC mode and displayMenu is NONE, let the active mode handle '=' evaluation
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('=', modeContext);
+      if (handled) return;
+    }
+
+    const expr = astToExpression(astState.root);
+    if (!expr || expr === '0') return;
+
+    const evalResult = evaluateMathExpression(expr, angleMode, variables, lastAns);
+
+    if (evalResult.success && evalResult.result !== undefined) {
+      const numVal = evalResult.result;
+      setRawNumericVal(numVal);
+      setLastAns(numVal);
+      try {
+        localStorage.setItem('casio_last_ans', String(numVal));
+      } catch {}
       setIsCalculated(true);
+      setSdCycleState(0);
+      setEngStep(0);
+      setErrorMessage(null);
 
-      const historyItem: HistoryItem = {
+      let formattedOutput: string;
+      if (evalResult.exactResult !== undefined && displayFormat.startsWith('NORM')) {
+        formattedOutput = evalResult.exactResult;
+        setLastExactResult(evalResult.exactResult);
+      } else {
+        formattedOutput = formatResult(numVal, displayFormat, fixDigits, sciDigits, 0);
+        setLastExactResult(undefined);
+      }
+
+      setResult(formattedOutput);
+
+      const newItem: HistoryItem = {
         id: Date.now().toString(),
-        expression: `SOLVE: ${astToDisplayText(astState.root)}`,
-        result: `x = ${rootStr}`,
-        numericVal: solveRes.root,
+        expression: astToDisplayText(astState.root),
+        result: formattedOutput,
+        exactResult: evalResult.exactResult,
+        numericVal: numVal,
         timestamp: Date.now(),
       };
-      setHistory((prev) => [historyItem, ...prev.slice(0, 49)]);
+      setHistory((prev) => [newItem, ...prev.slice(0, 49)]);
+      setHistoryIndex(-1);
     } else {
-      setErrorMessage("Can't Solve");
-      playKeyClick('error');
+      setErrorMessage(evalResult.error || 'Syntax ERROR');
+      setResult('');
     }
   };
 
-  // S<=>D Toggle
-  const handleSdToggle = () => {
-    if (isPoweredOff) return;
-    playKeyClick('sd');
-    setKeystrokes((k) => k + 1);
-    if (!isCalculated && rawNumericVal === 0) return;
-
-    const num = rawNumericVal;
-    const nextState = (sdCycleState + 1) % 3;
-    setSdCycleState(nextState);
-
-    if (nextState === 0) {
-      const surd = recognizeExactSurd(num);
-      if (surd) {
-        setResult(surd);
-        return;
-      }
-      const frac = toFraction(num);
-      if (frac && frac.den > 1 && frac.den <= 1000) {
-        setResult(`${frac.num}/${frac.den}`);
-        return;
-      }
-      setResult(formatResult(num, displayFormat, fixDigits, sciDigits, engStep));
-    } else if (nextState === 1) {
-      setResult(formatResult(num, displayFormat, fixDigits, sciDigits, engStep));
-    } else {
-      const frac = toFraction(num);
-      if (frac && frac.den > 1 && Math.abs(frac.num) > frac.den) {
-        const whole = Math.floor(Math.abs(frac.num) / frac.den) * (frac.num < 0 ? -1 : 1);
-        const rem = Math.abs(frac.num) % frac.den;
-        setResult(`${whole} ${rem}/${frac.den}`);
-      } else {
-        setResult(formatResult(num, displayFormat, fixDigits, sciDigits, engStep));
-      }
-    }
-  };
-
-  const handleMemoryAdd = () => {
-    if (isPoweredOff) return;
-    playKeyClick('action');
-    setKeystrokes((k) => k + 1);
-    if (isCalculated) {
-      setMemoryM((prev) => prev + rawNumericVal);
-    } else {
-      handleToken('M');
-    }
-  };
-
-  const handleMemorySub = () => {
-    if (isPoweredOff) return;
-    playKeyClick('action');
-    showTrainer('SHIFT → M+ = M-');
-    setKeystrokes((k) => k + 1);
-    if (isCalculated) {
-      setMemoryM((prev) => prev - rawNumericVal);
-    } else {
-      handleToken('M');
-    }
-  };
-
-  const handleEng = (delta: number) => {
-    if (isPoweredOff) return;
-    playKeyClick('func');
-    setKeystrokes((k) => k + 1);
-    if (isCalculated) {
-      const nextStep = engStep + delta;
-      setEngStep(nextStep);
-      setResult(formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, nextStep));
-    }
-  };
-
-  // Smart key processor: executes Shift or Alpha action if active, then resets layer
+  // Smart multi-state key helper (Primary, SHIFT, ALPHA, Mode Overrides)
   const handleSmartKey = (
-    normalAction: () => void,
+    primaryAction: () => void,
     shiftAction?: () => void,
     alphaAction?: () => void,
-    keyType: HapticKeyType = 'func'
+    hapticTypeOrKeyName?: HapticKeyType | string,
+    keyNameParam?: string
   ) => {
     if (isPoweredOff) return;
-    playKeyClick(keyType);
-    if (isStoreMode) return;
+    let hapticType: HapticKeyType = 'func';
+    let keyName = keyNameParam;
 
-    if (shiftActive && shiftAction) {
-      shiftAction();
-      setShiftActive(false);
-      return;
+    const validHaptics: HapticKeyType[] = ['action', 'alpha', 'dpad', 'equal', 'error', 'func', 'num', 'sd', 'shift'];
+    if (typeof hapticTypeOrKeyName === 'string') {
+      if (validHaptics.includes(hapticTypeOrKeyName as HapticKeyType)) {
+        hapticType = hapticTypeOrKeyName as HapticKeyType;
+      } else {
+        keyName = hapticTypeOrKeyName;
+      }
     }
+
+    playKeyClick(hapticType);
     if (alphaActive && alphaAction) {
       alphaAction();
       setAlphaActive(false);
-      return;
+    } else if (shiftActive && shiftAction) {
+      shiftAction();
+      setShiftActive(false);
+    } else {
+      // In non-CALC mode, check if key is overridden in the mode's keymap table
+      if (modeState.mode !== 'CALC' && keyName && currentModeModule.keymap.overrides[keyName]) {
+        currentModeModule.keymap.overrides[keyName].action(modeContext);
+        return;
+      }
+      primaryAction();
     }
-    normalAction();
   };
 
+  // Variable Storage and Recall (STO, RCL)
+  const handleVariableOperation = (varName: string) => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('action');
+    if (isStoreMode) {
+      const val = isCalculated ? rawNumericVal : lastAns;
+      setVariables((prev) => ({ ...prev, [varName]: val }));
+      setIsStoreMode(false);
+      setResult(`Ans➔${varName}`);
+    } else {
+      handleToken(varName, 'num', 'VAR');
+    }
+  };
+
+  // Memory Plus/Minus (M+, M-)
+  const handleMemoryAdd = (subtract = false) => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('action');
+    const val = isCalculated ? rawNumericVal : lastAns;
+    const nextM = subtract ? memoryM - val : memoryM + val;
+    setMemoryM(nextM);
+    setVariables((prev) => ({ ...prev, M: nextM }));
+  };
+
+  // Prime Factorization (FACT)
+  const handlePrimeFactorization = () => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('func');
+    if (!isCalculated || rawNumericVal <= 0 || !Number.isInteger(rawNumericVal)) return;
+    const factors = primeFactorization(rawNumericVal);
+    setResult(factors);
+  };
+
+  // Equation Solve Helper (SOLVE)
+  const handleSolve = () => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('action');
+    const expr = astToExpression(astState.root);
+    const res = solveEquation(expr, angleMode, variables.X || 0);
+    if (res.success && res.root !== undefined) {
+      setResult(`x = ${formatResult(res.root, displayFormat, fixDigits, sciDigits, 0)}`);
+      setVariables((prev) => ({ ...prev, X: res.root! }));
+      setIsCalculated(true);
+    } else {
+      setErrorMessage(res.error || "Can't Solve");
+    }
+  };
+
+  // Active page index for MENU grid (2 pages of 6 items each)
+  const menuPage = Math.floor(menuHighlightIndex / 6);
+  const currentMenuGrid = MENU_PAGES[menuPage] || MENU_PAGES[0];
+
   return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full bg-[#08080A] flex flex-col items-center justify-between text-slate-100 selection:bg-amber-400/20 overflow-hidden pt-[env(safe-area-inset-top,0)]">
+    <div className="w-full h-[100dvh] bg-[#0A0A0F] flex items-center justify-center p-0 m-0 overflow-hidden select-none font-sans">
       
-      {/* Top Controls Bar: ONLY rendered in Study Mode. In Exam Mode, strict 1:1 hardware faceplate with no software bars */}
-      {calcMode === 'STUDY' ? (
-        <header className="w-full max-w-[430px] h-8 px-2.5 flex items-center justify-between text-xs text-slate-400 shrink-0 select-none z-10 border-b border-purple-900/40 bg-[#0E0E14]">
-          <div className="flex items-center gap-1.5">
-            <span className="px-1.5 py-0.5 rounded bg-purple-950/80 border border-purple-600/50 text-[10px] font-mono text-purple-300 font-bold flex items-center gap-1">
-              <GraduationCap className="w-3 h-3 text-purple-400" />
-              <span>STUDY</span>
-            </span>
-
-            {/* Drill Timer */}
-            <div className="flex items-center gap-1 text-[10px] font-mono text-slate-300 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-              <Clock className="w-2.5 h-2.5 text-amber-400" />
-              <span>
-                {String(Math.floor(practiceSeconds / 60)).padStart(2, '0')}:
-                {String(practiceSeconds % 60).padStart(2, '0')}
-              </span>
+      {/* Floating Performance Metrics HUD (?perf=1) */}
+      {perfMetrics?.isPerf && (
+        <div className="fixed top-2 left-2 z-50 p-2.5 bg-black/95 border border-emerald-500/80 rounded-lg font-mono text-[10px] text-emerald-400 pointer-events-none shadow-2xl max-w-[320px] leading-tight select-none">
+          <div className="font-bold text-amber-300 border-b border-emerald-800 pb-1 mb-1 flex justify-between items-center">
+            <span>fx-570EX GEOMETRY & PERF</span>
+            <span className="text-[9px] text-emerald-300">?perf=1</span>
+          </div>
+          <div>Screen: {perfMetrics.screenWidth} × {perfMetrics.screenHeight} px (DPR: {perfMetrics.dpr})</div>
+          <div>Key Block: {perfMetrics.keyBlockWidth.toFixed(1)} × {perfMetrics.keyBlockHeight.toFixed(1)} px</div>
+          <div className={perfMetrics.isDisplayPctPass ? 'text-emerald-300 font-bold' : 'text-amber-400 font-bold'}>
+            Display H: {perfMetrics.displayHeight.toFixed(1)} px ({perfMetrics.displayPct.toFixed(1)}% of VP) {perfMetrics.isDisplayPctPass ? '✓ PASS (~24%)' : '⚠ LOW'}
+          </div>
+          <div className="mt-1 pt-1 border-t border-emerald-950 space-y-0.5">
+            <div className={perfMetrics.isVisualKeyPass ? 'text-emerald-300' : 'text-rose-400 font-bold'}>
+              Visual Key H: {perfMetrics.visualKeyHeight.toFixed(1)} dp {perfMetrics.isVisualKeyPass ? '✓ PASS (≥40dp)' : '✗ FAIL (<40dp)'}
             </div>
-
-            {/* Keystrokes Counter */}
-            <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
-              {keystrokes} keys
-            </span>
+            <div className={perfMetrics.isTouchTargetPass ? 'text-emerald-300' : 'text-rose-400 font-bold'}>
+              Touch Target: {perfMetrics.touchTargetWidth.toFixed(1)} × {perfMetrics.touchTargetHeight.toFixed(1)} dp {perfMetrics.isTouchTargetPass ? '✓ PASS (≥44dp)' : '✗ FAIL (<44dp)'}
+            </div>
+            <div className="text-slate-400 text-[9px]">
+              Smallest Target: {perfMetrics.touchTargetWidth.toFixed(1)} × {perfMetrics.touchTargetHeight.toFixed(1)} dp ({perfMetrics.minKeyLabel})
+            </div>
           </div>
+        </div>
+      )}
 
-          <div className="flex items-center gap-1.5">
-            {/* Multi-Level Undo Button */}
-            <button
-              onClick={handleUndo}
-              disabled={undoStack.length === 0}
-              title="Undo Last Action"
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 transition-colors ${
-                undoStack.length > 0
-                  ? 'bg-slate-800 hover:bg-slate-700 text-pink-300 border border-pink-500/30'
-                  : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
-              }`}
-            >
-              <Undo2 className="w-3 h-3 text-pink-400" />
-              <span>Undo</span>
-            </button>
-
-            {/* History Tape Button */}
-            <button
-              onClick={() => {
-                playKeyClick('action');
-                setIsHistoryModalOpen(true);
-              }}
-              title="Open Calculation Tape"
-              className="px-1.5 py-0.5 rounded bg-[#1A1A24] hover:bg-slate-700 text-[10px] font-mono text-amber-300 border border-amber-400/30 flex items-center gap-1 transition-colors active:scale-95"
-            >
-              <span>Tape ({history.length})</span>
-            </button>
-
-            {/* Settings Gear Modal Button */}
-            <button
-              onClick={() => {
-                playKeyClick('action');
-                setIsSettingsModalOpen(true);
-              }}
-              title="Open Settings & Mode Menu"
-              className="p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
-            >
-              <Settings className="w-3.5 h-3.5 text-[#E5A93C]" />
-            </button>
-          </div>
-        </header>
-      ) : null}
-
-      {/* Main Flagship Smartphone / Calculator Chassis constrained to OPPO Find X9 Pro Aspect Ratio */}
+      {/* Main Container: Fills viewport edge-to-edge on mobile, letterboxed on desktop */}
       <main 
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
         style={{
-          aspectRatio: aspectMode === 'OPPO' ? '9 / 19.8' : aspectMode === '9:19.5' ? '9 / 19.5' : undefined,
-          maxHeight: calcMode === 'EXAM' ? '100dvh' : 'calc(100dvh - 36px)',
           transform: calibrationScale !== 1.0 ? `scale(${calibrationScale})` : undefined,
           transformOrigin: 'top center',
         }}
-        className={`h-full w-auto max-w-full flex flex-col justify-between bg-[#0E0E12] border border-slate-800/90 shadow-2xl overflow-hidden select-none transition-all duration-150 relative ${
-          isPhoneFrame 
-            ? 'rounded-[26px] sm:rounded-[34px] border-[5px] sm:border-[7px] border-[#1C1C24] shadow-[0_20px_50px_-10px_rgba(0,0,0,0.9)]' 
-            : 'rounded-none border-0'
-        }`}
+        className="w-full max-w-[440px] h-[100dvh] bg-[#0E0E12] flex flex-col justify-between relative overflow-hidden select-none"
       >
-        {/* Subtle white tray bezel outer edge simulation */}
-        <div className="absolute inset-y-12 -left-[3px] w-[3px] bg-slate-300/40 rounded-l-full pointer-events-none"></div>
-        <div className="absolute inset-y-12 -right-[3px] w-[3px] bg-slate-300/40 rounded-r-full pointer-events-none"></div>
-
         {/* Key-Path Trainer Floating Pill (Study Mode) */}
         {calcMode === 'STUDY' && trainerRoute && (
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-mono font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-mono font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
             <Sparkles className="w-3 h-3 text-slate-950" />
             <span>Path: {trainerRoute}</span>
           </div>
         )}
 
-        {/* 1. Casio Authentic Faceplate Header: CASIO top-left, fx-570EX top-right, CLASSWIZ centered below */}
-        <div className="shrink-0 pt-2 pb-1.5 px-4 flex flex-col bg-[#121217] border-b border-slate-900/60 select-none">
-          <div className="flex items-center justify-between">
-            <span className="font-extrabold text-sm sm:text-base tracking-widest text-slate-100 font-mono">
-              CASIO
-            </span>
+        {/* 1. SETTINGS GEAR ICON: Overlaying display top margin in top-right corner, 40% opacity, 44px touch target */}
+        <button
+          onClick={() => {
+            playKeyClick('action');
+            setIsSettingsModalOpen(true);
+          }}
+          aria-label="Settings and Modes"
+          title="ClassWiz Settings & Mode Switch"
+          className="absolute top-[env(safe-area-inset-top,6px)] right-[env(safe-area-inset-right,6px)] z-30 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center opacity-40 hover:opacity-100 active:opacity-100 transition-opacity text-slate-300"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
 
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono text-xs sm:text-sm font-bold text-slate-200 tracking-wider">
-                fx-570EX
-              </span>
-              {/* Subtle Settings Gear Button for Mode Switching & Calibration */}
-              <button
-                onClick={() => {
-                  playKeyClick('action');
-                  setIsSettingsModalOpen(true);
-                }}
-                title="ClassWiz Settings & Mode Switch"
-                className="p-1 rounded-md hover:bg-slate-800 text-slate-500 hover:text-[#E5A93C] transition-colors ml-0.5 active:scale-90"
-              >
-                <Settings className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex justify-center -mt-0.5">
-            <span className="font-black text-xs sm:text-sm tracking-[0.25em] font-mono text-[#E6007E] drop-shadow-[0_0_6px_rgba(230,0,126,0.3)]">
-              CLASSWIZ
-            </span>
-          </div>
-        </div>
-
-        {/* 2. DUAL-LINE DOT-MATRIX OLED DISPLAY SCREEN (2D Math AST Natural Display) */}
-        <div className={`shrink-0 mx-2.5 sm:mx-3 my-0.5 sm:my-1 p-2 sm:p-2.5 rounded-xl border border-slate-800/90 shadow-inner relative flex flex-col justify-between h-[clamp(88px,16.5vh,128px)] min-h-[82px] transition-colors duration-300 ${
-          isPoweredOff ? 'bg-[#06080A]' : 'lcd-screen-bg'
-        }`}>
+        {/* 2. DUAL-LINE HIGH-CONTRAST LCD DISPLAY SCREEN */}
+        {/* RULE: Takes ALL remaining height above key block; all menus render inside this container */}
+        <div 
+          ref={displayRef}
+          data-testid="display-screen"
+          className={`flex-1 w-full min-h-[160px] flex flex-col justify-between relative select-none pt-[env(safe-area-inset-top,8px)] px-3 pb-2 transition-colors duration-300 ${
+            isPoweredOff ? 'bg-[#06080A]' : 'lcd-screen-bg'
+          }`}
+        >
           {isPoweredOff ? (
             /* Power-Off Standby Display */
             <div className="h-full flex flex-col items-center justify-center text-slate-800 font-mono select-none">
@@ -986,8 +1331,8 @@ export default function App() {
             </div>
           ) : (
             <>
-              {/* Top Status Indicators Row (S, A, STO, M, D/R/G, FIX/SCI, Math▲▼, History) */}
-              <div className="flex items-center justify-between text-[10px] font-mono tracking-wider border-b border-emerald-950/40 pb-0.5 text-slate-400 select-none">
+              {/* TOP STATUS INDICATORS ROW: Stays strictly visible during all menus */}
+              <div className="flex items-center justify-between text-[10.5px] font-mono tracking-wider border-b border-emerald-950/40 pb-1 text-slate-400 select-none pr-12">
                 <div className="flex items-center gap-1.5">
                   {/* [S] Indicator */}
                   <span className={`px-1 rounded text-[9px] font-bold transition-all ${shiftActive ? 'bg-[#E5A93C] text-slate-950 shadow-[0_0_8px_#E5A93C]' : 'opacity-20'}`}>
@@ -1002,307 +1347,585 @@ export default function App() {
                     STO
                   </span>
                   {/* [M] Indicator */}
-                  <span className={`px-1 rounded text-[9px] font-bold transition-opacity ${memoryM !== 0 ? 'bg-emerald-400 text-slate-950' : 'opacity-20'}`}>
+                  <span className={`px-1 rounded text-[9px] font-bold transition-opacity ${memoryM !== 0 ? 'bg-emerald-500 text-slate-950' : 'opacity-0'}`}>
                     M
                   </span>
-
-                  {/* History Tape Quick Indicator: Study Mode only */}
-                  {calcMode === 'STUDY' && (
-                    <button
-                      onClick={() => {
-                        playKeyClick('action');
-                        setIsHistoryModalOpen(true);
-                      }}
-                      title="View History Tape"
-                      className="px-1 rounded text-[9px] font-mono text-[#E5A93C] hover:bg-slate-800 transition-colors flex items-center gap-0.5"
-                    >
-                      <span>HIST</span>
-                      <span className="text-[8px] bg-slate-800 px-1 rounded text-[#E5A93C]">{history.length}</span>
-                    </button>
+                  {/* Angle Mode Indicator */}
+                  <span className="font-bold text-emerald-400/90 ml-1">
+                    {angleMode === 'DEG' ? 'D' : angleMode === 'RAD' ? 'R' : 'G'}
+                  </span>
+                  {/* Display Precision Mode */}
+                  <span className="text-emerald-500/70 text-[9px]">
+                    {displayFormat === 'NORM1' ? 'Norm1' : displayFormat === 'NORM2' ? 'Norm2' : displayFormat === 'FIX' ? `Fix${fixDigits}` : `Sci${sciDigits}`}
+                  </span>
+                  {/* Mode Indicator: dynamic based on active mode (e.g. i, DEC, MAT, VCT, STAT, TABLE, EQN) */}
+                  {modeIndicator && (
+                    <span className="px-1 rounded bg-emerald-900/60 text-emerald-300 font-bold text-[8.5px] border border-emerald-700/40">
+                      {modeIndicator}
+                    </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {/* Angle Mode Badge: Tap to cycle DEG / RAD / GRA */}
-                  <button
-                    onClick={() => {
-                      playKeyClick('action');
-                      const next: AngleMode = angleMode === 'DEG' ? 'RAD' : angleMode === 'RAD' ? 'GRA' : 'DEG';
-                      setAngleMode(next);
-                    }}
-                    className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900/90 text-emerald-400 border border-emerald-900/50 hover:bg-slate-800 transition-colors"
-                  >
-                    {angleMode === 'DEG' ? 'D' : angleMode === 'RAD' ? 'R' : 'G'}
-                  </button>
-
-                  <span className="text-[9px] font-medium text-slate-400">
-                    {displayFormat}
-                  </span>
-
-                  <span className="text-[9px] font-bold text-emerald-500">
-                    Math ▲▼
+                <div className="flex items-center gap-2 text-[9px]">
+                  {/* Natural Textbook Display indicator */}
+                  <span className="text-emerald-400/90 font-serif italic">Math</span>
+                  {/* In-Display Page Scroll Arrows */}
+                  <span className="flex items-center text-[8.5px] text-emerald-400/80 font-bold">
+                    ▲▼
                   </span>
                 </div>
               </div>
 
-              {/* Upper Line: 2D Math Box AST Natural Display (Left-aligned input) */}
-              <NaturalDisplay
-                nodes={astState.root}
-                cursor={astState.cursor}
-                pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
-                onSetCursor={(slotId, offset) => {
-                  setAstState((prev) => ({
-                    ...prev,
-                    cursor: { slotId, offset },
-                    pendingDeleteTemplateId: null,
-                  }));
-                }}
-              />
-
-              {/* Lower Line: Right-aligned result with horizontal scroll and ◄ ► overflow indicators */}
-              <div className="flex items-end justify-between pt-0.5 border-t border-emerald-950/40 relative min-h-[30px] overflow-hidden">
-                {/* Left Status: Previous Ans in Study Mode */}
-                <div className="shrink-0 text-[9px] font-mono text-slate-500 pr-1 select-none">
-                  {calcMode === 'STUDY' && isCalculated && !errorMessage && (
-                    <span>Ans = {lastAns}</span>
-                  )}
-                </div>
-
-                {/* Right-aligned Result Container */}
-                <div className="flex-1 min-w-0 flex items-center justify-end">
-                  {errorMessage ? (
-                    <div className="text-right">
-                      <span className="text-xs sm:text-sm font-mono text-red-400 font-bold tracking-wide animate-pulse">
-                        [{errorMessage}]
-                      </span>
+              {/* IN-DISPLAY CONTENT ROUTER: Swaps between Natural Expression, Mode Screens, and In-Display Menus */}
+              {displayMenu === 'NONE' ? (
+                modeState.mode !== 'CALC' ? (
+                  /* In-Display Mode Renderer (BASE, CMPLX, MATRIX, VECTOR, STAT, TABLE, EQN, DIST, etc.) */
+                  <div className="flex-1 w-full flex flex-col justify-between overflow-hidden">
+                    {currentModeModule.renderDisplay(modeContext)}
+                  </div>
+                ) : (
+                  <>
+                    {/* Natural Display Expression Area (Top-Left aligned, 2D Math Box AST) */}
+                    <div className="flex-1 min-h-[64px] flex items-center overflow-hidden py-1">
+                      <NaturalDisplay
+                        nodes={astState.root}
+                        cursor={astState.cursor}
+                        pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
+                        onSetCursor={(slotId, offset) => {
+                          setAstState((prev) => ({
+                            ...prev,
+                            cursor: { slotId, offset },
+                          }));
+                        }}
+                      />
                     </div>
-                  ) : (
-                    <div className="relative flex items-center justify-end max-w-full">
-                      {/* Left scroll overflow arrow */}
-                      {showLeftArrow && (
-                        <span className="text-[10px] font-bold text-emerald-400 mr-1 select-none animate-pulse shrink-0">
-                          ◄
-                        </span>
-                      )}
 
-                      {/* Scrollable Result Text */}
-                      <div
-                        ref={resultContainerRef}
-                        onScroll={checkResultOverflow}
-                        className="overflow-x-auto no-scrollbar whitespace-nowrap text-right max-w-full px-0.5 scroll-smooth"
-                      >
-                        <span className="text-xl sm:text-2xl font-mono font-bold text-slate-100 tracking-tight lcd-dot-text select-text">
-                          {result}
-                        </span>
+                    {/* Bottom Result Line: Strictly Right-Aligned with scroll guards */}
+                    <div className="shrink-0 flex items-baseline justify-between overflow-hidden select-text pt-0.5 border-t border-emerald-950/20">
+                      <div className="flex items-center gap-1 text-[10px] text-emerald-600/70 font-mono">
+                        {errorMessage ? (
+                          <span className="text-rose-400 font-bold text-xs tracking-wider animate-pulse">
+                            [{errorMessage}]
+                          </span>
+                        ) : isCalculated ? (
+                          <span className="text-emerald-500/60 text-[9px]">◄►</span>
+                        ) : null}
                       </div>
 
-                      {/* Right scroll overflow arrow */}
-                      {showRightArrow && (
-                        <span className="text-[10px] font-bold text-emerald-400 ml-1 select-none animate-pulse shrink-0">
-                          ►
-                        </span>
-                      )}
+                      <div 
+                        className="flex-1 text-right font-mono text-2xl sm:text-3xl font-bold tracking-wider text-emerald-200 select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2"
+                        style={{ textShadow: '0 0 3px rgba(110,231,183,0.3)' }}
+                      >
+                        {errorMessage ? '' : result}
+                      </div>
                     </div>
-                  )}
+                  </>
+                )
+              ) : displayMenu === 'MENU' ? (
+                /* 1. IN-DISPLAY MENU GRID: 2 rows × 3 columns per page, authentic ClassWiz LCD */
+                <div 
+                  data-testid="in-display-menu"
+                  className="flex-1 w-full min-h-[92px] flex flex-col justify-between py-1 font-mono select-none"
+                >
+                  <div className="grid grid-cols-3 grid-rows-2 gap-1.5 flex-1 min-h-[72px] w-full items-stretch">
+                    {currentMenuGrid.map((item, idx) => {
+                      const absoluteIndex = menuPage * 6 + idx;
+                      const isSelected = absoluteIndex === menuHighlightIndex;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setMenuHighlightIndex(absoluteIndex);
+                            handleSelectMode(item.code);
+                          }}
+                          className={`flex flex-col items-start justify-center px-2 py-1 rounded min-h-[34px] transition-colors text-left border cursor-pointer ${
+                            isSelected 
+                              ? 'bg-emerald-400 text-slate-950 font-bold border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+                              : 'bg-emerald-950/40 text-emerald-300 border-emerald-900/50 hover:bg-emerald-900/50'
+                          }`}
+                        >
+                          <span className={`text-[9.5px] font-bold ${isSelected ? 'text-slate-950' : 'text-amber-400'}`}>
+                            {item.key}:
+                          </span>
+                          <span className="text-[10px] leading-tight truncate w-full font-medium">
+                            {item.shortName}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Page indicator and helper footer */}
+                  <div className="flex items-center justify-between text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40">
+                    <span>Use [▲▼◄►] to move, [=] to select</span>
+                    <span className="font-bold text-amber-400">Page {menuPage + 1}/2 ▲▼</span>
+                  </div>
                 </div>
-              </div>
+              ) : displayMenu === 'SETUP' ? (
+                /* 2. IN-DISPLAY SETUP LIST: Scrollable list of 4 items per page */
+                <div className="flex-1 flex flex-col justify-between py-1 overflow-hidden font-mono">
+                  <div className="space-y-1 flex-1">
+                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5 mb-1 flex justify-between">
+                      <span>SETUP MENU</span>
+                      <span>Page {setupPageIndex + 1}/{SETUP_PAGES.length} ▲▼</span>
+                    </div>
+                    {SETUP_PAGES[setupPageIndex].map((item, idx) => {
+                      const isSelected = idx === setupRowIndex;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setSetupRowIndex(idx);
+                            if (item.targetMenu) setDisplayMenu(item.targetMenu);
+                          }}
+                          className={`w-full flex items-center justify-between px-2 py-0.5 rounded text-left text-xs ${
+                            isSelected
+                              ? 'bg-emerald-400 text-slate-950 font-bold shadow'
+                              : 'text-emerald-200 hover:bg-emerald-950/40'
+                          }`}
+                        >
+                          <span>{item.key}:{item.title}</span>
+                          <span className="text-[10px] opacity-70">➔</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1~4 to select</span>
+                    <span>[AC] :Exit</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'SETUP_ANGLE' ? (
+                /* Angle Unit Sub-menu */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">ANGLE UNIT</div>
+                    {[
+                      { key: '1', name: 'Degree (D)', mode: 'DEG' as AngleMode },
+                      { key: '2', name: 'Radian (R)', mode: 'RAD' as AngleMode },
+                      { key: '3', name: 'Gradian (G)', mode: 'GRA' as AngleMode },
+                    ].map((m) => (
+                      <button
+                        key={m.key}
+                        onClick={() => {
+                          setAngleMode(m.mode);
+                          setDisplayMenu('NONE');
+                        }}
+                        className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
+                          angleMode === m.mode ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-emerald-200 hover:bg-emerald-950/40'
+                        }`}
+                      >
+                        <span>{m.key}:{m.name}</span>
+                        {angleMode === m.mode && <span>✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1~3 to set</span>
+                    <span>[AC] :Back</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'SETUP_FORMAT' ? (
+                /* Number Format Sub-menu */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">NUMBER FORMAT</div>
+                    {[
+                      { key: '1', name: 'Fix (Fixed decimal places)', menu: 'SETUP_FIX' as DisplayMenuType },
+                      { key: '2', name: 'Sci (Significant figures)', menu: 'SETUP_SCI' as DisplayMenuType },
+                      { key: '3', name: 'Norm (Norm1 / Norm2)', menu: 'SETUP_NORM' as DisplayMenuType },
+                    ].map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setDisplayMenu(f.menu)}
+                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-emerald-200 hover:bg-emerald-950/40"
+                      >
+                        <span>{f.key}:{f.name}</span>
+                        <span className="text-[10px] opacity-70">➔</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1~3 to choose</span>
+                    <span>[AC] :Back</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'SETUP_FIX' ? (
+                /* Fix Digits Prompt */
+                <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
+                  <div className="py-2">
+                    <div className="text-sm font-bold text-emerald-300">Fix 0~9?</div>
+                    <p className="text-[10px] text-emerald-500 mt-1">Specify number of decimal places (e.g. press 2 for Fix2)</p>
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press [0] ~ [9]</span>
+                    <span>[AC] :Back</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'SETUP_SCI' ? (
+                /* Sci Digits Prompt */
+                <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
+                  <div className="py-2">
+                    <div className="text-sm font-bold text-emerald-300">Sci 0~9?</div>
+                    <p className="text-[10px] text-emerald-500 mt-1">Specify significant figures (0 = 10 digits)</p>
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press [0] ~ [9]</span>
+                    <span>[AC] :Back</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'SETUP_NORM' ? (
+                /* Norm1 / Norm2 Selection */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">NORM FORMAT</div>
+                    <button
+                      onClick={() => {
+                        setDisplayFormat('NORM1');
+                        setDisplayMenu('NONE');
+                      }}
+                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
+                        displayFormat === 'NORM1' ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-emerald-200'
+                      }`}
+                    >
+                      <span>1:Norm1 (10⁻² ~ 10¹⁰)</span>
+                      {displayFormat === 'NORM1' && <span>✓</span>}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDisplayFormat('NORM2');
+                        setDisplayMenu('NONE');
+                      }}
+                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
+                        displayFormat === 'NORM2' ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-emerald-200'
+                      }`}
+                    >
+                      <span>2:Norm2 (10⁻⁹ ~ 10¹⁰)</span>
+                      {displayFormat === 'NORM2' && <span>✓</span>}
+                    </button>
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1 or 2</span>
+                    <span>[AC] :Back</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'OPTN' ? (
+                /* 3. OPTN MENU */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">OPTIONS (OPTN)</div>
+                    {[
+                      { key: '1', name: 'Hyperbolic / Trig', menu: 'OPTN_HYP' as DisplayMenuType },
+                      { key: '2', name: 'Angle Unit (° / r / g)', menu: 'OPTN_ANGLE' as DisplayMenuType },
+                      { key: '3', name: 'Engineer Symbol', menu: 'OPTN_ENG' as DisplayMenuType },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setDisplayMenu(opt.menu)}
+                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-emerald-200 hover:bg-emerald-950/40"
+                      >
+                        <span>{opt.key}:{opt.name}</span>
+                        <span className="text-[10px] opacity-70">➔</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1~3</span>
+                    <span>[AC] :Exit</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'CONST_CAT' ? (
+                /* 4. SCIENTIFIC CONSTANTS CATEGORIES */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="space-y-0.5">
+                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">SCIENTIFIC CONSTANTS</div>
+                    <div className="grid grid-cols-2 gap-1 text-[11px]">
+                      {CONST_CATEGORIES.map((cat) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => {
+                            setConstCatIndex(cat.id - 1);
+                            setDisplayMenu('CONST_LIST');
+                          }}
+                          className="flex items-center px-1.5 py-0.5 rounded text-left text-emerald-200 hover:bg-emerald-950/40 border border-emerald-900/30"
+                        >
+                          <span className="font-bold text-amber-400 mr-1">{cat.key}:</span>
+                          <span className="truncate">{cat.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1~6</span>
+                    <span>[AC] :Exit</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'CONST_LIST' ? (
+                /* Constants List */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="space-y-0.5">
+                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">
+                      {CONST_CATEGORIES[constCatIndex]?.name.toUpperCase()} CONSTANTS
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-[11px]">
+                      {CONST_CATEGORIES[constCatIndex]?.items.map((sym, idx) => (
+                        <button
+                          key={sym}
+                          onClick={() => handleMenuNumberSelect((idx + 1).toString())}
+                          className="flex items-center justify-between px-1.5 py-0.5 rounded text-left text-emerald-200 hover:bg-emerald-950/40 border border-emerald-900/30"
+                        >
+                          <span><strong className="text-amber-400 mr-1">{idx + 1}:</strong>{sym}</span>
+                          <span className="text-[9px] opacity-60">insert</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press key to insert</span>
+                    <span>[AC] :Back</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'RESET' ? (
+                /* 5. RESET MENU */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-rose-400 border-b border-emerald-950 pb-0.5">RESET ?</div>
+                    {[
+                      { key: '1', name: 'Setup Data' },
+                      { key: '2', name: 'Memory' },
+                      { key: '3', name: 'Initialize All' },
+                    ].map((item) => (
+                      <button
+                        key={item.key}
+                        onClick={() => {
+                          setResetIndex(parseInt(item.key, 10) - 1);
+                          setDisplayMenu('RESET_CONFIRM');
+                        }}
+                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-emerald-200 hover:bg-emerald-950/40"
+                      >
+                        <span>{item.key}:{item.name}</span>
+                        <span className="text-[10px] opacity-70">➔</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1~3</span>
+                    <span>[AC] :Cancel</span>
+                  </div>
+                </div>
+              ) : displayMenu === 'RESET_CONFIRM' ? (
+                /* Reset Confirmation */
+                <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
+                  <div className="py-2">
+                    <div className="text-sm font-bold text-amber-300">Reset All?</div>
+                    <div className="mt-2 text-xs text-emerald-300">
+                      Yes: [ = ] &nbsp;&nbsp;&nbsp;&nbsp; No: [ AC ]
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press [=] to execute</span>
+                    <span>[AC] :Cancel</span>
+                  </div>
+                </div>
+              ) : (
+                /* Generic In-Display Sub-menu (CONV, STAT, MATRIX, VECTOR) */
+                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                  <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5 uppercase">
+                    {displayMenu} MENU
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-[11px] py-1">
+                    {['1:Item 1', '2:Item 2', '3:Item 3', '4:Item 4'].map((it, idx) => (
+                      <button
+                        key={it}
+                        onClick={() => handleMenuNumberSelect((idx + 1).toString())}
+                        className="px-1.5 py-0.5 rounded text-left text-emerald-200 hover:bg-emerald-950/40 border border-emerald-900/30"
+                      >
+                        {it}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                    <span>Press 1~4 to select</span>
+                    <span>[AC] :Exit</span>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
 
-        {/* MODE / SETUP Menus */}
-        {activeMenu === 'MODE' && (
-          <div className="shrink-0 mx-2.5 mb-1 p-2 bg-[#171720] border border-amber-500/40 rounded-xl text-xs font-mono grid grid-cols-3 gap-1 animate-in fade-in">
-            <button onClick={() => { playKeyClick('action'); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left">
-              1: COMP
-            </button>
-            <button onClick={() => { setActiveDrawerTab('STAT'); setIsDrawerOpen(true); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left text-amber-300">
-              2: STAT
-            </button>
-            <button onClick={() => { setActiveDrawerTab('MATRIX'); setIsDrawerOpen(true); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left text-pink-300">
-              3: MATRIX
-            </button>
-            <button onClick={() => { setActiveDrawerTab('VECTOR'); setIsDrawerOpen(true); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left text-cyan-300">
-              4: VECTOR
-            </button>
-            <button onClick={() => { setActiveDrawerTab('EQUATION'); setIsDrawerOpen(true); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left text-emerald-300">
-              5: EQN
-            </button>
-            <button onClick={() => { setActiveDrawerTab('BASE'); setIsDrawerOpen(true); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left text-purple-300">
-              6: BASE-N
-            </button>
-          </div>
-        )}
-
-        {activeMenu === 'SETUP' && (
-          <div className="shrink-0 mx-2.5 mb-1 p-2 bg-[#171720] border border-amber-500/40 rounded-xl text-xs font-mono grid grid-cols-3 gap-1 animate-in fade-in">
-            <button onClick={() => { setAngleMode('DEG'); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left">
-              1: Deg (°)
-            </button>
-            <button onClick={() => { setAngleMode('RAD'); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left">
-              2: Rad (r)
-            </button>
-            <button onClick={() => { setAngleMode('GRA'); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left">
-              3: Gra (g)
-            </button>
-            <button onClick={() => { setDisplayFormat('FIX'); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left">
-              4: Fix (0-9)
-            </button>
-            <button onClick={() => { setDisplayFormat('SCI'); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left">
-              5: Sci (Exp)
-            </button>
-            <button onClick={() => { setDisplayFormat('NORM1'); setActiveMenu('NONE'); }} className="p-1 bg-slate-800 rounded hover:bg-slate-700 text-left">
-              6: Norm
-            </button>
-          </div>
-        )}
-
-        {/* Swipe Affordance Bar: Only rendered in Study Mode */}
-        {calcMode === 'STUDY' && (
-          <div 
-            onClick={() => {
-              playKeyClick('action');
-              setIsDrawerOpen(true);
-            }}
-            className="shrink-0 mx-2.5 sm:mx-3 mb-0.5 px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-800/80 flex items-center justify-between text-[9px] font-mono text-slate-400 cursor-pointer hover:bg-slate-800/80 transition-colors"
-          >
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#E5A93C]"></span>
-              <span>Modes: Stat · Matrix · Vector · Eqn</span>
-            </span>
-            <span className="text-[#E5A93C] font-bold flex items-center gap-0.5">
-              Swipe ◄ or Tap
-            </span>
-          </div>
-        )}
-
-        {/* 3. KEYPAD SECTION (Authentic Physical fx-570EX Key Matrix & Dual Secondary Label System) */}
-        <div className="flex-1 min-h-0 px-2 sm:px-3 pb-1 pt-0.5 flex flex-col justify-between gap-1 bg-[#121217]">
-          
-          {/* Row 1: Top Navigation Row (SHIFT, ALPHA, REPLAY D-PAD, MENU/SETUP, ON) */}
-          <div className="shrink-0 grid grid-cols-5 items-center gap-1 h-[clamp(44px,7vh,56px)]">
-            {/* SHIFT Key */}
-            <div className="flex flex-col items-center justify-center h-full min-h-0">
-              <span className="text-[clamp(7.5px,1vh,9px)] font-bold text-[#E5A93C] font-mono tracking-tighter leading-none mb-0.5">SHIFT</span>
+        {/* 3. KEYPAD SECTION: Physical fx-570EX Unit Grid */}
+        {/* Scale key block uniformly by width; side padding min 16px keeps keys out of back-gesture zone */}
+        {/* RULE: The key block never moves or shifts when menus open */}
+        <div 
+          ref={keyBlockRef}
+          data-testid="key-block"
+          style={{
+            paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
+            paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
+            paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+          }}
+          className="shrink-0 w-full pt-0 flex flex-col gap-1 justify-end"
+        >
+          {/* FUNCTION KEYS BLOCK: 6 columns × 7 rows */}
+          <div className="grid grid-cols-6 gap-x-1.5 gap-y-0.5 relative w-full">
+            
+            {/* Col 1, Row 1: SHIFT */}
+            <div className="col-start-1 row-start-1 key-wrapper">
+              <div className="key-secondary-labels">
+                <span></span>
+                <span></span>
+              </div>
               <button
-                onClick={handleShift}
-                className={`w-full h-[clamp(26px,4vh,32px)] rounded-full font-mono text-[10px] sm:text-xs font-bold transition-all key-hardware-round flex items-center justify-center ${
-                  shiftActive 
-                    ? 'bg-[#E5A93C] text-slate-950 ring-2 ring-[#E5A93C]' 
-                    : 'text-[#E5A93C]'
+                onClick={() => {
+                  playKeyClick('action');
+                  setShiftActive((prev) => !prev);
+                  if (alphaActive) setAlphaActive(false);
+                }}
+                aria-label="SHIFT key"
+                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
+                  shiftActive ? 'text-slate-950 bg-[#E5A93C] shadow-[0_0_10px_#E5A93C]' : 'text-[#E5A93C]'
                 }`}
               >
                 SHIFT
               </button>
             </div>
 
-            {/* ALPHA Key */}
-            <div className="flex flex-col items-center justify-center h-full min-h-0">
-              <span className="text-[clamp(7.5px,1vh,9px)] font-bold text-[#E6007E] font-mono tracking-tighter leading-none mb-0.5">ALPHA</span>
+            {/* Col 2, Row 1: ALPHA */}
+            <div className="col-start-2 row-start-1 key-wrapper">
+              <div className="key-secondary-labels">
+                <span></span>
+                <span></span>
+              </div>
               <button
-                onClick={handleAlpha}
-                className={`w-full h-[clamp(26px,4vh,32px)] rounded-full font-mono text-[10px] sm:text-xs font-bold transition-all key-hardware-round flex items-center justify-center ${
-                  alphaActive 
-                    ? 'bg-[#E6007E] text-white ring-2 ring-[#E6007E]' 
-                    : 'text-[#E6007E]'
+                onClick={() => {
+                  playKeyClick('action');
+                  setAlphaActive((prev) => !prev);
+                  if (shiftActive) setShiftActive(false);
+                }}
+                aria-label="ALPHA key"
+                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
+                  alphaActive ? 'text-white bg-[#E6007E] shadow-[0_0_10px_#E6007E]' : 'text-[#E6007E]'
                 }`}
               >
                 ALPHA
               </button>
             </div>
 
-            {/* Center: REPLAY D-PAD (Directional cluster with chrome finish) */}
-            <div className="flex flex-col items-center justify-center h-full min-h-0">
-              <div className="relative w-[clamp(58px,8.8vh,70px)] h-[clamp(40px,6.2vh,50px)] bg-gradient-to-b from-[#2C2C38] via-[#20202A] to-[#14141A] rounded-full border border-slate-600/80 shadow-[0_2px_4px_rgba(0,0,0,0.6)] flex items-center justify-center p-0.5">
-                {/* UP */}
+            {/* Cols 3-4, Rows 1-2: 4-WAY D-PAD */}
+            <div className="col-start-3 col-span-2 row-start-1 row-span-2 relative flex items-center justify-center my-auto py-0 z-10 pointer-events-auto">
+              <div className="relative w-[90px] h-[79px] rounded-full bg-[#1A1A22] border border-slate-700/60 shadow-[inset_0_1px_3px_rgba(255,255,255,0.1),0_2px_5px_rgba(0,0,0,0.6)] flex items-center justify-center overflow-hidden">
+                
+                {/* Up */}
                 <button
-                  onClick={() => handleDpad('up')}
-                  title="D-Pad UP: Numerator / Upper Limit"
-                  className="absolute top-0 p-1 text-slate-300 hover:text-[#E5A93C] active:scale-90 transition-transform"
+                  onClick={() => handleDpad('UP')}
+                  aria-label="D-pad Up"
+                  className="absolute top-0 w-11 h-10 min-w-[44px] min-h-[40px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
                 >
-                  <ChevronUp className="w-3.5 h-3.5" />
+                  <ChevronUp className="w-4 h-4" />
                 </button>
-                {/* DOWN */}
+
+                {/* Down */}
                 <button
-                  onClick={() => handleDpad('down')}
-                  title="D-Pad DOWN: Denominator / Lower Limit"
-                  className="absolute bottom-0 p-1 text-slate-300 hover:text-[#E5A93C] active:scale-90 transition-transform"
+                  onClick={() => handleDpad('DOWN')}
+                  aria-label="D-pad Down"
+                  className="absolute bottom-0 w-11 h-10 min-w-[44px] min-h-[40px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
                 >
-                  <ChevronDown className="w-3.5 h-3.5" />
+                  <ChevronDown className="w-4 h-4" />
                 </button>
-                {/* LEFT */}
+
+                {/* Left */}
                 <button
-                  onClick={() => handleDpad('left')}
-                  title="D-Pad LEFT"
-                  className="absolute left-0.5 p-1 text-slate-300 hover:text-[#E5A93C] active:scale-90 transition-transform"
+                  onClick={() => handleDpad('LEFT')}
+                  aria-label="D-pad Left"
+                  className="absolute left-0 w-10 h-11 min-w-[40px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
-                {/* RIGHT */}
+
+                {/* Right */}
                 <button
-                  onClick={() => handleDpad('right')}
-                  title="D-Pad RIGHT: Step or break out of template"
-                  className="absolute right-0.5 p-1 text-slate-300 hover:text-[#E5A93C] active:scale-90 transition-transform"
+                  onClick={() => handleDpad('RIGHT')}
+                  aria-label="D-pad Right"
+                  className="absolute right-0 w-10 h-11 min-w-[40px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
                 >
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
-                {/* Center Pivot: Authentic metallic concave pivot (NO center label) */}
-                <div className="w-4 h-4 rounded-full bg-gradient-to-b from-[#1C1C24] to-[#0D0D12] border border-slate-600/70 shadow-inner pointer-events-none"></div>
+
+                {/* Center Core: Clean Casio Blank */}
+                <div className="w-6 h-6 rounded-full bg-[#121218] border border-slate-800 pointer-events-none shadow-inner" />
               </div>
             </div>
 
-            {/* MENU / SETUP Key */}
-            <div className="flex flex-col items-center justify-center h-full min-h-0">
-              <span className="text-[clamp(7.5px,1vh,9px)] font-mono text-[#E5A93C] font-semibold tracking-tighter leading-none mb-0.5">SETUP</span>
+            {/* Col 5, Row 1: MENU / SETUP */}
+            <div className="col-start-5 row-start-1 key-wrapper relative z-20">
+              <div className="key-secondary-labels">
+                <span className="text-[clamp(7.5px,1vh,9px)] font-mono text-[#E5A93C] font-semibold tracking-tighter leading-none">SETUP</span>
+                <span></span>
+              </div>
               <button
                 onClick={() => {
                   playKeyClick('action');
                   if (shiftActive) {
-                    setActiveMenu(activeMenu === 'SETUP' ? 'NONE' : 'SETUP');
+                    setDisplayMenu((prev) => (prev === 'SETUP' ? 'NONE' : 'SETUP'));
                     setShiftActive(false);
                   } else {
-                    setActiveMenu(activeMenu === 'MODE' ? 'NONE' : 'MODE');
+                    setDisplayMenu((prev) => (prev === 'MENU' ? 'NONE' : 'MENU'));
+                    setMenuHighlightIndex(0);
                   }
                 }}
-                className="w-full h-[clamp(26px,4vh,32px)] rounded-full font-mono text-[10px] sm:text-xs font-semibold key-hardware-round text-slate-200 flex items-center justify-center"
+                aria-label="MENU key"
+                data-testid="menu-key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-semibold key-hardware-round text-slate-200 flex items-center justify-center cursor-pointer select-none"
               >
                 MENU
               </button>
             </div>
 
-            {/* ON Key */}
-            <div className="flex flex-col items-center justify-center h-full min-h-0">
-              <span className="text-[clamp(7.5px,1vh,9px)] font-mono text-slate-500 tracking-tighter leading-none mb-0.5">CLR</span>
+            {/* Col 6, Row 1: ON */}
+            <div className="col-start-6 row-start-1 key-wrapper">
+              <div className="key-secondary-labels">
+                <span className="text-[clamp(7.5px,1vh,9px)] font-mono text-slate-500 tracking-tighter leading-none">CLR</span>
+                <span></span>
+              </div>
               <button
                 onClick={handleOn}
-                className="w-full h-[clamp(26px,4vh,32px)] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round text-slate-100 border border-slate-600/50 flex items-center justify-center"
+                aria-label="ON key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round text-slate-100 border border-slate-600/50 flex items-center justify-center"
               >
                 ON
               </button>
             </div>
-          </div>
 
-          {/* Row 2: OPTN, CALC, (D-Pad Center), ∫□ dx, x */}
-          <div className="shrink-0 grid grid-cols-6 items-center gap-1 h-[clamp(36px,5.2vh,46px)] text-[11px] font-mono">
-            {/* OPTN: Shift -> QR (Yellow) */}
-            <div className="key-wrapper">
+            {/* Col 1, Row 2: OPTN */}
+            <div className="col-start-1 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">QR</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => { setActiveDrawerTab('STAT'); setIsDrawerOpen(true); },
+                  () => {
+                    if (modeState.mode !== 'CALC') {
+                      if (currentModeModule.keymap.overrides['OPTN']) {
+                        currentModeModule.keymap.overrides['OPTN'].action(modeContext);
+                      } else {
+                        modeContext.openSubMenu();
+                      }
+                    } else {
+                      setDisplayMenu((prev) => (prev === 'OPTN' ? 'NONE' : 'OPTN'));
+                    }
+                  },
                   () => setIsQrModalOpen(true)
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] font-bold"
+                aria-label="OPTN key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] font-bold"
               >
                 OPTN
               </button>
             </div>
 
-            {/* CALC: Shift -> SOLVE (Yellow), Alpha -> = (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 2, Row 2: CALC */}
+            <div className="col-start-2 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">SOLVE</span>
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E6007E]">=</span>
@@ -1313,17 +1936,15 @@ export default function App() {
                   () => handleSolve(),
                   () => handleToken('=')
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-semibold text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="CALC key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-semibold text-[clamp(9.5px,1.35vh,11.5px)]"
               >
                 CALC
               </button>
             </div>
 
-            {/* Center Spacers */}
-            <div className="col-span-2 hidden sm:block"></div>
-
-            {/* INTEGRAL: Shift -> d/dx (Yellow), Alpha -> : (Pink) */}
-            <div className="key-wrapper sm:col-start-5">
+            {/* Col 5, Row 2: INTEGRAL */}
+            <div className="col-start-5 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">d/dx</span>
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E6007E]">:</span>
@@ -1334,126 +1955,125 @@ export default function App() {
                   () => handleToken('d/dx('),
                   () => handleToken(':')
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-[#E5A93C] flex items-center justify-center text-[clamp(10px,1.4vh,12px)] font-bold"
+                aria-label="Integral key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-serif text-sm"
               >
-                ∫□ dx
+                ∫dx
               </button>
             </div>
 
-            {/* VARIABLE X: Shift -> Σ (Yellow) */}
-            <div className="key-wrapper sm:col-start-6">
+            {/* Col 6, Row 2: VARIABLE x */}
+            <div className="col-start-6 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">Σ</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleToken('x'),
+                  () => handleToken('x', 'num', 'VAR'),
                   () => handleToken('Σ(')
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-100 flex items-center justify-center text-[clamp(10px,1.4vh,12px)] font-serif italic font-bold"
+                aria-label="Variable x key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-[#E6007E] flex items-center justify-center font-bold text-sm"
               >
                 x
               </button>
             </div>
-          </div>
 
-          {/* 4. FUNCTION KEY BLOCK (Rows 3 to 5) with Dual Secondary Labels */}
-          <div className="flex-[1] min-h-0 grid grid-cols-6 grid-rows-3 gap-1 text-[11px] font-mono">
-            {/* ROW 3: [■/□], [√], [x²], [xⁿ], [log□■], [ln] */}
-            
-            {/* ■/□ Fraction: Shift -> a b/c (Yellow) */}
-            <div className="key-wrapper">
+            {/* ROW 3: Fraction, Sqrt, Square, Power, LogBase, Ln */}
+            {/* Col 1, Row 3: Fraction */}
+            <div className="col-start-1 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">a b/c</span>
                 <span></span>
               </div>
               <button
-                onClick={() => handleSmartKey(() => handleFractionKey(), () => handleSdToggle())}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold"
+                onClick={() => handleSmartKey(() => handleFractionKey(), () => handleFractionKey())}
+                aria-label="Fraction key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
-                <div className="flex flex-col items-center leading-none text-[9px]">
-                  <span>■</span>
-                  <span className="w-2.5 h-[1px] bg-slate-300 my-0.5"></span>
-                  <span>□</span>
-                </div>
+                ■/□
               </button>
             </div>
 
-            {/* √□ Square Root: Shift -> ³√ (Yellow) */}
-            <div className="key-wrapper">
+            {/* Col 2, Row 3: Sqrt */}
+            <div className="col-start-2 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">³√</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">³√■</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handleSqrtKey(), () => handleToken('³√('))}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="Square root key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
-                √□
+                √■
               </button>
             </div>
 
-            {/* x²: Shift -> x³ (Yellow), Base -> DEC (Cyan) */}
-            <div className="key-wrapper">
+            {/* Col 3, Row 3: x² */}
+            <div className="col-start-3 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">x³</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#00E5FF]">DEC</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">DEC</span>
               </div>
               <button
-                onClick={() => handleSmartKey(() => handlePostfixKey('²'), () => handlePostfixKey('³'))}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold text-[clamp(9.5px,1.35vh,11.5px)]"
+                onClick={() => handleSmartKey(() => handlePostfixKey('²'), () => handlePostfixKey('³'), undefined, 'func', 'x²')}
+                aria-label="x squared key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
                 x²
               </button>
             </div>
 
-            {/* xⁿ: Shift -> ⁿ√x (Yellow), Base -> HEX (Cyan) */}
-            <div className="key-wrapper">
+            {/* Col 4, Row 3: x□ */}
+            <div className="col-start-4 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">ⁿ√x</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#00E5FF]">HEX</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">■√■</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">HEX</span>
               </div>
               <button
-                onClick={() => handleSmartKey(() => handlePowerKey(), () => handleToken('^('))}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold text-[clamp(9.5px,1.35vh,11.5px)]"
+                onClick={() => handleSmartKey(() => handlePowerKey(), () => handleToken('^('), undefined, 'func', 'x^□')}
+                aria-label="x to power key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
-                x□
+                x<sup>□</sup>
               </button>
             </div>
 
-            {/* log□■: Shift -> 10ˣ (Yellow), Base -> BIN (Cyan) */}
-            <div className="key-wrapper">
+            {/* Col 5, Row 3: log□ */}
+            <div className="col-start-5 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">10ˣ</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#00E5FF]">BIN</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">10<sup>□</sup></span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">BIN</span>
               </div>
               <button
-                onClick={() => handleSmartKey(() => handleLogBaseKey(), () => handleToken('10^('))}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
+                onClick={() => handleSmartKey(() => handleLogBaseKey(), () => handleToken('10^('), undefined, 'func', 'log')}
+                aria-label="log base key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-[11px]"
               >
-                log□■
+                log<sub>□</sub>
               </button>
             </div>
 
-            {/* ln: Shift -> eˣ (Yellow), Base -> OCT (Cyan) */}
-            <div className="key-wrapper">
+            {/* Col 6, Row 3: ln */}
+            <div className="col-start-6 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">eˣ</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#00E5FF]">OCT</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">e<sup>□</sup></span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">OCT</span>
               </div>
               <button
-                onClick={() => handleSmartKey(() => handleToken('ln('), () => handleToken('e^('))}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
+                onClick={() => handleSmartKey(() => handleToken('ln('), () => handleToken('e^('), undefined, 'func', 'ln')}
+                aria-label="ln key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
               >
                 ln
               </button>
             </div>
 
-            {/* ROW 4: [(-)], [° ' "], [x⁻¹], [sin], [cos], [tan] */}
-
-            {/* (-): Shift -> log (Yellow), Alpha -> A (Pink) */}
-            <div className="key-wrapper">
+            {/* ROW 4: (-) Negation, Deg/Min/Sec, x⁻¹, sin, cos, tan */}
+            {/* Col 1, Row 4: (-) Negation */}
+            <div className="col-start-1 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">log</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">A</span>
@@ -1462,38 +2082,44 @@ export default function App() {
                 onClick={() => handleSmartKey(
                   () => handleToken('(-'),
                   () => handleToken('log('),
-                  () => handleToken('A')
+                  () => handleVariableOperation('A'),
+                  '(-)'
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="Negation key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
                 (-)
               </button>
             </div>
 
-            {/* ° ' ": Shift -> FACT (Yellow), Alpha -> B (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 2, Row 4: DMS (° ' ") */}
+            <div className="col-start-2 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">FACT</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">B</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleDmsKey(),
                   () => {
-                    if (rawNumericVal > 0) {
-                      setResult(primeFactorization(rawNumericVal));
+                    if (isCalculated) {
+                      setResult(decimalToDms(rawNumericVal));
+                    } else {
+                      handlePostfixKey('°');
                     }
                   },
-                  () => handleToken('B')
+                  () => handlePrimeFactorization(),
+                  () => handleVariableOperation('B'),
+                  "° ' \""
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="Degrees minutes seconds key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
-                ° ' "
+                °&apos;&quot;
               </button>
             </div>
 
-            {/* x⁻¹: Shift -> x! (Yellow), Alpha -> C (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 3, Row 4: x⁻¹ */}
+            <div className="col-start-3 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">x!</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">C</span>
@@ -1502,16 +2128,18 @@ export default function App() {
                 onClick={() => handleSmartKey(
                   () => handlePostfixKey('⁻¹'),
                   () => handlePostfixKey('!'),
-                  () => handleToken('C')
+                  () => handleVariableOperation('C'),
+                  'hyp'
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] font-bold"
+                aria-label="x inverse key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
                 x⁻¹
               </button>
             </div>
 
-            {/* sin: Shift -> sin⁻¹ (Yellow), Alpha -> D (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 4, Row 4: sin */}
+            <div className="col-start-4 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">sin⁻¹</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">D</span>
@@ -1520,16 +2148,18 @@ export default function App() {
                 onClick={() => handleSmartKey(
                   () => handleToken('sin('),
                   () => handleToken('sin⁻¹('),
-                  () => handleToken('D')
+                  () => handleVariableOperation('D'),
+                  'sin'
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="sine key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
                 sin
               </button>
             </div>
 
-            {/* cos: Shift -> cos⁻¹ (Yellow), Alpha -> E (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 5, Row 4: cos */}
+            <div className="col-start-5 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">cos⁻¹</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">E</span>
@@ -1538,16 +2168,18 @@ export default function App() {
                 onClick={() => handleSmartKey(
                   () => handleToken('cos('),
                   () => handleToken('cos⁻¹('),
-                  () => handleToken('E')
+                  () => handleVariableOperation('E'),
+                  'cos'
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="cosine key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
                 cos
               </button>
             </div>
 
-            {/* tan: Shift -> tan⁻¹ (Yellow), Alpha -> F (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 6, Row 4: tan */}
+            <div className="col-start-6 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">tan⁻¹</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">F</span>
@@ -1556,75 +2188,73 @@ export default function App() {
                 onClick={() => handleSmartKey(
                   () => handleToken('tan('),
                   () => handleToken('tan⁻¹('),
-                  () => handleToken('F')
+                  () => handleVariableOperation('F'),
+                  'tan'
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="tangent key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
               >
                 tan
               </button>
             </div>
 
-            {/* ROW 5: [STO], [ENG], [(], [)], [S<=>D], [M+] */}
-
-            {/* STO: Shift -> RECALL (Yellow) */}
-            <div className="key-wrapper">
+            {/* ROW 5: STO, ENG, (, ), S<=>D, M+ */}
+            {/* Col 1, Row 5: STO */}
+            <div className="col-start-1 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">RECALL</span>
-                <span></span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">x</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => {
-                    playKeyClick('action');
-                    setIsStoreMode(!isStoreMode);
-                  },
-                  () => handleToken('X')
+                  () => setIsStoreMode((prev) => !prev),
+                  () => {},
+                  () => handleVariableOperation('X')
                 )}
-                className={`w-full flex-1 min-h-0 rounded-md key-hardware-charcoal flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] ${
-                  isStoreMode ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-200'
-                }`}
+                aria-label="Store key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
               >
                 STO
               </button>
             </div>
 
-            {/* ENG: Shift -> i (Yellow), Alpha -> ∠ (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 2, Row 5: ENG */}
+            <div className="col-start-2 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">i</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">∠</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">←</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">i</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleEng(-1),
-                  () => handleEng(1),
-                  () => handleToken('i')
+                  () => handleEngKey('forward'),
+                  () => handleEngKey('backward'),
+                  () => handleToken('i'),
+                  'ENG'
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="Engineering format key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
               >
                 ENG
               </button>
             </div>
 
-            {/* (: Shift -> Abs (Yellow) */}
-            <div className="key-wrapper">
+            {/* Col 3, Row 5: ( */}
+            <div className="col-start-3 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Abs</span>
+                <span></span>
                 <span></span>
               </div>
               <button
-                onClick={() => handleSmartKey(
-                  () => handleToken('('),
-                  () => handleToken('Abs(')
-                )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold text-[clamp(9.5px,1.35vh,11.5px)]"
+                onClick={() => handleSmartKey(() => handleToken('('), () => handleToken('Abs('))}
+                aria-label="Left bracket key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-sm"
               >
                 (
               </button>
             </div>
 
-            {/* ): Shift -> , (Yellow), Alpha -> x (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 4, Row 5: ) */}
+            <div className="col-start-4 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">,</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">x</span>
@@ -1633,149 +2263,149 @@ export default function App() {
                 onClick={() => handleSmartKey(
                   () => handleToken(')'),
                   () => handleToken(','),
-                  () => handleToken('x')
+                  () => handleToken('x', 'num', 'VAR')
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-bold text-[clamp(9.5px,1.35vh,11.5px)]"
+                aria-label="Right bracket key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-sm"
               >
                 )
               </button>
             </div>
 
-            {/* S<=>D: Shift -> a b/c <=> d/c (Yellow), Alpha -> y (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 5, Row 5: S<=>D */}
+            <div className="col-start-5 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8px)] font-bold text-[#E5A93C]">a b/c⇔d/c</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">a b/c⇔d/c</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">y</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleSdToggle(),
-                  () => handleSdToggle(),
-                  () => handleToken('y')
+                  () => handleFormatCycle(),
+                  () => handleFormatCycle(),
+                  () => handleVariableOperation('Y')
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-[#E5A93C] flex items-center justify-center text-[clamp(9px,1.3vh,11px)] font-bold"
+                aria-label="S to D toggle key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
               >
-                S ⇔ D
+                S⇔D
               </button>
             </div>
 
-            {/* M+: Shift -> M- (Yellow), Alpha -> M (Pink) */}
-            <div className="key-wrapper">
+            {/* Col 6, Row 5: M+ */}
+            <div className="col-start-6 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">M-</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">M</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleMemoryAdd(),
-                  () => handleMemorySub(),
-                  () => handleToken('M')
+                  () => handleMemoryAdd(false),
+                  () => handleMemoryAdd(true),
+                  () => handleVariableOperation('M')
                 )}
-                className="w-full flex-1 min-h-0 rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] font-bold"
+                aria-label="Memory plus key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
               >
                 M+
               </button>
             </div>
+
           </div>
 
-          {/* 5. NUMERIC & BASE BLOCK - HARDWARE ACCURATE WHITE/BLUE KEYCAPS WITH DUAL SECONDARY LABELS */}
-          <div className="flex-[1.4] min-h-0 grid grid-cols-5 grid-rows-4 gap-1.5 text-sm font-mono pt-0.5">
-            
-            {/* ROW 6: [7], [8], [9], [DEL], [AC] */}
-            
-            {/* 7: Shift -> CONST (Yellow) */}
-            <div className="key-wrapper">
+          {/* NUMERIC & ARITHMETIC KEYPAD: 5 columns × 4 rows */}
+          <div className="grid grid-cols-5 gap-x-1.5 gap-y-0.5 relative w-full pt-0.5">
+
+            {/* ROW 1: 7, 8, 9, DEL, AC */}
+            {/* Key 7 */}
+            <div className="col-start-1 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">CONST</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">CONST</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('7'),
-                  () => { setActiveDrawerTab('CONST'); setIsDrawerOpen(true); }
+                  () => setDisplayMenu('CONST_CAT')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="7 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 7
               </button>
             </div>
 
-            {/* 8: Shift -> CONV (Yellow) */}
-            <div className="key-wrapper">
+            {/* Key 8 */}
+            <div className="col-start-2 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">CONV</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">CONV</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('8'),
-                  () => { setActiveDrawerTab('CONV'); setIsDrawerOpen(true); }
+                  () => setDisplayMenu('CONV_CAT')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="8 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 8
               </button>
             </div>
 
-            {/* 9: Shift -> RESET (Yellow) */}
-            <div className="key-wrapper">
+            {/* Key 9 */}
+            <div className="col-start-3 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">RESET</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">RESET</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('9'),
-                  () => handleAllClear()
+                  () => setDisplayMenu('RESET')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="9 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 9
               </button>
             </div>
 
-            {/* DEL: Shift -> INS (Yellow), Alpha -> UNDO (Pink) */}
-            <div className="key-wrapper">
+            {/* DEL */}
+            <div className="col-start-4 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">INS</span>
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E6007E]">UNDO</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">INS</span>
+                {calcMode === 'STUDY' && <span className="text-[7.5px] font-bold text-sky-300">UNDO</span>}
               </div>
               <button
-                onClick={() => handleSmartKey(
-                  () => handleDelete(),
-                  () => handleDelete(),
-                  () => handleDelete(),
-                  'action'
-                )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-blue text-white text-[clamp(11px,1.8vh,13px)] font-black flex items-center justify-center"
+                onClick={() => handleSmartKey(() => handleDelete(), () => handleUndo())}
+                aria-label="Delete key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-blue text-white font-bold text-xs flex items-center justify-center"
               >
                 DEL
               </button>
             </div>
 
-            {/* AC: Shift -> OFF (Yellow) */}
-            <div className="key-wrapper">
+            {/* AC */}
+            <div className="col-start-5 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">OFF</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">OFF</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleAllClear(),
-                  () => handlePowerOff(),
-                  undefined,
-                  'action'
+                  () => setIsPoweredOff(true)
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-blue text-white text-[clamp(11px,1.8vh,13px)] font-black flex items-center justify-center"
+                aria-label="All clear key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-blue text-white font-bold text-xs flex items-center justify-center"
               >
                 AC
               </button>
             </div>
 
-            {/* ROW 7: [4], [5], [6], [×], [÷] */}
-            
-            {/* 4: Shift -> [MATRIX] (Yellow) */}
-            <div className="key-wrapper">
+            {/* ROW 2: 4, 5, 6, ×, ÷ */}
+            {/* Key 4 */}
+            <div className="col-start-1 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">MATRIX</span>
                 <span></span>
@@ -1783,16 +2413,20 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('4'),
-                  () => { setActiveDrawerTab('MATRIX'); setIsDrawerOpen(true); }
+                  () => {
+                    handleSelectMode('MATRIX');
+                    setModeState((prev) => ({ ...prev, screen: 'SUBMENU', data: { ...prev.data, subMenuPage: 0 } }));
+                  }
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="4 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 4
               </button>
             </div>
 
-            {/* 5: Shift -> [VECTOR] (Yellow) */}
-            <div className="key-wrapper">
+            {/* Key 5 */}
+            <div className="col-start-2 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">VECTOR</span>
                 <span></span>
@@ -1800,119 +2434,137 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('5'),
-                  () => { setActiveDrawerTab('VECTOR'); setIsDrawerOpen(true); }
+                  () => {
+                    handleSelectMode('VECTOR');
+                    setModeState((prev) => ({ ...prev, screen: 'SUBMENU', data: { ...prev.data, subMenuPage: 0 } }));
+                  }
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="5 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 5
               </button>
             </div>
 
-            {/* 6 */}
-            <div className="key-wrapper">
+            {/* Key 6 */}
+            <div className="col-start-3 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span></span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleToken('6')}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="6 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 6
               </button>
             </div>
 
-            {/* ×: Shift -> nPr (Yellow) */}
-            <div className="key-wrapper">
+            {/* × */}
+            <div className="col-start-4 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">nPr</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">nPr</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('×', 'func'),
-                  () => handleToken(' P ')
+                  () => handleToken('P', 'func', 'OP_NPR')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(15px,2.5vh,20px)] font-bold flex items-center justify-center"
+                aria-label="Multiply key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 ×
               </button>
             </div>
 
-            {/* ÷: Shift -> nCr (Yellow) */}
-            <div className="key-wrapper">
+            {/* ÷ */}
+            <div className="col-start-5 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">nCr</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">nCr</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleFractionKey(),
-                  () => handleToken(' C ')
+                  () => handleToken('C', 'func', 'OP_NCR')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(15px,2.5vh,20px)] font-bold flex items-center justify-center"
+                aria-label="Divide key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 ÷
               </button>
             </div>
 
-            {/* ROW 8: [1], [2], [3], [+], [-] */}
-            
-            {/* 1: Shift -> [STAT] (Yellow) */}
-            <div className="key-wrapper">
+            {/* ROW 3: 1, 2, 3, +, - */}
+            {/* Key 1 */}
+            <div className="col-start-1 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">STAT</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">STAT</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('1'),
-                  () => { setActiveDrawerTab('STAT'); setIsDrawerOpen(true); }
+                  () => {
+                    handleSelectMode('STAT');
+                    setModeState((prev) => ({ ...prev, screen: 'SUBMENU', data: { ...prev.data, subMenuPage: 0 } }));
+                  }
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="1 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 1
               </button>
             </div>
 
-            {/* 2: Shift -> [CMPLX] (Yellow) */}
-            <div className="key-wrapper">
+            {/* Key 2 */}
+            <div className="col-start-2 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">CMPLX</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">CMPLX</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('2'),
-                  () => handleToken('i')
+                  () => {
+                    handleSelectMode('CMPLX');
+                    setModeState((prev) => ({ ...prev, screen: 'SUBMENU', data: { ...prev.data, subMenuPage: 0 } }));
+                  }
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="2 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 2
               </button>
             </div>
 
-            {/* 3: Shift -> [BASE] (Yellow) */}
-            <div className="key-wrapper">
+            {/* Key 3 */}
+            <div className="col-start-3 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">BASE</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">BASE-N</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('3'),
-                  () => { setActiveDrawerTab('BASE'); setIsDrawerOpen(true); }
+                  () => {
+                    handleSelectMode('BASE');
+                    setModeState((prev) => ({ ...prev, screen: 'SUBMENU', data: { ...prev.data, subMenuPage: 0 } }));
+                  }
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="3 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 3
               </button>
             </div>
 
-            {/* +: Shift -> Pol (Yellow) */}
-            <div className="key-wrapper">
+            {/* + */}
+            <div className="col-start-4 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">Pol</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Pol</span>
                 <span></span>
               </div>
               <button
@@ -1920,16 +2572,17 @@ export default function App() {
                   () => handleToken('+', 'func'),
                   () => handleToken('Pol(')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(15px,2.5vh,20px)] font-bold flex items-center justify-center"
+                aria-label="Plus key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 +
               </button>
             </div>
 
-            {/* -: Shift -> Rec (Yellow) */}
-            <div className="key-wrapper">
+            {/* - */}
+            <div className="col-start-5 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">Rec</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Rec</span>
                 <span></span>
               </div>
               <button
@@ -1937,18 +2590,18 @@ export default function App() {
                   () => handleToken('-', 'func'),
                   () => handleToken('Rec(')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(15px,2.5vh,20px)] font-bold flex items-center justify-center"
+                aria-label="Minus key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 -
               </button>
             </div>
 
-            {/* ROW 9: [0], [.], [×10ˣ], [Ans], [=] */}
-
-            {/* 0: Shift -> Rnd (Yellow) */}
-            <div className="key-wrapper">
+            {/* ROW 4: 0, ., ×10ˣ, Ans, = */}
+            {/* Key 0 */}
+            <div className="col-start-1 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">Rnd</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Rnd</span>
                 <span></span>
               </div>
               <button
@@ -1956,14 +2609,15 @@ export default function App() {
                   () => handleToken('0'),
                   () => handleToken('Rnd(')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(14px,2.4vh,18px)] font-black flex items-center justify-center"
+                aria-label="0 key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 0
               </button>
             </div>
 
-            {/* .: Shift -> Ran# (Yellow), Alpha -> RanInt (Pink) */}
-            <div className="key-wrapper">
+            {/* . */}
+            <div className="col-start-2 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Ran#</span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">RanInt</span>
@@ -1974,17 +2628,18 @@ export default function App() {
                   () => handleToken(parseFloat(Math.random().toFixed(3)).toString()),
                   () => handleToken(Math.floor(Math.random() * 10).toString())
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(15px,2.5vh,20px)] font-black flex items-center justify-center"
+                aria-label="Decimal point key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
-                ·
+                .
               </button>
             </div>
 
-            {/* ×10ˣ: Shift -> π (Yellow), Alpha -> e (Pink) */}
-            <div className="key-wrapper">
+            {/* ×10ˣ */}
+            <div className="col-start-3 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">π</span>
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E6007E]">e</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">π</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">e</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -1992,43 +2647,41 @@ export default function App() {
                   () => handleToken('π'),
                   () => handleToken('e')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(10px,1.6vh,13px)] font-black flex items-center justify-center"
+                aria-label="Exponent times 10 to power key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xs flex items-center justify-center"
               >
-                ×10ˣ
+                ×10<sup>x</sup>
               </button>
             </div>
 
-            {/* Ans: Shift -> % (Yellow) */}
-            <div className="key-wrapper">
+            {/* Ans */}
+            <div className="col-start-4 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">%</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">PRE-ANS</span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(
                   () => handleToken('Ans'),
-                  () => handlePostfixKey('%')
+                  () => handleToken('Ans')
                 )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-900 text-[clamp(11px,1.7vh,13px)] font-black flex items-center justify-center"
+                aria-label="Answer recall key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xs flex items-center justify-center"
               >
                 Ans
               </button>
             </div>
 
-            {/* =: Shift -> ≈ (Yellow) */}
-            <div className="key-wrapper">
+            {/* = */}
+            <div className="col-start-5 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">≈</span>
+                <span></span>
                 <span></span>
               </div>
               <button
-                onClick={() => handleSmartKey(
-                  () => handleEqual(),
-                  () => handleEqual(),
-                  undefined,
-                  'equal'
-                )}
-                className="w-full flex-1 min-h-0 rounded-xl key-hardware-white text-slate-950 text-[clamp(16px,2.8vh,22px)] font-black flex items-center justify-center"
+                onClick={handleEqual}
+                aria-label="Equals key"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xl flex items-center justify-center"
               >
                 =
               </button>
@@ -2036,54 +2689,14 @@ export default function App() {
 
           </div>
         </div>
-
-        {/* Bottom Smartphone Navigation Home Bar Indicator */}
-        <div className="shrink-0 py-1 flex justify-center bg-[#0D0D10] border-t border-slate-900">
-          <div className="w-20 h-1 bg-slate-700/60 rounded-full"></div>
-        </div>
       </main>
 
-      {/* DEDICATED CALCULATION HISTORY LOG MODAL */}
-      <HistoryModal
-        isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
-        history={history}
-        onSelectHistory={(item) => {
-          setAstState(parseStringToAst(item.expression));
-          setResult(item.result);
-          setRawNumericVal(item.numericVal);
-          setIsCalculated(true);
-        }}
-        onInsertAns={(val) => {
-          handleToken(val);
-        }}
-        onClearHistory={() => setHistory([])}
-        onDeleteItem={(id) => setHistory((prev) => prev.filter((item) => item.id !== id))}
-      />
-
-      {/* CLASSWIZ QR CODE SHEET MODAL */}
+      {/* CLASSWIZ QR CODE SHEET MODAL (SHIFT + OPTN) */}
       <ClassWizQrModal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
         expression={astToDisplayText(astState.root)}
         result={result}
-      />
-
-      {/* ADVANCED MODES DRAWER */}
-      <AdvancedModesDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        activeTab={activeDrawerTab}
-        setActiveTab={setActiveDrawerTab}
-        onInsertValue={(val) => handleToken(val)}
-        history={history}
-        onSelectHistory={(item) => {
-          setAstState(parseStringToAst(item.expression));
-          setResult(item.result);
-          setRawNumericVal(item.numericVal);
-          setIsCalculated(true);
-        }}
-        onClearHistory={() => setHistory([])}
       />
 
       {/* SETTINGS & OPERATING MODE SELECTION MODAL */}
@@ -2097,6 +2710,10 @@ export default function App() {
         }}
         onOpenCalibration={() => setIsCalibrationModalOpen(true)}
         onOpenTestHarness={() => setIsTestHarnessOpen(true)}
+        onOpenMenu={() => {
+          setDisplayMenu('MENU');
+          setMenuHighlightIndex(0);
+        }}
         soundOn={soundOn}
         onToggleSound={toggleSound}
         hapticOn={hapticOn}
@@ -2116,6 +2733,7 @@ export default function App() {
           setVariables({ A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, X: 0, Y: 0, M: 0 });
           setMemoryM(0);
           setLastAns(0);
+          handleSelectMode('CALC');
           setCalcMode('EXAM');
           setCalibrationScale(1.0);
           setIsSettingsModalOpen(false);

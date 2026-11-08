@@ -3,8 +3,8 @@
 
 @layer base {
   :root {
-    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-display: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
 
   html, body, #root {
@@ -15,6 +15,7 @@
     padding: 0;
     overflow: hidden;
     overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
 
   body {
@@ -33,40 +34,44 @@
     radial-gradient(rgba(45, 85, 80, 0.28) 1.2px, transparent 1.2px),
     linear-gradient(to bottom, #111e22 0%, #0c1619 60%, #081013 100%);
   background-size: 3.5px 3.5px, 100% 100%;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9), inset 0 0 15px rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0, 0, 0, 0.6);
 }
 
 .lcd-dot-text {
-  font-family: 'JetBrains Mono', 'VT323', monospace;
+  font-family: var(--font-mono);
   text-shadow: 0 0 2px rgba(110, 231, 183, 0.45);
 }
 
-/* Casio Key Hardware Styling */
+/* Casio Key Hardware Styling with Light Box-Shadows */
 /* 1. Charcoal Function Keys */
 .key-hardware-charcoal {
   background: linear-gradient(180deg, #282834 0%, #1c1c24 60%, #15151c 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  border-bottom: 2px solid #0d0d12;
-  box-shadow: 0 2px 0 #0a0a0e, 0 3px 5px rgba(0, 0, 0, 0.5);
-  transition: all 0.05s cubic-bezier(0.16, 1, 0.3, 1);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1.5px solid #0d0d12;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  touch-action: manipulation;
+  transition: transform 0.04s ease-out;
 }
 .key-hardware-charcoal:active, .key-hardware-charcoal.active-press {
   transform: translateY(1.5px);
-  box-shadow: 0 0.5px 0 #0a0a0e, 0 1.5px 2px rgba(0, 0, 0, 0.6);
+  will-change: transform;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
   background: linear-gradient(180deg, #1e1e26 0%, #16161d 100%);
 }
 
 /* 2. White High-Contrast Numeric Keys */
 .key-hardware-white {
   background: linear-gradient(180deg, #FFFFFF 0%, #ECECF0 65%, #DFDFE6 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.9);
-  border-bottom: 2.5px solid #A8A8B6;
-  box-shadow: 0 2.5px 0 #888896, 0 3.5px 6px rgba(0, 0, 0, 0.35);
-  transition: all 0.05s cubic-bezier(0.16, 1, 0.3, 1);
+  border-top: 1px solid rgba(255, 255, 255, 0.8);
+  border-bottom: 2px solid #A8A8B6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  touch-action: manipulation;
+  transition: transform 0.04s ease-out;
 }
 .key-hardware-white:active, .key-hardware-white.active-press {
-  transform: translateY(2px);
-  box-shadow: 0 0.5px 0 #888896, 0 1.5px 2px rgba(0, 0, 0, 0.5);
+  transform: translateY(1.5px);
+  will-change: transform;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.3);
   background: linear-gradient(180deg, #E2E2E8 0%, #D8D8DF 100%);
 }
 
@@ -74,41 +79,47 @@
 .key-hardware-blue {
   background: linear-gradient(180deg, #2475E8 0%, #1868DB 60%, #1257BA 100%);
   border-top: 1px solid rgba(147, 197, 253, 0.5);
-  border-bottom: 2.5px solid #0C3E8A;
-  box-shadow: 0 2.5px 0 #092E66, 0 3.5px 6px rgba(0, 0, 0, 0.45);
-  transition: all 0.05s cubic-bezier(0.16, 1, 0.3, 1);
+  border-bottom: 2px solid #0C3E8A;
+  box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.35);
+  touch-action: manipulation;
+  transition: transform 0.04s ease-out;
 }
 .key-hardware-blue:active, .key-hardware-blue.active-press {
-  transform: translateY(2px);
-  box-shadow: 0 0.5px 0 #092E66, 0 1.5px 2px rgba(0, 0, 0, 0.6);
+  transform: translateY(1.5px);
+  will-change: transform;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
   background: linear-gradient(180deg, #1558BD 0%, #0F499E 100%);
 }
 
 /* 4. Round Navigation Keys (SHIFT, ALPHA, MENU, ON) */
 .key-hardware-round {
   background: linear-gradient(180deg, #32323E 0%, #22222B 65%, #181820 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
-  border-bottom: 2px solid #0F0F14;
-  box-shadow: 0 2px 0 #0B0B0E, 0 3px 5px rgba(0, 0, 0, 0.45);
-  transition: all 0.05s cubic-bezier(0.16, 1, 0.3, 1);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1.5px solid #0F0F14;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  touch-action: manipulation;
+  transition: transform 0.04s ease-out;
 }
 .key-hardware-round:active, .key-hardware-round.active-press {
   transform: translateY(1.5px);
-  box-shadow: 0 0.5px 0 #0B0B0E, 0 1.5px 2px rgba(0, 0, 0, 0.6);
+  will-change: transform;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
   background: linear-gradient(180deg, #1A1A22 0%, #14141A 100%);
 }
 
-/* Scoped relative key containers reserving clear 14px top margin for Shift/Alpha labels */
+/* Scoped relative key containers with tight labels gap and zero dead zones */
 .key-wrapper {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
   width: 100%;
   height: 100%;
-  min-height: 0;
-  padding-top: 14px; /* Reserves clear top margin for Shift/Alpha text */
+  min-height: 48px;
+  padding-top: 8px; /* Tightened gap between Shift/Alpha text and keycap */
   box-sizing: border-box;
+  touch-action: manipulation;
 }
 
 .key-secondary-labels {
@@ -116,15 +127,30 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 12px;
+  height: 9px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 2px;
+  padding: 0 1px;
   pointer-events: none;
   line-height: 1;
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* Touch target covers full grid cell (visual key plus surrounding gap zone) with zero dead zones */
+.key-wrapper > button {
+  position: relative;
+  touch-action: manipulation;
+}
+.key-wrapper > button::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -4px;
+  left: -2px;
+  right: -2px;
+  z-index: 5;
 }
 
 /* Custom scrollbars */

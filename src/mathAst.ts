@@ -7,8 +7,10 @@
 
 export type PostfixOp = '²' | '³' | '⁻¹' | '!' | '°' | '%';
 
+export type TokenType = 'DEFAULT' | 'OP_NPR' | 'OP_NCR' | 'VAR' | 'FUNC';
+
 export type MathNode =
-  | { type: 'token'; id: string; val: string }
+  | { type: 'token'; id: string; val: string; tokenType?: TokenType }
   | { type: 'frac'; id: string; num: MathNode[]; den: MathNode[] }
   | { type: 'int'; id: string; integrand: MathNode[]; lower: MathNode[]; upper: MathNode[] }
   | { type: 'sqrt'; id: string; content: MathNode[] }
@@ -260,7 +262,7 @@ export function extractPreviousOperand(
 /**
  * Insert a token (number, operator, variable, etc.) at current cursor
  */
-export function insertToken(state: MathAstState, tokenVal: string): MathAstState {
+export function insertToken(state: MathAstState, tokenVal: string, tokenType?: TokenType): MathAstState {
   const newRoot = cloneAst(state.root);
   const slotNodes = getSlotNodes(newRoot, state.cursor.slotId);
   if (!slotNodes) return state;
@@ -269,6 +271,7 @@ export function insertToken(state: MathAstState, tokenVal: string): MathAstState
     type: 'token',
     id: generateUniqueId('tok'),
     val: tokenVal,
+    ...(tokenType ? { tokenType } : {}),
   };
 
   const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
@@ -837,7 +840,15 @@ export function astToExpression(nodes: MathNode[]): string {
 
   for (const node of nodes) {
     if (node.type === 'token') {
-      expr += node.val;
+      if (node.tokenType === 'OP_NCR') {
+        expr += ' _nCr_ ';
+      } else if (node.tokenType === 'OP_NPR') {
+        expr += ' _nPr_ ';
+      } else if (node.tokenType === 'VAR') {
+        expr += ` _var_${node.val}_ `;
+      } else {
+        expr += node.val;
+      }
     } else if (node.type === 'frac') {
       const numExpr = astToExpression(node.num) || '0';
       const denExpr = astToExpression(node.den) || '1';
@@ -995,6 +1006,17 @@ export function simulateKeystrokes(keys: string[]): MathAstState {
       state = navigateAst(state, 'down');
     } else if (k === 'DEL') {
       state = deleteAst(state);
+    } else if (k === 'OP_NCR' || k === 'nCr') {
+      state = insertToken(state, 'C', 'OP_NCR');
+    } else if (k === 'OP_NPR' || k === 'nPr') {
+      state = insertToken(state, 'P', 'OP_NPR');
+    } else if (k === 'VAR_C' || k === 'ALPHA_C') {
+      state = insertToken(state, 'C', 'VAR');
+    } else if (k === 'ALPHA') {
+      // In key stream, next key will be checked if it's variable
+      continue;
+    } else if (/^[A-FMXY]$/.test(k)) {
+      state = insertToken(state, k, 'VAR');
     } else {
       state = insertToken(state, k);
     }

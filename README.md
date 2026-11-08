@@ -4,7 +4,7 @@ A phone-first web clone of the Casio fx-570EX ClassWiz, built for **exam muscle 
 
 **Live demo:** https://calculatorcassio.vercel.app
 
-
+![screenshot](docs/screenshot.png)
 
 ## Why this exists
 
@@ -17,33 +17,10 @@ Most calculator web apps are generic. This one copies the fx-570EX's key positio
 
 ## Features
 
-- Fixed layout scaled uniformly to any phone screen, so nothing reflows or overlaps
-- Math I/O editor with fractions, powers, roots, integrals, and brackets, using the real operand rules
-- Exact results (fractions, √, π) separate from decimal results, with S⇔D
-- Norm1/Norm2/Fix/Sci display formatting that follows the real thresholds
-- Haptic feedback, offline support (PWA), and persistent memory variables
-- `?test=1` regression suite and `?perf=1` keypress-latency overlay
-
-## Status
-
-Work in progress. Behavior is checked against a physical fx-570EX, and mismatches are tracked as test cases.
-
-**Not implemented yet:** [list, e.g. TABLE, EQN, VECTOR, full STAT regressions]
-
-## Run locally
-
-```bash
-git clone https://github.com/[you]/[repo].git
-cd [repo]
-npx serve .
-```
-
-Then open `http://localhost:3000`. Add `?test=1` to run the test suite.
-
-## Disclaimer
-
-Not affiliated with or endorsed by Casio. "Casio" and "ClassWiz" are trademarks of Casio Computer Co., Ltd. This is an educational practice tool, not a replacement for your approved exam calculator. Check your exam rules before relying on any result.
-
-## Contributing
-
-Found a result that differs from a real fx-570EX? Open an issue with the key sequence and what your calculator shows. That's the most useful bug report.
+- Fixed layout scaled uniformly to any phone screen, so nothing reflows or moves under your fingers
+- 2D Math I/O AST editor: natural-display templates for fractions, roots, powers, logs, and integrals with cursor slot navigation
+- Algebraic exact evaluator: strict algebraic exactness for fractions, surds, and $\pi$-multiples; decimal literals remain pure decimals with Norm1, Norm2, Fix, and Sci formatting (no heuristic tolerance matching)
+- Full combinatorics support: distinct internal tokens for $n\text{P}r$, $n\text{C}r$, and ALPHA variables $A$–$F$, $x$, $y$, $M$
+- D-pad history navigation and multi-line expression recall
+- Haptic and click feedback
+- Works offline as a PWA

@@ -8,7 +8,7 @@ interface NaturalDisplayProps {
   onSetCursor: (slotId: string, offset: number) => void;
 }
 
-export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
+export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
   nodes,
   cursor,
   pendingDeleteTemplateId,
@@ -48,7 +48,8 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
     if (slotNodes.length === 0) {
       return (
         <span
-          onClick={(e) => {
+          onPointerDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onSetCursor(slotId, 0);
           }}
@@ -73,7 +74,8 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
 
     return (
       <span
-        onClick={(e) => {
+        onPointerDown={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           onSetCursor(slotId, slotNodes.length);
         }}
@@ -92,7 +94,8 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
       return (
         <span
           key={node.id}
-          onClick={(e) => {
+          onPointerDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onSetCursor(parentSlotId, index + 1);
           }}
@@ -129,62 +132,38 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
       return (
         <span
           key={node.id}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            position: 'relative',
-            lineHeight: 'normal',
-          }}
-          className={`align-middle mx-1.5 my-0.5 rounded px-0.5 transition-all ${
+          style={{ verticalAlign: 'middle' }}
+          className={`inline-flex items-center align-middle mx-1.5 my-0.5 rounded px-0.5 transition-all ${
             isPendingDelete
               ? 'border border-dashed border-red-500 bg-red-950/30 animate-pulse'
               : 'border border-transparent'
           }`}
         >
           {/* Integral Symbol and Limits Container */}
-          <span className="inline-flex items-center relative mr-1 select-none">
-            {/* The integral symbol ∫ scaled vertically to span the integrand */}
-            <span className="text-2xl sm:text-3xl font-serif italic text-emerald-400 leading-none mr-1 select-none transform scale-y-115">
+          <span className="inline-flex items-center relative select-none">
+            {/* Lower Limit Box: bottom-left of the sign at ~70% font size */}
+            <span className="text-[0.7em] leading-none self-end mb-0.5 mr-0.5 flex items-center">
+              {renderSlotList(node.lower, `${node.id}_lower`, '□')}
+            </span>
+
+            {/* Tall integral sign scaled to integrand height */}
+            <span className="text-2xl sm:text-3xl font-serif italic text-emerald-400 select-none leading-none px-0.5 transform scale-y-125 origin-center">
               ∫
             </span>
 
-            {/* Dedicated 2-row vertical stack to the right of the integral sign */}
-            <span
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                fontSize: '0.65em',
-                minHeight: '36px',
-              }}
-              className="py-0.5"
-            >
-              {/* Upper Limit Box */}
-              <span className="leading-none mb-1 flex items-center">
-                {renderSlotList(node.upper, `${node.id}_upper`, '□')}
-              </span>
-              {/* Lower Limit Box */}
-              <span className="leading-none mt-1 flex items-center">
-                {renderSlotList(node.lower, `${node.id}_lower`, '□')}
-              </span>
+            {/* Upper Limit Box: top-right of the sign at ~70% font size */}
+            <span className="text-[0.7em] leading-none self-start mt-0.5 ml-0.5 flex items-center">
+              {renderSlotList(node.upper, `${node.id}_upper`, '□')}
             </span>
           </span>
 
-          {/* Integrand Box in Parentheses with explicit horizontal margins */}
-          <span
-            style={{ marginLeft: '2px', marginRight: '4px' }}
-            className="inline-flex items-center text-sm sm:text-base"
-          >
-            <span className="text-emerald-500 font-light select-none mr-0.5">(</span>
-            <span className="px-0.5">{renderSlotList(node.integrand, `${node.id}_integrand`, '□')}</span>
-            <span className="text-emerald-500 font-light select-none ml-0.5">)</span>
+          {/* Integrand Box: single digit-sized dashed box (no outer brackets) */}
+          <span className="inline-flex items-center mx-1.5 text-xs sm:text-sm">
+            {renderSlotList(node.integrand, `${node.id}_integrand`, '□')}
           </span>
 
-          {/* dx Differential Token with explicit spacing */}
-          <span
-            style={{ marginLeft: '2px' }}
-            className="text-xs sm:text-sm font-serif italic text-amber-300 select-none tracking-normal"
-          >
+          {/* dx Differential Token in italics */}
+          <span className="text-xs sm:text-sm font-serif italic text-amber-300 select-none tracking-normal ml-0.5">
             dx
           </span>
         </span>
@@ -302,7 +281,7 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
   return (
     <div
       ref={containerRef}
-      onClick={() => onSetCursor('root', nodes.length)}
+      onPointerDown={() => onSetCursor('root', nodes.length)}
       style={{
         overflowX: 'auto',
         overflowY: 'hidden',
@@ -320,4 +299,4 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = ({
       )}
     </div>
   );
-};
+});

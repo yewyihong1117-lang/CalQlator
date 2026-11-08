@@ -20,6 +20,7 @@ interface SettingsModalProps {
   displayFormat: DisplayFormat;
   onSetDisplayFormat: (fmt: DisplayFormat) => void;
   onResetCalculator: () => void;
+  onOpenMenu?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -38,6 +39,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   displayFormat,
   onSetDisplayFormat,
   onResetCalculator,
+  onOpenMenu,
 }) => {
   if (!isOpen) return null;
 
@@ -60,6 +62,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* In-Display Mode Menu Launcher */}
+        {onOpenMenu && (
+          <button
+            onClick={() => {
+              onClose();
+              onOpenMenu();
+            }}
+            className="w-full py-2.5 px-3 rounded-xl bg-emerald-950/60 border border-emerald-500/60 hover:bg-emerald-900/60 text-emerald-300 font-bold text-xs flex items-center justify-between transition-colors shadow"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Open In-Display Mode Menu (Calculate, Matrix, Vector...)</span>
+            </div>
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">MENU key</span>
+          </button>
+        )}
 
         {/* 1. Operating Mode Selection */}
         <div className="space-y-2">
