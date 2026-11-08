@@ -1,26 +1,30 @@
-# fx-570 Practice Calculator
+# CalQlator 算七七
 
-A phone-first web clone of the Casio fx-570EX ClassWiz, built for **exam muscle memory**. Phones aren't allowed in my exams, so the goal is to match the physical calculator's keys, layout, and behavior closely enough that practicing here carries over to the real one.
+*"Faster than memory... simpler than forgetting."*
 
-**Live demo:** https://calculatorcassio.vercel.app
+CalQlator is a web-based scientific calculator (modeled after the classic FX-570 interface) designed for quick, hassle-free calculations on mobile devices. No login screens, no tracking, and no annoying pop-ups. Just open, compute, and close.
 
-![screenshot](docs/screenshot.png)
+---
 
-## Why this exists
+## Key Features
 
-Most calculator web apps are generic. This one copies the fx-570EX's key positions, shift/alpha labels, Math I/O editing, and result formatting. Finger positions and key sequences should be the same as on the real device.
+* **Scientific Power** — Packed with full scientific functions (trigonometric operations, exponents, logarithms, memory registers, and conversion modes).
+* **Zero Distractions** — No account setup, no ads, no pop-ups, and no login requirements. 
+* **Native App Experience** — Optimized for mobile screen ratios and touch input, functioning seamlessly as an installed PWA.
+* **Instant Load** — Extremely lightweight setup so you can calculate standard or complex equations immediately.
 
-## Two modes
+---
 
-- **Exam Mode (default):** a strict 1:1 clone. Every shifted function is reached only through SHIFT or ALPHA, with no swipes, tape, or hints.
-- **Study Mode:** extras for practice, such as unlimited history, undo, a key-path trainer that shows the real key sequence, and a keystroke counter.
+## Quick Start
 
-## Features
+1. Open the project link in your mobile browser.
+2. Tap **Add to Home Screen** (or Install App via your browser menu).
+3. Launch directly from your home screen whenever math calls.
 
-- Fixed layout scaled uniformly to any phone screen, so nothing reflows or moves under your fingers
-- 2D Math I/O AST editor: natural-display templates for fractions, roots, powers, logs, and integrals with cursor slot navigation
-- Algebraic exact evaluator: strict algebraic exactness for fractions, surds, and $\pi$-multiples; decimal literals remain pure decimals with Norm1, Norm2, Fix, and Sci formatting (no heuristic tolerance matching)
-- Full combinatorics support: distinct internal tokens for $n\text{P}r$, $n\text{C}r$, and ALPHA variables $A$–$F$, $x$, $y$, $M$
-- D-pad history navigation and multi-line expression recall
-- Haptic and click feedback
-- Works offline as a PWA
+---
+
+## Built With
+
+* **Vite**
+* **Tailwind CSS v4**
+* **Deployed on Vercel**
