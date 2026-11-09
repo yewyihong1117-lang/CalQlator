@@ -5,6 +5,66 @@
   :root {
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --font-display: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    /* Theme CSS Variables (Default Theme: Authentic Casio ClassWiz) */
+    --bg: #0E0E12;
+    --key-fn: #1c1c24;
+    --key-fn-text: #E2E8F0;
+    --key-num: #ECECF0;
+    --key-num-text: #0F172A;
+    --key-accent: #2475E8;
+    --key-accent-text: #FFFFFF;
+    --key-equals: #DFDFE6;
+    --key-equals-text: #0F172A;
+    --label-shift: #E5A93C;
+    --label-alpha: #E6007E;
+    --label-base: #22D3EE;
+    --display-bg: #0c1417;
+    --display-text: #A7F3D0;
+    --display-screen-gradient: linear-gradient(to bottom, #111e22 0%, #0c1619 60%, #081013 100%);
+    --display-dot-color: rgba(45, 85, 80, 0.28);
+    --display-glow: rgba(110, 231, 183, 0.35);
+
+    /* Material 3 Expressive UI Surfaces & Single Accent (Default) */
+    --ui-accent: #E5A93C;
+    --ui-accent-text: #171104;
+    --ui-accent-tonal: rgba(229, 169, 60, 0.16);
+    --m3-surface: #14141A;
+    --m3-surface-container: #1C1C24;
+    --m3-surface-container-high: #262632;
+    --m3-on-surface: #E2E8F0;
+    --m3-on-surface-variant: #94A3B8;
+  }
+
+  /* Qiqi Theme */
+  [data-theme="qiqi"] {
+    --bg: #0E0B16;
+    --key-fn: #1C1830;
+    --key-fn-text: #EDE7FF;
+    --key-num: #F1EDFF;
+    --key-num-text: #1B1530;
+    --key-accent: #6F4BE8;
+    --key-accent-text: #FFFFFF;
+    --key-equals: #8FE3FF;
+    --key-equals-text: #0B0E1A;
+    --label-shift: #F5C96B;
+    --label-alpha: #F08CFF;
+    --label-base: #8FE3FF;
+    --display-bg: #0B0E1A;
+    --display-text: #A8EEFF;
+    --display-screen-gradient: linear-gradient(to bottom, #151329 0%, #0E0B1A 60%, #07060F 100%);
+    --display-dot-color: rgba(143, 227, 255, 0.2);
+    --display-glow: rgba(168, 238, 255, 0.4);
+
+    /* Material 3 Expressive UI Surfaces & Single Accent (Qiqi) */
+    --ui-accent: #8FE3FF;
+    --ui-accent-text: #05161C;
+    --ui-accent-tonal: rgba(143, 227, 255, 0.16);
+    --m3-surface: #120F1D;
+    --m3-surface-container: #1D1830;
+    --m3-surface-container-high: #292342;
+    --m3-on-surface: #EDE7FF;
+    --m3-on-surface-variant: #A8A0C2;
   }
 
   html, body, #root {
@@ -16,6 +76,7 @@
     overflow: hidden;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
+    background-color: var(--bg);
   }
 
   body {
@@ -27,27 +88,29 @@
   }
 }
 
-/* Authentic Casio ClassWiz High-Contrast LCD Dot-Matrix Screen */
+/* Casio ClassWiz High-Contrast LCD Dot-Matrix Screen */
 .lcd-screen-bg {
-  background-color: #0c1417;
+  background-color: var(--display-bg);
   background-image: 
-    radial-gradient(rgba(45, 85, 80, 0.28) 1.2px, transparent 1.2px),
-    linear-gradient(to bottom, #111e22 0%, #0c1619 60%, #081013 100%);
+    radial-gradient(var(--display-dot-color) 1.2px, transparent 1.2px),
+    var(--display-screen-gradient);
   background-size: 3.5px 3.5px, 100% 100%;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0, 0, 0, 0.6);
 }
 
 .lcd-dot-text {
   font-family: var(--font-mono);
-  text-shadow: 0 0 2px rgba(110, 231, 183, 0.45);
+  color: var(--display-text);
+  text-shadow: 0 0 2px var(--display-glow);
 }
 
-/* Casio Key Hardware Styling with Light Box-Shadows */
-/* 1. Charcoal Function Keys */
+/* Casio Key Hardware Styling with Theme-Driven CSS Variables */
+/* 1. Function Keys (Charcoal / Qiqi Indigo) */
 .key-hardware-charcoal {
-  background: linear-gradient(180deg, #282834 0%, #1c1c24 60%, #15151c 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1.5px solid #0d0d12;
+  background: var(--key-fn);
+  color: var(--key-fn-text);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1.5px solid rgba(0, 0, 0, 0.6);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   touch-action: manipulation;
   transition: transform 0.04s ease-out;
@@ -56,14 +119,15 @@
   transform: translateY(1.5px);
   will-change: transform;
   box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
-  background: linear-gradient(180deg, #1e1e26 0%, #16161d 100%);
+  filter: brightness(0.9);
 }
 
-/* 2. White High-Contrast Numeric Keys */
+/* 2. Numeric Keys */
 .key-hardware-white {
-  background: linear-gradient(180deg, #FFFFFF 0%, #ECECF0 65%, #DFDFE6 100%);
+  background: var(--key-num);
+  color: var(--key-num-text);
   border-top: 1px solid rgba(255, 255, 255, 0.8);
-  border-bottom: 2px solid #A8A8B6;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.25);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
   touch-action: manipulation;
   transition: transform 0.04s ease-out;
@@ -72,14 +136,15 @@
   transform: translateY(1.5px);
   will-change: transform;
   box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.3);
-  background: linear-gradient(180deg, #E2E2E8 0%, #D8D8DF 100%);
+  filter: brightness(0.93);
 }
 
-/* 3. Vibrant Blue Action Keys (DEL, AC) */
+/* 3. Action Keys (DEL, AC - Blue / Qiqi Purple Accent) */
 .key-hardware-blue {
-  background: linear-gradient(180deg, #2475E8 0%, #1868DB 60%, #1257BA 100%);
-  border-top: 1px solid rgba(147, 197, 253, 0.5);
-  border-bottom: 2px solid #0C3E8A;
+  background: var(--key-accent);
+  color: var(--key-accent-text);
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.4);
   box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.35);
   touch-action: manipulation;
   transition: transform 0.04s ease-out;
@@ -88,14 +153,32 @@
   transform: translateY(1.5px);
   will-change: transform;
   box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
-  background: linear-gradient(180deg, #1558BD 0%, #0F499E 100%);
+  filter: brightness(0.88);
 }
 
-/* 4. Round Navigation Keys (SHIFT, ALPHA, MENU, ON) */
+/* 4. Equals Key (=) */
+.key-hardware-equals {
+  background: var(--key-equals);
+  color: var(--key-equals-text);
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.3);
+  touch-action: manipulation;
+  transition: transform 0.04s ease-out;
+}
+.key-hardware-equals:active, .key-hardware-equals.active-press {
+  transform: translateY(1.5px);
+  will-change: transform;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
+  filter: brightness(0.92);
+}
+
+/* 5. Round Navigation Keys (SHIFT, ALPHA, MENU, ON) */
 .key-hardware-round {
-  background: linear-gradient(180deg, #32323E 0%, #22222B 65%, #181820 100%);
+  background: var(--key-fn);
+  color: var(--key-fn-text);
   border-top: 1px solid rgba(255, 255, 255, 0.15);
-  border-bottom: 1.5px solid #0F0F14;
+  border-bottom: 1.5px solid rgba(0, 0, 0, 0.5);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   touch-action: manipulation;
   transition: transform 0.04s ease-out;
@@ -104,7 +187,20 @@
   transform: translateY(1.5px);
   will-change: transform;
   box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
-  background: linear-gradient(180deg, #1A1A22 0%, #14141A 100%);
+  filter: brightness(0.88);
+}
+
+/* Label Colors mapped to Theme CSS variables */
+.theme-label-shift {
+  color: var(--label-shift);
+}
+
+.theme-label-alpha {
+  color: var(--label-alpha);
+}
+
+.theme-label-base {
+  color: var(--label-base);
 }
 
 /* Scoped relative key containers with tight labels gap and zero dead zones */

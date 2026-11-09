@@ -36,7 +36,7 @@ import {
 } from './mathAst';
 import { NaturalDisplay } from './components/NaturalDisplay';
 import { ClassWizQrModal } from './components/ClassWizQrModal';
-import { SettingsModal, CalculatorMode } from './components/SettingsModal';
+import { SettingsModal, CalculatorMode, CalculatorTheme } from './components/SettingsModal';
 import { CalibrationModal } from './components/CalibrationModal';
 import { TestHarnessModal } from './components/TestHarnessModal';
 
@@ -133,6 +133,15 @@ export default function App() {
       if (saved === 'STUDY' || saved === 'EXAM') return saved;
     } catch {}
     return 'EXAM';
+  });
+
+  // Theme System: 'default' (Classic ClassWiz) vs 'qiqi' (Qiqi Theme)
+  const [theme, setTheme] = useState<CalculatorTheme>(() => {
+    try {
+      const saved = localStorage.getItem('casio_theme');
+      if (saved === 'qiqi' || saved === 'default') return saved as CalculatorTheme;
+    } catch {}
+    return 'default';
   });
 
   // Physical card calibration mm scale factor
@@ -1290,7 +1299,8 @@ export default function App() {
           transform: calibrationScale !== 1.0 ? `scale(${calibrationScale})` : undefined,
           transformOrigin: 'top center',
         }}
-        className="w-full max-w-[440px] h-[100dvh] bg-[#0E0E12] flex flex-col justify-between relative overflow-hidden select-none"
+        data-theme={theme}
+        className="w-full max-w-[440px] h-[100dvh] bg-[var(--bg)] flex flex-col justify-between relative overflow-hidden select-none"
       >
         {/* Key-Path Trainer Floating Pill (Study Mode) */}
         {calcMode === 'STUDY' && trainerRoute && (
@@ -1413,8 +1423,8 @@ export default function App() {
                       </div>
 
                       <div 
-                        className="flex-1 text-right font-mono text-2xl sm:text-3xl font-bold tracking-wider text-emerald-200 select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2"
-                        style={{ textShadow: '0 0 3px rgba(110,231,183,0.3)' }}
+                        className="flex-1 text-right font-mono text-2xl sm:text-3xl font-bold tracking-wider text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2"
+                        style={{ textShadow: '0 0 3px var(--display-glow)' }}
                       >
                         {errorMessage ? '' : result}
                       </div>
@@ -1783,7 +1793,7 @@ export default function App() {
                 }}
                 aria-label="SHIFT key"
                 className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
-                  shiftActive ? 'text-slate-950 bg-[#E5A93C] shadow-[0_0_10px_#E5A93C]' : 'text-[#E5A93C]'
+                  shiftActive ? 'text-slate-950 bg-[var(--label-shift)] shadow-[0_0_10px_var(--label-shift)]' : 'theme-label-shift'
                 }`}
               >
                 SHIFT
@@ -1804,7 +1814,7 @@ export default function App() {
                 }}
                 aria-label="ALPHA key"
                 className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
-                  alphaActive ? 'text-white bg-[#E6007E] shadow-[0_0_10px_#E6007E]' : 'text-[#E6007E]'
+                  alphaActive ? 'text-white bg-[var(--label-alpha)] shadow-[0_0_10px_var(--label-alpha)]' : 'theme-label-alpha'
                 }`}
               >
                 ALPHA
@@ -1859,7 +1869,7 @@ export default function App() {
             {/* Col 5, Row 1: MENU / SETUP */}
             <div className="col-start-5 row-start-1 key-wrapper relative z-20">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,1vh,9px)] font-mono text-[#E5A93C] font-semibold tracking-tighter leading-none">SETUP</span>
+                <span className="text-[clamp(7.5px,1vh,9px)] font-mono theme-label-shift font-semibold tracking-tighter leading-none">SETUP</span>
                 <span></span>
               </div>
               <button
@@ -1899,7 +1909,7 @@ export default function App() {
             {/* Col 1, Row 2: OPTN */}
             <div className="col-start-1 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">QR</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift">QR</span>
                 <span></span>
               </div>
               <button
@@ -1927,8 +1937,8 @@ export default function App() {
             {/* Col 2, Row 2: CALC */}
             <div className="col-start-2 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">SOLVE</span>
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E6007E]">=</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift">SOLVE</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-alpha">=</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -1946,8 +1956,8 @@ export default function App() {
             {/* Col 5, Row 2: INTEGRAL */}
             <div className="col-start-5 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">d/dx</span>
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E6007E]">:</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift">d/dx</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-alpha">:</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -1965,7 +1975,7 @@ export default function App() {
             {/* Col 6, Row 2: VARIABLE x */}
             <div className="col-start-6 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold text-[#E5A93C]">Σ</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift">Σ</span>
                 <span></span>
               </div>
               <button
@@ -1974,7 +1984,7 @@ export default function App() {
                   () => handleToken('Σ(')
                 )}
                 aria-label="Variable x key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-[#E6007E] flex items-center justify-center font-bold text-sm"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal theme-label-alpha flex items-center justify-center font-bold text-sm"
               >
                 x
               </button>
@@ -1984,7 +1994,7 @@ export default function App() {
             {/* Col 1, Row 3: Fraction */}
             <div className="col-start-1 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">a b/c</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">a b/c</span>
                 <span></span>
               </div>
               <button
@@ -1999,7 +2009,7 @@ export default function App() {
             {/* Col 2, Row 3: Sqrt */}
             <div className="col-start-2 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">³√■</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">³√■</span>
                 <span></span>
               </div>
               <button
@@ -2014,8 +2024,8 @@ export default function App() {
             {/* Col 3, Row 3: x² */}
             <div className="col-start-3 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">x³</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">DEC</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">x³</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">DEC</span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handlePostfixKey('²'), () => handlePostfixKey('³'), undefined, 'func', 'x²')}
@@ -2029,8 +2039,8 @@ export default function App() {
             {/* Col 4, Row 3: x□ */}
             <div className="col-start-4 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">■√■</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">HEX</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">■√■</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">HEX</span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handlePowerKey(), () => handleToken('^('), undefined, 'func', 'x^□')}
@@ -2044,8 +2054,8 @@ export default function App() {
             {/* Col 5, Row 3: log□ */}
             <div className="col-start-5 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">10<sup>□</sup></span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">BIN</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">10<sup>□</sup></span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">BIN</span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handleLogBaseKey(), () => handleToken('10^('), undefined, 'func', 'log')}
@@ -2059,8 +2069,8 @@ export default function App() {
             {/* Col 6, Row 3: ln */}
             <div className="col-start-6 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">e<sup>□</sup></span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-cyan-400">OCT</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">e<sup>□</sup></span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">OCT</span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handleToken('ln('), () => handleToken('e^('), undefined, 'func', 'ln')}
@@ -2075,8 +2085,8 @@ export default function App() {
             {/* Col 1, Row 4: (-) Negation */}
             <div className="col-start-1 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">log</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">A</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">log</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">A</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2095,8 +2105,8 @@ export default function App() {
             {/* Col 2, Row 4: DMS (° ' ") */}
             <div className="col-start-2 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">FACT</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">B</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">FACT</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">B</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2121,8 +2131,8 @@ export default function App() {
             {/* Col 3, Row 4: x⁻¹ */}
             <div className="col-start-3 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">x!</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">C</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">x!</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">C</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2141,8 +2151,8 @@ export default function App() {
             {/* Col 4, Row 4: sin */}
             <div className="col-start-4 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">sin⁻¹</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">D</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">sin⁻¹</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">D</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2161,8 +2171,8 @@ export default function App() {
             {/* Col 5, Row 4: cos */}
             <div className="col-start-5 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">cos⁻¹</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">E</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">cos⁻¹</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">E</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2181,8 +2191,8 @@ export default function App() {
             {/* Col 6, Row 4: tan */}
             <div className="col-start-6 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">tan⁻¹</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">F</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">tan⁻¹</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">F</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2202,8 +2212,8 @@ export default function App() {
             {/* Col 1, Row 5: STO */}
             <div className="col-start-1 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">RECALL</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">x</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">RECALL</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">x</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2221,8 +2231,8 @@ export default function App() {
             {/* Col 2, Row 5: ENG */}
             <div className="col-start-2 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">←</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">i</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">←</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">i</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2256,8 +2266,8 @@ export default function App() {
             {/* Col 4, Row 5: ) */}
             <div className="col-start-4 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">,</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">x</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">,</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">x</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2275,8 +2285,8 @@ export default function App() {
             {/* Col 5, Row 5: S<=>D */}
             <div className="col-start-5 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">a b/c⇔d/c</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">y</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">a b/c⇔d/c</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">y</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2294,8 +2304,8 @@ export default function App() {
             {/* Col 6, Row 5: M+ */}
             <div className="col-start-6 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">M-</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">M</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">M-</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">M</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2319,7 +2329,7 @@ export default function App() {
             {/* Key 7 */}
             <div className="col-start-1 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">CONST</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">CONST</span>
                 <span></span>
               </div>
               <button
@@ -2337,7 +2347,7 @@ export default function App() {
             {/* Key 8 */}
             <div className="col-start-2 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">CONV</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">CONV</span>
                 <span></span>
               </div>
               <button
@@ -2355,7 +2365,7 @@ export default function App() {
             {/* Key 9 */}
             <div className="col-start-3 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">RESET</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">RESET</span>
                 <span></span>
               </div>
               <button
@@ -2373,7 +2383,7 @@ export default function App() {
             {/* DEL */}
             <div className="col-start-4 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">INS</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">INS</span>
                 {calcMode === 'STUDY' && <span className="text-[7.5px] font-bold text-sky-300">UNDO</span>}
               </div>
               <button
@@ -2388,7 +2398,7 @@ export default function App() {
             {/* AC */}
             <div className="col-start-5 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">OFF</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">OFF</span>
                 <span></span>
               </div>
               <button
@@ -2407,7 +2417,7 @@ export default function App() {
             {/* Key 4 */}
             <div className="col-start-1 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">MATRIX</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">MATRIX</span>
                 <span></span>
               </div>
               <button
@@ -2428,7 +2438,7 @@ export default function App() {
             {/* Key 5 */}
             <div className="col-start-2 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">VECTOR</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">VECTOR</span>
                 <span></span>
               </div>
               <button
@@ -2464,7 +2474,7 @@ export default function App() {
             {/* × */}
             <div className="col-start-4 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">nPr</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">nPr</span>
                 <span></span>
               </div>
               <button
@@ -2482,7 +2492,7 @@ export default function App() {
             {/* ÷ */}
             <div className="col-start-5 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">nCr</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">nCr</span>
                 <span></span>
               </div>
               <button
@@ -2501,7 +2511,7 @@ export default function App() {
             {/* Key 1 */}
             <div className="col-start-1 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">STAT</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">STAT</span>
                 <span></span>
               </div>
               <button
@@ -2522,7 +2532,7 @@ export default function App() {
             {/* Key 2 */}
             <div className="col-start-2 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">CMPLX</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">CMPLX</span>
                 <span></span>
               </div>
               <button
@@ -2543,7 +2553,7 @@ export default function App() {
             {/* Key 3 */}
             <div className="col-start-3 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">BASE-N</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">BASE-N</span>
                 <span></span>
               </div>
               <button
@@ -2564,7 +2574,7 @@ export default function App() {
             {/* + */}
             <div className="col-start-4 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Pol</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">Pol</span>
                 <span></span>
               </div>
               <button
@@ -2582,7 +2592,7 @@ export default function App() {
             {/* - */}
             <div className="col-start-5 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Rec</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">Rec</span>
                 <span></span>
               </div>
               <button
@@ -2601,7 +2611,7 @@ export default function App() {
             {/* Key 0 */}
             <div className="col-start-1 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Rnd</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">Rnd</span>
                 <span></span>
               </div>
               <button
@@ -2619,8 +2629,8 @@ export default function App() {
             {/* . */}
             <div className="col-start-2 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">Ran#</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">RanInt</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">Ran#</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">RanInt</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2638,8 +2648,8 @@ export default function App() {
             {/* ×10ˣ */}
             <div className="col-start-3 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">π</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E6007E]">e</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">π</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">e</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2657,7 +2667,7 @@ export default function App() {
             {/* Ans */}
             <div className="col-start-4 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold text-[#E5A93C]">PRE-ANS</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">PRE-ANS</span>
                 <span></span>
               </div>
               <button
@@ -2681,7 +2691,7 @@ export default function App() {
               <button
                 onClick={handleEqual}
                 aria-label="Equals key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xl flex items-center justify-center"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-equals font-bold text-xl flex items-center justify-center"
               >
                 =
               </button>
@@ -2704,6 +2714,11 @@ export default function App() {
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         calcMode={calcMode}
+        theme={theme}
+        onSetTheme={(t) => {
+          setTheme(t);
+          localStorage.setItem('casio_theme', t);
+        }}
         onSetCalcMode={(mode) => {
           setCalcMode(mode);
           localStorage.setItem('casio_mode', mode);
@@ -2736,6 +2751,8 @@ export default function App() {
           handleSelectMode('CALC');
           setCalcMode('EXAM');
           setCalibrationScale(1.0);
+          setTheme('default');
+          localStorage.setItem('casio_theme', 'default');
           setIsSettingsModalOpen(false);
         }}
       />
@@ -2751,6 +2768,8 @@ export default function App() {
         }}
         onReset={() => {
           setCalibrationScale(1.0);
+          setTheme('default');
+          localStorage.setItem('casio_theme', 'default');
           localStorage.setItem('casio_calibration_scale', '1.0');
         }}
       />
