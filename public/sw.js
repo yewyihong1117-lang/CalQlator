@@ -1,4 +1,4 @@
-const CACHE = 'fx570-v1';
+const CACHE = 'CalQlator_Beta1.0';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => {
   e.waitUntil(
