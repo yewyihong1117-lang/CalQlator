@@ -184,7 +184,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 </div>
 
                 {/* Mathematical Expression */}
-                <div className="font-mono text-sm sm:text-base text-emerald-300 py-1 break-all tracking-wide">
+                <div className="font-mono text-sm sm:text-base text-[var(--display-text)] py-1 break-all tracking-wide">
                   {item.expression}
                 </div>
 

@@ -246,12 +246,12 @@ export const cmplxModeModule: ModeModule = {
       const page = CMPLX_SUBMENU_PAGES[pageIdx];
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-emerald-300 select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
-          { className: 'flex justify-between items-center border-b border-emerald-950/40 pb-1 text-xs font-bold text-amber-400' },
+          { className: 'flex justify-between items-center border-b border-[var(--display-text)]/20 pb-1 text-xs font-bold text-[var(--label-shift)]' },
           React.createElement('span', null, page.title || 'Complex Menu'),
-          React.createElement('span', { className: 'text-[10px] text-emerald-500/80 font-normal' }, `Page ${pageIdx + 1}/${CMPLX_SUBMENU_PAGES.length} ▲▼`)
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70 font-normal' }, `Page ${pageIdx + 1}/${CMPLX_SUBMENU_PAGES.length} ▲▼`)
         ),
         React.createElement(
           'div',
@@ -260,14 +260,14 @@ export const cmplxModeModule: ModeModule = {
             React.createElement(
               'div',
               { key: it.id, className: 'flex items-center space-x-1.5' },
-              React.createElement('span', { className: 'bg-emerald-950 text-amber-300 border border-emerald-800/60 rounded px-1.5 py-0.5 text-[10px] font-bold' }, it.key),
-              React.createElement('span', { className: 'font-semibold text-emerald-200' }, it.name)
+              React.createElement('span', { className: 'bg-[var(--display-text)]/15 text-[var(--label-shift)] border border-[var(--display-text)]/30 rounded px-1.5 py-0.5 text-[10px] font-bold' }, it.key),
+              React.createElement('span', { className: 'font-semibold text-[var(--display-text)]' }, it.name)
             )
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-emerald-500/80 text-right pt-1 border-t border-emerald-950/40' },
+          { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' },
           '[▲/▼] Page  [AC] Return'
         )
       );
@@ -278,17 +278,16 @@ export const cmplxModeModule: ModeModule = {
     const res = modeState.data.result || '0';
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-mono select-none' },
+      { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
       React.createElement(
         'div',
-        { className: 'text-sm text-emerald-300 min-h-[1.5rem] break-all tracking-wide' },
-        expr || React.createElement('span', { className: 'text-emerald-700/60' }, '0')
+        { className: 'text-sm text-[var(--display-text)] min-h-[1.5rem] break-all tracking-wide' },
+        expr || React.createElement('span', { className: 'text-[var(--display-text)]/40' }, '0')
       ),
       React.createElement(
         'div',
         { 
-          className: 'flex-1 text-right font-mono text-xl sm:text-2xl font-bold tracking-wider text-emerald-200 select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2 flex items-end justify-end',
-          style: { textShadow: '0 0 3px rgba(110,231,183,0.3)' }
+          className: 'flex-1 text-right font-mono text-xl sm:text-2xl font-bold tracking-wider text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2 flex items-end justify-end'
         },
         res
       )

@@ -559,12 +559,12 @@ export const ineqModeModule: ModeModule = {
     if (modeState.screen === 'SELECT_DEGREE') {
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-emerald-300 select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-emerald-950/40 pb-1 text-emerald-400 flex justify-between items-center' },
+          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center' },
           React.createElement('span', null, 'Polynomial Degree?'),
-          React.createElement('span', { className: 'text-[10px] text-emerald-500' }, 'INEQ')
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70' }, 'INEQ')
         ),
         React.createElement(
           'div',
@@ -572,25 +572,25 @@ export const ineqModeModule: ModeModule = {
           React.createElement(
             'div',
             { className: 'flex items-center gap-2' },
-            React.createElement('span', { className: 'font-bold text-amber-300 px-1 bg-amber-950/40 border border-amber-500/30 rounded' }, '2'),
+            React.createElement('span', { className: 'font-bold text-[var(--label-shift)] px-1 bg-[var(--display-text)]/15 border border-[var(--display-text)]/30 rounded' }, '2'),
             React.createElement('span', null, 'ax² + bx + c')
           ),
           React.createElement(
             'div',
             { className: 'flex items-center gap-2' },
-            React.createElement('span', { className: 'font-bold text-amber-300 px-1 bg-amber-950/40 border border-amber-500/30 rounded' }, '3'),
+            React.createElement('span', { className: 'font-bold text-[var(--label-shift)] px-1 bg-[var(--display-text)]/15 border border-[var(--display-text)]/30 rounded' }, '3'),
             React.createElement('span', null, 'ax³ + bx² + cx + d')
           ),
           React.createElement(
             'div',
             { className: 'flex items-center gap-2' },
-            React.createElement('span', { className: 'font-bold text-amber-300 px-1 bg-amber-950/40 border border-amber-500/30 rounded' }, '4'),
+            React.createElement('span', { className: 'font-bold text-[var(--label-shift)] px-1 bg-[var(--display-text)]/15 border border-[var(--display-text)]/30 rounded' }, '4'),
             React.createElement('span', null, 'ax⁴ + bx³ + cx² + dx + e')
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9.5px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between' },
+          { className: 'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between' },
           React.createElement('span', null, 'Select Degree (2 ~ 4)'),
           React.createElement('span', null, '[AC]: Exit')
         )
@@ -608,12 +608,12 @@ export const ineqModeModule: ModeModule = {
 
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-emerald-300 select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-emerald-950/40 pb-1 text-emerald-400 flex justify-between' },
+          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between' },
           React.createElement('span', null, `${polyHead} 0`),
-          React.createElement('span', { className: 'text-[10px] text-amber-300' }, `Degree ${degree}`)
+          React.createElement('span', { className: 'text-[10px] text-[var(--label-shift)]' }, `Degree ${degree}`)
         ),
         React.createElement(
           'div',
@@ -628,16 +628,16 @@ export const ineqModeModule: ModeModule = {
               'div',
               {
                 key: item.num,
-                className: 'px-2 py-1 rounded border border-emerald-900/50 bg-emerald-950/20 flex items-center justify-between',
+                className: 'px-2 py-1 rounded border border-[var(--display-text)]/25 bg-[var(--display-text)]/5 flex items-center justify-between',
               },
-              React.createElement('span', { className: 'font-bold text-amber-300 mr-1.5' }, `${item.num}:`),
-              React.createElement('span', { className: 'font-semibold tracking-wider text-emerald-200' }, `${item.sym} 0`)
+              React.createElement('span', { className: 'font-bold text-[var(--label-shift)] mr-1.5' }, `${item.num}:`),
+              React.createElement('span', { className: 'font-semibold tracking-wider text-[var(--display-text)]' }, `${item.sym} 0`)
             )
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9.5px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between' },
+          { className: 'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between' },
           React.createElement('span', null, 'Press [1] ~ [4]'),
           React.createElement('span', null, '[AC]: Back')
         )
@@ -656,12 +656,12 @@ export const ineqModeModule: ModeModule = {
 
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-emerald-300 select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-emerald-950/40 pb-1 text-emerald-400 flex justify-between items-center' },
+          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center' },
           React.createElement('span', { className: 'truncate pr-1' }, polyTitle),
-          React.createElement('span', { className: 'text-[9.5px] text-amber-300 shrink-0' }, 'INEQ')
+          React.createElement('span', { className: 'text-[9.5px] text-[var(--label-shift)] shrink-0' }, 'INEQ')
         ),
         React.createElement(
           'div',
@@ -669,15 +669,14 @@ export const ineqModeModule: ModeModule = {
           React.createElement(
             'div',
             {
-              className: 'text-base sm:text-lg font-bold tracking-wider text-emerald-100 select-text px-1 break-words',
-              style: { textShadow: '0 0 4px rgba(110,231,183,0.45)' },
+              className: 'text-base sm:text-lg font-bold tracking-wider text-[var(--display-text)] select-text px-1 break-words',
             },
             sol
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9.5px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between' },
+          { className: 'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between' },
           React.createElement('span', null, '[=] / [AC]: Edit Coeffs'),
           React.createElement('span', null, '[OPTN]: Form')
         )
@@ -699,12 +698,12 @@ export const ineqModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-mono select-none' },
+      { className: 'flex flex-col h-full justify-between p-2 font-mono select-none text-[var(--display-text)]' },
       React.createElement(
         'div',
-        { className: 'text-xs font-bold border-b border-emerald-950/40 pb-1 text-emerald-400 flex justify-between items-center' },
+        { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center' },
         React.createElement('span', null, polyHeader),
-        React.createElement('span', { className: 'text-[10px] text-amber-300' }, `Deg ${degree}`)
+        React.createElement('span', { className: 'text-[10px] text-[var(--label-shift)]' }, `Deg ${degree}`)
       ),
       React.createElement(
         'div',
@@ -718,11 +717,11 @@ export const ineqModeModule: ModeModule = {
               key: label,
               className: `flex-1 py-1 px-1 border rounded text-center transition-all ${
                 isSelected
-                  ? 'border-amber-400 bg-amber-950/40 font-bold text-amber-300 shadow-[0_0_6px_rgba(251,191,36,0.35)]'
-                  : 'border-emerald-900/60 bg-emerald-950/20 text-emerald-300'
+                  ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 font-bold text-[var(--label-shift)] shadow-[0_0_6px_rgba(229,169,60,0.25)]'
+                  : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'
               }`,
             },
-            React.createElement('div', { className: 'text-[10px] text-emerald-500/80 uppercase' }, `${label}=`),
+            React.createElement('div', { className: 'text-[10px] opacity-75 uppercase' }, `${label}=`),
             React.createElement(
               'div',
               { className: 'text-sm font-semibold truncate', title: String(displayVal) },
@@ -733,7 +732,7 @@ export const ineqModeModule: ModeModule = {
       ),
       React.createElement(
         'div',
-        { className: 'text-[9.5px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between' },
+        { className: 'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between' },
         React.createElement('span', null, 'Enter number, press [=]'),
         React.createElement('span', null, '◄ ►: Move')
       )

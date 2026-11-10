@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { 
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
   Power, Settings, Sparkles
@@ -39,6 +39,203 @@ import { ClassWizQrModal } from './components/ClassWizQrModal';
 import { SettingsModal, CalculatorMode, CalculatorTheme } from './components/SettingsModal';
 import { CalibrationModal } from './components/CalibrationModal';
 import { TestHarnessModal } from './components/TestHarnessModal';
+
+// Persistent Display Slot Engine Models
+export interface DisplayEntry {
+  id: string;
+  slot: 0 | 1 | 2 | 3;
+  expressionText: string;
+  result: string;
+  exactResult?: string;
+  numericVal?: number;
+}
+
+export const DISPLAY_SLOT_CONFIG = {
+  0: { scale: 1, y: '0cqh', mix: 100, mixRes: 100, opacity: 1 },
+  1: { scale: 0.6, y: '-38cqh', mix: 70, mixRes: 100, opacity: 1 },
+  2: { scale: 0.45, y: '-65cqh', mix: 50, mixRes: 70, opacity: 1 },
+  3: { scale: 0.4, y: '-88cqh', mix: 35, mixRes: 50, opacity: 0 },
+};
+
+function useLineFitScale(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  contentRef: React.RefObject<HTMLDivElement | null>,
+  dependency: any,
+  minFontSizePx = 16
+) {
+  const [fitScale, setFitScale] = useState(1);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+
+    const measure = () => {
+      const containerWidth = container.clientWidth;
+      const contentWidth = content.scrollWidth;
+      if (containerWidth <= 0 || contentWidth <= 0) return;
+
+      const computedFontSize = parseFloat(window.getComputedStyle(container).fontSize) || 20;
+      const minScale = Math.max(0.1, minFontSizePx / computedFontSize);
+
+      let targetScale = 1;
+      if (contentWidth > containerWidth) {
+        const rawScale = containerWidth / contentWidth;
+        targetScale = Math.max(minScale, Math.min(1, rawScale));
+      }
+
+      setFitScale((prev) => {
+        if (Math.abs(prev - targetScale) < 0.008) return prev;
+        return targetScale;
+      });
+    };
+
+    measure();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        measure();
+      });
+      ro.observe(container);
+      ro.observe(content);
+    }
+
+    return () => {
+      ro?.disconnect();
+    };
+  }, [containerRef, contentRef, dependency, minFontSizePx]);
+
+  return fitScale;
+}
+
+interface DisplaySlotEntryItemProps {
+  entry: DisplayEntry;
+  isSlot0: boolean;
+  astState: MathAstState;
+  setAstState: React.Dispatch<React.SetStateAction<MathAstState>>;
+  errorMessage: string | null;
+  result: string;
+  onInsertExpr: (expr: string) => void;
+  onInsertResult: (res: string) => void;
+  onRemoveSlot3: (id: string) => void;
+}
+
+const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
+  entry,
+  isSlot0,
+  astState,
+  setAstState,
+  errorMessage,
+  result,
+  onInsertExpr,
+  onInsertResult,
+  onRemoveSlot3,
+}) => {
+  const cfg = DISPLAY_SLOT_CONFIG[entry.slot] || DISPLAY_SLOT_CONFIG[0];
+  const exprContainerRef = useRef<HTMLDivElement>(null);
+  const exprContentRef = useRef<HTMLDivElement>(null);
+  const resContainerRef = useRef<HTMLDivElement>(null);
+  const resContentRef = useRef<HTMLDivElement>(null);
+
+  const exprText = isSlot0 ? astToDisplayText(astState.root) : entry.expressionText;
+  const resText = isSlot0 ? (errorMessage ? `[${errorMessage}]` : result) : (entry.result ? `= ${entry.result}` : '');
+
+  const exprFitScale = useLineFitScale(exprContainerRef, exprContentRef, exprText, 16);
+  const resFitScale = useLineFitScale(resContainerRef, resContentRef, resText, 16);
+
+  useEffect(() => {
+    if (entry.slot === 3) {
+      const timer = setTimeout(() => {
+        onRemoveSlot3(entry.id);
+      }, 260);
+      return () => clearTimeout(timer);
+    }
+  }, [entry.slot, entry.id, onRemoveSlot3]);
+
+  return (
+    <div
+      data-testid={`display-slot-${entry.slot}`}
+      onTransitionEnd={(e) => {
+        if (e.target === e.currentTarget && entry.slot === 3) {
+          onRemoveSlot3(entry.id);
+        }
+      }}
+      className="display-slot-entry"
+      style={{
+        '--y': cfg.y,
+        '--entry-opacity': cfg.opacity,
+        '--scale': cfg.scale,
+        '--mix': `${cfg.mix}%`,
+        '--mix-res': `${cfg.mixRes}%`,
+      } as React.CSSProperties}
+    >
+      {/* Expression Line (Left Aligned) */}
+      <div ref={exprContainerRef} className="display-slot-line-expr">
+        <div
+          ref={exprContentRef}
+          onClick={!isSlot0 && entry.expressionText ? (e) => {
+            e.stopPropagation();
+            onInsertExpr(entry.expressionText);
+          } : undefined}
+          className={`display-slot-expr-content ${!isSlot0 && entry.expressionText ? 'cursor-pointer hover:opacity-90' : ''}`}
+          style={{
+            '--final-scale': `${(exprFitScale * cfg.scale).toFixed(4)}`,
+            '--scale': `${cfg.scale}`,
+            '--mix': `${cfg.mix}%`,
+          } as React.CSSProperties}
+          title={!isSlot0 && entry.expressionText ? 'Tap to insert expression' : undefined}
+        >
+          {isSlot0 ? (
+            <NaturalDisplay
+              nodes={astState.root}
+              cursor={astState.cursor}
+              pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
+              onSetCursor={(slotId, offset) => {
+                setAstState((prev) => ({
+                  ...prev,
+                  cursor: { slotId, offset },
+                }));
+              }}
+            />
+          ) : (
+            <span>{entry.expressionText}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Result Line (Right Aligned) */}
+      <div ref={resContainerRef} className="display-slot-line-res">
+        <div
+          ref={resContentRef}
+          onClick={isSlot0 ? (result && !errorMessage ? () => onInsertResult(result) : undefined) : (entry.result ? (e) => {
+            e.stopPropagation();
+            onInsertResult(entry.exactResult || entry.result);
+          } : undefined)}
+          className={`display-slot-res-content ${((isSlot0 && result && !errorMessage) || (!isSlot0 && entry.result)) ? 'cursor-pointer hover:opacity-90 select-text' : ''}`}
+          style={{
+            '--final-scale': `${(resFitScale * cfg.scale).toFixed(4)}`,
+            '--scale': `${cfg.scale}`,
+            '--mix-res': `${cfg.mixRes}%`,
+          } as React.CSSProperties}
+          title={isSlot0 ? (result ? 'Tap to insert result' : undefined) : (entry.result ? 'Tap to insert result' : undefined)}
+        >
+          {isSlot0 ? (
+            errorMessage ? (
+              <span className="text-rose-400 font-bold text-sm tracking-wider animate-pulse">
+                [{errorMessage}]
+              </span>
+            ) : result ? (
+              <span>{result}</span>
+            ) : null
+          ) : (
+            entry.result ? <span>= {entry.result}</span> : null
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
 
 // Display Menu Modes (All in-display, zero external chrome)
 export type DisplayMenuType = 
@@ -328,7 +525,7 @@ export default function App() {
     displayFormat,
   };
 
-  // Calculation History Log
+  // Calculation History Log (persisted in localStorage for full history view)
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
       const saved = localStorage.getItem('casio_history');
@@ -337,11 +534,91 @@ export default function App() {
     return [];
   });
 
+  // Persistent Display Slot Engine Entries: 0 = current, 1 = newest history, 2 = older history, 3 = exiting
+  const [displayEntries, setDisplayEntries] = useState<DisplayEntry[]>(() => {
+    let hist: HistoryItem[] = [];
+    try {
+      const saved = localStorage.getItem('casio_history');
+      if (saved) hist = JSON.parse(saved);
+    } catch {}
+
+    const entries: DisplayEntry[] = [
+      {
+        id: 'entry_cur_' + Date.now(),
+        slot: 0,
+        expressionText: '',
+        result: '',
+      },
+    ];
+
+    if (hist.length > 0) {
+      entries.push({
+        id: 'entry_h1_' + (hist[0].id || '1'),
+        slot: 1,
+        expressionText: hist[0].expression,
+        result: hist[0].result,
+        exactResult: hist[0].exactResult,
+        numericVal: hist[0].numericVal,
+      });
+    }
+
+    if (hist.length > 1) {
+      entries.push({
+        id: 'entry_h2_' + (hist[1].id || '2'),
+        slot: 2,
+        expressionText: hist[1].expression,
+        result: hist[1].result,
+        exactResult: hist[1].exactResult,
+        numericVal: hist[1].numericVal,
+      });
+    }
+
+    return entries;
+  });
+
   useEffect(() => {
     try {
       localStorage.setItem('casio_history', JSON.stringify(history));
     } catch {}
   }, [history]);
+
+  // Insert history expression or result into active workspace
+  const handleInsertHistoryExpression = useCallback((exprStr: string) => {
+    playKeyClick('num');
+    triggerHaptic('num');
+    const parsed = parseStringToAst(exprStr);
+    if (astState.root.length === 0 || isCalculated) {
+      setAstState(parsed);
+      setIsCalculated(false);
+      setErrorMessage(null);
+    } else {
+      setAstState((prev) => ({
+        ...prev,
+        root: [...prev.root, ...parsed.root],
+        cursor: { slotId: 'root', offset: prev.root.length + parsed.root.length },
+      }));
+    }
+  }, [astState.root.length, isCalculated]);
+
+  const handleInsertHistoryResult = useCallback((valStr: string) => {
+    playKeyClick('num');
+    triggerHaptic('num');
+    const cleanStr = valStr.replace(/^=\s*/, '');
+    const parsed = parseStringToAst(cleanStr);
+    if (astState.root.length === 0 || isCalculated) {
+      setAstState(parsed);
+      setIsCalculated(false);
+      setErrorMessage(null);
+    } else {
+      setAstState((prev) => ({
+        ...prev,
+        root: [...prev.root, ...parsed.root],
+        cursor: { slotId: 'root', offset: prev.root.length + parsed.root.length },
+      }));
+    }
+  }, [astState.root.length, isCalculated]);
+
+  const commitPendingHistory = useCallback(() => {}, []);
 
   // History Navigation Index
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
@@ -568,6 +845,7 @@ export default function App() {
       if (handled) return;
     }
 
+    commitPendingHistory();
     setAstState(createInitialAstState());
     setResult('0');
     setIsCalculated(false);
@@ -807,6 +1085,7 @@ export default function App() {
 
     let currentState = astState;
     if (isCalculated) {
+      commitPendingHistory();
       // Binary and postfix operators start new expression with "Ans"
       // (+ - × ÷ x² x⁻¹ x^□ nPr nCr etc.)
       const isBinaryOrPostfix = [
@@ -840,6 +1119,7 @@ export default function App() {
 
     let currentState = astState;
     if (isCalculated) {
+      commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
     }
@@ -859,6 +1139,7 @@ export default function App() {
 
     let currentState = astState;
     if (isCalculated) {
+      commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
     }
@@ -878,6 +1159,7 @@ export default function App() {
 
     let currentState = astState;
     if (isCalculated) {
+      commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
     }
@@ -897,6 +1179,7 @@ export default function App() {
 
     let currentState = astState;
     if (isCalculated) {
+      commitPendingHistory();
       currentState = parseStringToAst('Ans');
       setIsCalculated(false);
     }
@@ -916,6 +1199,7 @@ export default function App() {
 
     let currentState = astState;
     if (isCalculated) {
+      commitPendingHistory();
       currentState = parseStringToAst('Ans');
       setIsCalculated(false);
     }
@@ -935,6 +1219,7 @@ export default function App() {
 
     let currentState = astState;
     if (isCalculated) {
+      commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
     }
@@ -969,10 +1254,13 @@ export default function App() {
     if (lastExactResult) {
       if (sdCycleState === 0) {
         setSdCycleState(1);
-        setResult(formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, engStep));
+        const nextRes = formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, engStep);
+        setResult(nextRes);
+        setDisplayEntries((prev) => prev.map((e) => (e.slot === 1 ? { ...e, result: nextRes } : e)));
       } else {
         setSdCycleState(0);
         setResult(lastExactResult);
+        setDisplayEntries((prev) => prev.map((e) => (e.slot === 1 ? { ...e, result: lastExactResult } : e)));
       }
     } else {
       setSdCycleState((prev) => (prev === 0 ? 1 : 0));
@@ -987,7 +1275,9 @@ export default function App() {
 
     const nextStep = direction === 'forward' ? engStep + 1 : engStep - 1;
     setEngStep(nextStep);
-    setResult(toEngineering(rawNumericVal, nextStep));
+    const nextRes = toEngineering(rawNumericVal, nextStep);
+    setResult(nextRes);
+    setDisplayEntries((prev) => prev.map((e) => (e.slot === 1 ? { ...e, result: nextRes } : e)));
   };
 
   // D-Pad Arrow Navigation (Left, Right, Up, Down)
@@ -1115,6 +1405,15 @@ export default function App() {
       handleSelectMode('CALC');
       setAstState(createInitialAstState());
       setResult('0');
+      setDisplayEntries([
+        {
+          id: 'entry_reset_' + Date.now(),
+          slot: 0,
+          expressionText: '',
+          result: '',
+        },
+      ]);
+      setHistory([]);
       setDisplayMenu('NONE');
       return;
     }
@@ -1158,15 +1457,60 @@ export default function App() {
 
       setResult(formattedOutput);
 
-      const newItem: HistoryItem = {
-        id: Date.now().toString(),
-        expression: astToDisplayText(astState.root),
+      const completedExpr = astToDisplayText(astState.root);
+      const completedResult = formattedOutput;
+
+      // Continuity Motion: existing slot 0 moves to slot 1, slot 1 to 2, slot 2 to 3, new slot 0 enters
+      setDisplayEntries((prev) => {
+        const next: DisplayEntry[] = [];
+        const newSlot0: DisplayEntry = {
+          id: 'entry_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          slot: 0,
+          expressionText: '',
+          result: '',
+        };
+        next.push(newSlot0);
+
+        for (const item of prev) {
+          if (item.slot === 0) {
+            next.push({
+              ...item,
+              slot: 1,
+              expressionText: completedExpr,
+              result: completedResult,
+              exactResult: evalResult.exactResult,
+              numericVal: numVal,
+            });
+          } else if (item.slot === 1) {
+            next.push({
+              ...item,
+              slot: 2,
+            });
+          } else if (item.slot === 2) {
+            next.push({
+              ...item,
+              slot: 3,
+            });
+          }
+        }
+        return next;
+      });
+
+      const newHistoryItem: HistoryItem = {
+        id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+        expression: completedExpr,
         result: formattedOutput,
         exactResult: evalResult.exactResult,
         numericVal: numVal,
         timestamp: Date.now(),
       };
-      setHistory((prev) => [newItem, ...prev.slice(0, 49)]);
+      setHistory((prev) => {
+        const updated = [newHistoryItem, ...prev.slice(0, 49)];
+        try {
+          localStorage.setItem('casio_history', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
       setHistoryIndex(-1);
     } else {
       setErrorMessage(evalResult.error || 'Syntax ERROR');
@@ -1264,6 +1608,15 @@ export default function App() {
   const menuPage = Math.floor(menuHighlightIndex / 6);
   const currentMenuGrid = MENU_PAGES[menuPage] || MENU_PAGES[0];
 
+  // Dynamically calculate input font size (smoothly shrinks from 26px down to 16px)
+  const exprDisplayText = astToDisplayText(astState.root);
+  const exprCharLength = exprDisplayText.length;
+  const inputFontSize = Math.max(16, Math.min(26, 26 - Math.max(0, exprCharLength - 12) * 0.75));
+
+  // Display history: ordered chronologically (oldest at top, newest at bottom right above input)
+  const displayedHistory = [...history].reverse();
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   return (
     <div className="w-full h-[100dvh] bg-[#0A0A0F] flex items-center justify-center p-0 m-0 overflow-hidden select-none font-sans">
       
@@ -1293,7 +1646,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Container: Fills viewport edge-to-edge on mobile, letterboxed on desktop */}
+      {/* Main Container: Sized edge-to-edge on mobile, letterboxed on desktop using dvh */}
       <main 
         style={{
           transform: calibrationScale !== 1.0 ? `scale(${calibrationScale})` : undefined,
@@ -1310,25 +1663,12 @@ export default function App() {
           </div>
         )}
 
-        {/* 1. SETTINGS GEAR ICON: Overlaying display top margin in top-right corner, 40% opacity, 44px touch target */}
-        <button
-          onClick={() => {
-            playKeyClick('action');
-            setIsSettingsModalOpen(true);
-          }}
-          aria-label="Settings and Modes"
-          title="ClassWiz Settings & Mode Switch"
-          className="absolute top-[env(safe-area-inset-top,6px)] right-[env(safe-area-inset-right,6px)] z-30 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center opacity-40 hover:opacity-100 active:opacity-100 transition-opacity text-slate-300"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
-
-        {/* 2. DUAL-LINE HIGH-CONTRAST LCD DISPLAY SCREEN */}
-        {/* RULE: Takes ALL remaining height above key block; all menus render inside this container */}
+        {/* 2. MINIMALIST HIGH-CONTRAST LCD DISPLAY SCREEN */}
+        {/* RULE: Takes ALL remaining height above key block (flex-1); all menus render inside this container */}
         <div 
           ref={displayRef}
           data-testid="display-screen"
-          className={`flex-1 w-full min-h-[160px] flex flex-col justify-between relative select-none pt-[env(safe-area-inset-top,8px)] px-3 pb-2 transition-colors duration-300 ${
+          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none pt-[env(safe-area-inset-top,8px)] px-3 pb-2 transition-colors duration-300 ${
             isPoweredOff ? 'bg-[#06080A]' : 'lcd-screen-bg'
           }`}
         >
@@ -1341,48 +1681,68 @@ export default function App() {
             </div>
           ) : (
             <>
-              {/* TOP STATUS INDICATORS ROW: Stays strictly visible during all menus */}
-              <div className="flex items-center justify-between text-[10.5px] font-mono tracking-wider border-b border-emerald-950/40 pb-1 text-slate-400 select-none pr-12">
+              {/* TOP THIN STATUS INDICATOR STRIP: S, A, D/R/G, Norm1, Math, arrows, and settings gear */}
+              <div className="flex items-center justify-between text-[11px] font-mono tabular-nums tracking-wider pb-1 select-none text-[var(--display-text)]/70 w-full shrink-0">
                 <div className="flex items-center gap-1.5">
-                  {/* [S] Indicator */}
-                  <span className={`px-1 rounded text-[9px] font-bold transition-all ${shiftActive ? 'bg-[#E5A93C] text-slate-950 shadow-[0_0_8px_#E5A93C]' : 'opacity-20'}`}>
-                    S
-                  </span>
-                  {/* [A] Indicator */}
-                  <span className={`px-1 rounded text-[9px] font-bold transition-all ${alphaActive ? 'bg-[#E6007E] text-white shadow-[0_0_8px_#E6007E]' : 'opacity-20'}`}>
-                    A
-                  </span>
-                  {/* [STO] Indicator */}
-                  <span className={`px-1 rounded text-[9px] font-bold transition-opacity ${isStoreMode ? 'bg-cyan-400 text-slate-950' : 'opacity-0'}`}>
-                    STO
-                  </span>
-                  {/* [M] Indicator */}
-                  <span className={`px-1 rounded text-[9px] font-bold transition-opacity ${memoryM !== 0 ? 'bg-emerald-500 text-slate-950' : 'opacity-0'}`}>
-                    M
-                  </span>
-                  {/* Angle Mode Indicator */}
-                  <span className="font-bold text-emerald-400/90 ml-1">
+                  {/* [S] Indicator: Shown ONLY when active */}
+                  {shiftActive && (
+                    <span className="px-1 rounded text-[9px] font-bold bg-[#E5A93C] text-slate-950">
+                      S
+                    </span>
+                  )}
+                  {/* [A] Indicator: Shown ONLY when active */}
+                  {alphaActive && (
+                    <span className="px-1 rounded text-[9px] font-bold bg-[#E6007E] text-white">
+                      A
+                    </span>
+                  )}
+                  {/* Angle Unit Indicator (D, R, G) */}
+                  <span className="font-bold text-[var(--display-text)] text-[10.5px]">
                     {angleMode === 'DEG' ? 'D' : angleMode === 'RAD' ? 'R' : 'G'}
                   </span>
-                  {/* Display Precision Mode */}
-                  <span className="text-emerald-500/70 text-[9px]">
+                  {/* Precision Format Mode */}
+                  <span className="text-[9.5px] text-[var(--display-text)]/75">
                     {displayFormat === 'NORM1' ? 'Norm1' : displayFormat === 'NORM2' ? 'Norm2' : displayFormat === 'FIX' ? `Fix${fixDigits}` : `Sci${sciDigits}`}
                   </span>
                   {/* Mode Indicator: dynamic based on active mode (e.g. i, DEC, MAT, VCT, STAT, TABLE, EQN) */}
                   {modeIndicator && (
-                    <span className="px-1 rounded bg-emerald-900/60 text-emerald-300 font-bold text-[8.5px] border border-emerald-700/40">
+                    <span className="px-1 rounded text-[8.5px] font-bold border border-[var(--display-text)]/30 text-[var(--display-text)]">
                       {modeIndicator}
+                    </span>
+                  )}
+                  {/* [STO] Indicator */}
+                  {isStoreMode && (
+                    <span className="px-1 rounded text-[8.5px] font-bold bg-cyan-400 text-slate-950">
+                      STO
+                    </span>
+                  )}
+                  {/* [M] Indicator */}
+                  {memoryM !== 0 && (
+                    <span className="px-1 rounded text-[8.5px] font-bold bg-[var(--display-text)] text-slate-950">
+                      M
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 text-[9px]">
+                <div className="flex items-center gap-2.5">
                   {/* Natural Textbook Display indicator */}
-                  <span className="text-emerald-400/90 font-serif italic">Math</span>
+                  <span className="text-[var(--display-text)]/85 text-[10px] font-serif italic">Math</span>
                   {/* In-Display Page Scroll Arrows */}
-                  <span className="flex items-center text-[8.5px] text-emerald-400/80 font-bold">
+                  <span className="text-[9px] text-[var(--display-text)]/75 font-bold tracking-tighter">
                     ▲▼
                   </span>
+                  {/* Settings Gear inside the indicator strip */}
+                  <button
+                    onClick={() => {
+                      playKeyClick('action');
+                      setIsSettingsModalOpen(true);
+                    }}
+                    aria-label="Settings and Modes"
+                    title="Settings & Modes"
+                    className="p-1 -mr-1 rounded hover:text-[var(--display-text)] transition-opacity opacity-75 hover:opacity-100 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 
@@ -1394,42 +1754,28 @@ export default function App() {
                     {currentModeModule.renderDisplay(modeContext)}
                   </div>
                 ) : (
-                  <>
-                    {/* Natural Display Expression Area (Top-Left aligned, 2D Math Box AST) */}
-                    <div className="flex-1 min-h-[64px] flex items-center overflow-hidden py-1">
-                      <NaturalDisplay
-                        nodes={astState.root}
-                        cursor={astState.cursor}
-                        pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
-                        onSetCursor={(slotId, offset) => {
-                          setAstState((prev) => ({
-                            ...prev,
-                            cursor: { slotId, offset },
-                          }));
+                  /* Slot-Based Persistent Continuity Display: Slot 0 = current, Slot 1 = newest history, Slot 2 = older history */
+                  <div 
+                    data-testid="display-workspace"
+                    className="display-workspace flex-1 w-full min-h-0 select-none"
+                  >
+                    {displayEntries.map((entry) => (
+                      <DisplaySlotEntryItem
+                        key={entry.id}
+                        entry={entry}
+                        isSlot0={entry.slot === 0}
+                        astState={astState}
+                        setAstState={setAstState}
+                        errorMessage={errorMessage}
+                        result={result}
+                        onInsertExpr={handleInsertHistoryExpression}
+                        onInsertResult={handleInsertHistoryResult}
+                        onRemoveSlot3={(id) => {
+                          setDisplayEntries((prev) => prev.filter((it) => it.id !== id));
                         }}
                       />
-                    </div>
-
-                    {/* Bottom Result Line: Strictly Right-Aligned with scroll guards */}
-                    <div className="shrink-0 flex items-baseline justify-between overflow-hidden select-text pt-0.5 border-t border-emerald-950/20">
-                      <div className="flex items-center gap-1 text-[10px] text-emerald-600/70 font-mono">
-                        {errorMessage ? (
-                          <span className="text-rose-400 font-bold text-xs tracking-wider animate-pulse">
-                            [{errorMessage}]
-                          </span>
-                        ) : isCalculated ? (
-                          <span className="text-emerald-500/60 text-[9px]">◄►</span>
-                        ) : null}
-                      </div>
-
-                      <div 
-                        className="flex-1 text-right font-mono text-2xl sm:text-3xl font-bold tracking-wider text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2"
-                        style={{ textShadow: '0 0 3px var(--display-glow)' }}
-                      >
-                        {errorMessage ? '' : result}
-                      </div>
-                    </div>
-                  </>
+                    ))}
+                  </div>
                 )
               ) : displayMenu === 'MENU' ? (
                 /* 1. IN-DISPLAY MENU GRID: 2 rows × 3 columns per page, authentic ClassWiz LCD */
@@ -1450,11 +1796,11 @@ export default function App() {
                           }}
                           className={`flex flex-col items-start justify-center px-2 py-1 rounded min-h-[34px] transition-colors text-left border cursor-pointer ${
                             isSelected 
-                              ? 'bg-emerald-400 text-slate-950 font-bold border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
-                              : 'bg-emerald-950/40 text-emerald-300 border-emerald-900/50 hover:bg-emerald-900/50'
+                              ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold border-[var(--display-text)] shadow-sm'
+                              : 'bg-[var(--display-text)]/10 text-[var(--display-text)] border-[var(--display-text)]/20 hover:bg-[var(--display-text)]/20'
                           }`}
                         >
-                          <span className={`text-[9.5px] font-bold ${isSelected ? 'text-slate-950' : 'text-amber-400'}`}>
+                          <span className={`text-[9.5px] font-bold ${isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--label-shift)]'}`}>
                             {item.key}:
                           </span>
                           <span className="text-[10px] leading-tight truncate w-full font-medium">
@@ -1465,16 +1811,16 @@ export default function App() {
                     })}
                   </div>
                   {/* Page indicator and helper footer */}
-                  <div className="flex items-center justify-between text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40">
+                  <div className="flex items-center justify-between text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20">
                     <span>Use [▲▼◄►] to move, [=] to select</span>
-                    <span className="font-bold text-amber-400">Page {menuPage + 1}/2 ▲▼</span>
+                    <span className="font-bold text-[var(--label-shift)]">Page {menuPage + 1}/2 ▲▼</span>
                   </div>
                 </div>
               ) : displayMenu === 'SETUP' ? (
                 /* 2. IN-DISPLAY SETUP LIST: Scrollable list of 4 items per page */
                 <div className="flex-1 flex flex-col justify-between py-1 overflow-hidden font-mono">
                   <div className="space-y-1 flex-1">
-                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5 mb-1 flex justify-between">
+                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5 mb-1 flex justify-between">
                       <span>SETUP MENU</span>
                       <span>Page {setupPageIndex + 1}/{SETUP_PAGES.length} ▲▼</span>
                     </div>
@@ -1489,8 +1835,8 @@ export default function App() {
                           }}
                           className={`w-full flex items-center justify-between px-2 py-0.5 rounded text-left text-xs ${
                             isSelected
-                              ? 'bg-emerald-400 text-slate-950 font-bold shadow'
-                              : 'text-emerald-200 hover:bg-emerald-950/40'
+                              ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold shadow-sm'
+                              : 'text-[var(--display-text)] hover:bg-[var(--display-text)]/20'
                           }`}
                         >
                           <span>{item.key}:{item.title}</span>
@@ -1499,7 +1845,7 @@ export default function App() {
                       );
                     })}
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1~4 to select</span>
                     <span>[AC] :Exit</span>
                   </div>
@@ -1508,7 +1854,7 @@ export default function App() {
                 /* Angle Unit Sub-menu */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">ANGLE UNIT</div>
+                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">ANGLE UNIT</div>
                     {[
                       { key: '1', name: 'Degree (D)', mode: 'DEG' as AngleMode },
                       { key: '2', name: 'Radian (R)', mode: 'RAD' as AngleMode },
@@ -1521,7 +1867,7 @@ export default function App() {
                           setDisplayMenu('NONE');
                         }}
                         className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
-                          angleMode === m.mode ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-emerald-200 hover:bg-emerald-950/40'
+                          angleMode === m.mode ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)] hover:bg-[var(--display-text)]/20'
                         }`}
                       >
                         <span>{m.key}:{m.name}</span>
@@ -1529,7 +1875,7 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1~3 to set</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -1538,7 +1884,7 @@ export default function App() {
                 /* Number Format Sub-menu */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">NUMBER FORMAT</div>
+                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">NUMBER FORMAT</div>
                     {[
                       { key: '1', name: 'Fix (Fixed decimal places)', menu: 'SETUP_FIX' as DisplayMenuType },
                       { key: '2', name: 'Sci (Significant figures)', menu: 'SETUP_SCI' as DisplayMenuType },
@@ -1547,14 +1893,14 @@ export default function App() {
                       <button
                         key={f.key}
                         onClick={() => setDisplayMenu(f.menu)}
-                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-emerald-200 hover:bg-emerald-950/40"
+                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[var(--display-text)] hover:bg-[var(--display-text)]/20"
                       >
                         <span>{f.key}:{f.name}</span>
                         <span className="text-[10px] opacity-70">➔</span>
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1~3 to choose</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -1563,10 +1909,10 @@ export default function App() {
                 /* Fix Digits Prompt */
                 <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
                   <div className="py-2">
-                    <div className="text-sm font-bold text-emerald-300">Fix 0~9?</div>
-                    <p className="text-[10px] text-emerald-500 mt-1">Specify number of decimal places (e.g. press 2 for Fix2)</p>
+                    <div className="text-sm font-bold text-[var(--display-text)]">Fix 0~9?</div>
+                    <p className="text-[10px] text-[var(--display-text)]/70 mt-1">Specify number of decimal places (e.g. press 2 for Fix2)</p>
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press [0] ~ [9]</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -1575,10 +1921,10 @@ export default function App() {
                 /* Sci Digits Prompt */
                 <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
                   <div className="py-2">
-                    <div className="text-sm font-bold text-emerald-300">Sci 0~9?</div>
-                    <p className="text-[10px] text-emerald-500 mt-1">Specify significant figures (0 = 10 digits)</p>
+                    <div className="text-sm font-bold text-[var(--display-text)]">Sci 0~9?</div>
+                    <p className="text-[10px] text-[var(--display-text)]/70 mt-1">Specify significant figures (0 = 10 digits)</p>
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press [0] ~ [9]</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -1587,14 +1933,14 @@ export default function App() {
                 /* Norm1 / Norm2 Selection */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">NORM FORMAT</div>
+                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">NORM FORMAT</div>
                     <button
                       onClick={() => {
                         setDisplayFormat('NORM1');
                         setDisplayMenu('NONE');
                       }}
                       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
-                        displayFormat === 'NORM1' ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-emerald-200'
+                        displayFormat === 'NORM1' ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)]'
                       }`}
                     >
                       <span>1:Norm1 (10⁻² ~ 10¹⁰)</span>
@@ -1606,14 +1952,14 @@ export default function App() {
                         setDisplayMenu('NONE');
                       }}
                       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
-                        displayFormat === 'NORM2' ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-emerald-200'
+                        displayFormat === 'NORM2' ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)]'
                       }`}
                     >
                       <span>2:Norm2 (10⁻⁹ ~ 10¹⁰)</span>
                       {displayFormat === 'NORM2' && <span>✓</span>}
                     </button>
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1 or 2</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -1622,7 +1968,7 @@ export default function App() {
                 /* 3. OPTN MENU */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">OPTIONS (OPTN)</div>
+                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">OPTIONS (OPTN)</div>
                     {[
                       { key: '1', name: 'Hyperbolic / Trig', menu: 'OPTN_HYP' as DisplayMenuType },
                       { key: '2', name: 'Angle Unit (° / r / g)', menu: 'OPTN_ANGLE' as DisplayMenuType },
@@ -1631,14 +1977,14 @@ export default function App() {
                       <button
                         key={opt.key}
                         onClick={() => setDisplayMenu(opt.menu)}
-                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-emerald-200 hover:bg-emerald-950/40"
+                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[var(--display-text)] hover:bg-[var(--display-text)]/20"
                       >
                         <span>{opt.key}:{opt.name}</span>
                         <span className="text-[10px] opacity-70">➔</span>
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1~3</span>
                     <span>[AC] :Exit</span>
                   </div>
@@ -1647,7 +1993,7 @@ export default function App() {
                 /* 4. SCIENTIFIC CONSTANTS CATEGORIES */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
                   <div className="space-y-0.5">
-                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">SCIENTIFIC CONSTANTS</div>
+                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">SCIENTIFIC CONSTANTS</div>
                     <div className="grid grid-cols-2 gap-1 text-[11px]">
                       {CONST_CATEGORIES.map((cat) => (
                         <button
@@ -1656,15 +2002,15 @@ export default function App() {
                             setConstCatIndex(cat.id - 1);
                             setDisplayMenu('CONST_LIST');
                           }}
-                          className="flex items-center px-1.5 py-0.5 rounded text-left text-emerald-200 hover:bg-emerald-950/40 border border-emerald-900/30"
+                          className="flex items-center px-1.5 py-0.5 rounded text-left text-[var(--display-text)] hover:bg-[var(--display-text)]/20 border border-[var(--display-text)]/30"
                         >
-                          <span className="font-bold text-amber-400 mr-1">{cat.key}:</span>
+                          <span className="font-bold text-[var(--label-shift)] mr-1">{cat.key}:</span>
                           <span className="truncate">{cat.name}</span>
                         </button>
                       ))}
                     </div>
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1~6</span>
                     <span>[AC] :Exit</span>
                   </div>
@@ -1673,7 +2019,7 @@ export default function App() {
                 /* Constants List */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
                   <div className="space-y-0.5">
-                    <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5">
+                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">
                       {CONST_CATEGORIES[constCatIndex]?.name.toUpperCase()} CONSTANTS
                     </div>
                     <div className="grid grid-cols-2 gap-1 text-[11px]">
@@ -1681,15 +2027,15 @@ export default function App() {
                         <button
                           key={sym}
                           onClick={() => handleMenuNumberSelect((idx + 1).toString())}
-                          className="flex items-center justify-between px-1.5 py-0.5 rounded text-left text-emerald-200 hover:bg-emerald-950/40 border border-emerald-900/30"
+                          className="flex items-center justify-between px-1.5 py-0.5 rounded text-left text-[var(--display-text)] hover:bg-[var(--display-text)]/20 border border-[var(--display-text)]/30"
                         >
-                          <span><strong className="text-amber-400 mr-1">{idx + 1}:</strong>{sym}</span>
+                          <span><strong className="text-[var(--label-shift)] mr-1">{idx + 1}:</strong>{sym}</span>
                           <span className="text-[9px] opacity-60">insert</span>
                         </button>
                       ))}
                     </div>
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press key to insert</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -1698,7 +2044,7 @@ export default function App() {
                 /* 5. RESET MENU */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-rose-400 border-b border-emerald-950 pb-0.5">RESET ?</div>
+                    <div className="text-[10px] font-bold text-rose-400 border-b border-[var(--display-text)]/20 pb-0.5">RESET ?</div>
                     {[
                       { key: '1', name: 'Setup Data' },
                       { key: '2', name: 'Memory' },
@@ -1710,14 +2056,14 @@ export default function App() {
                           setResetIndex(parseInt(item.key, 10) - 1);
                           setDisplayMenu('RESET_CONFIRM');
                         }}
-                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-emerald-200 hover:bg-emerald-950/40"
+                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[var(--display-text)] hover:bg-[var(--display-text)]/20"
                       >
                         <span>{item.key}:{item.name}</span>
                         <span className="text-[10px] opacity-70">➔</span>
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1~3</span>
                     <span>[AC] :Cancel</span>
                   </div>
@@ -1726,12 +2072,12 @@ export default function App() {
                 /* Reset Confirmation */
                 <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
                   <div className="py-2">
-                    <div className="text-sm font-bold text-amber-300">Reset All?</div>
-                    <div className="mt-2 text-xs text-emerald-300">
+                    <div className="text-sm font-bold text-[var(--label-shift)]">Reset All?</div>
+                    <div className="mt-2 text-xs text-[var(--display-text)]">
                       Yes: [ = ] &nbsp;&nbsp;&nbsp;&nbsp; No: [ AC ]
                     </div>
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press [=] to execute</span>
                     <span>[AC] :Cancel</span>
                   </div>
@@ -1739,7 +2085,7 @@ export default function App() {
               ) : (
                 /* Generic In-Display Sub-menu (CONV, STAT, MATRIX, VECTOR) */
                 <div className="flex-1 flex flex-col justify-between py-1 font-mono">
-                  <div className="text-[10px] font-bold text-amber-400 border-b border-emerald-950 pb-0.5 uppercase">
+                  <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5 uppercase">
                     {displayMenu} MENU
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-[11px] py-1">
@@ -1747,13 +2093,13 @@ export default function App() {
                       <button
                         key={it}
                         onClick={() => handleMenuNumberSelect((idx + 1).toString())}
-                        className="px-1.5 py-0.5 rounded text-left text-emerald-200 hover:bg-emerald-950/40 border border-emerald-900/30"
+                        className="px-1.5 py-0.5 rounded text-left text-[var(--display-text)] hover:bg-[var(--display-text)]/20 border border-[var(--display-text)]/30"
                       >
                         {it}
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-emerald-500/80 pt-1 border-t border-emerald-950/40 flex justify-between">
+                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
                     <span>Press 1~4 to select</span>
                     <span>[AC] :Exit</span>
                   </div>
