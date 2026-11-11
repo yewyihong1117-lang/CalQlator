@@ -10,109 +10,370 @@
 
 import React from 'react';
 import { ModeModule, ModeState, ModeContext } from './types';
+import { evaluateMathExpression } from '../calcEngine';
 
-function cleanNumber(val: number): string {
-  if (Math.abs(val) < 1e-12) return '0';
-  const fixed = val.toFixed(5);
+// ==========================================
+// 1. Exact Rational Arithmetic (BigInt Fraction)
+// ==========================================
+
+function gcd(a: bigint, b: bigint): bigint {
+  a = a < 0n ? -a : a;
+  b = b < 0n ? -b : b;
+  while (b > 0n) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+export class SimulFrac {
+  n: bigint;
+  d: bigint;
+
+  constructor(n: bigint, d: bigint = 1n) {
+    if (d === 0n) throw new Error('Division by zero');
+    if (d < 0n) {
+      n = -n;
+      d = -d;
+    }
+    const g = gcd(n, d);
+    this.n = n / g;
+    this.d = d / g;
+  }
+
+  add(o: SimulFrac): SimulFrac {
+    return new SimulFrac(this.n * o.d + o.n * this.d, this.d * o.d);
+  }
+
+  sub(o: SimulFrac): SimulFrac {
+    return new SimulFrac(this.n * o.d - o.n * this.d, this.d * o.d);
+  }
+
+  mul(o: SimulFrac): SimulFrac {
+    return new SimulFrac(this.n * o.n, this.d * o.d);
+  }
+
+  div(o: SimulFrac): SimulFrac {
+    if (o.n === 0n) throw new Error('Division by zero');
+    return new SimulFrac(this.n * o.d, this.d * o.n);
+  }
+
+  isZero(): boolean {
+    return this.n === 0n;
+  }
+
+  absCmp(o: SimulFrac): number {
+    const a = this.n < 0n ? -this.n : this.n;
+    const b = o.n < 0n ? -o.n : o.n;
+    const l = a * o.d;
+    const r = b * this.d;
+    return l > r ? 1 : l < r ? -1 : 0;
+  }
+
+  toString(): string {
+    if (this.d === 1n) return this.n.toString();
+    return `${this.n.toString()}/${this.d.toString()}`;
+  }
+
+  toNumber(): number {
+    return Number(this.n) / Number(this.d);
+  }
+}
+
+/**
+ * Convert number or fraction string to SimulFrac.
+ * Uses Farey approximation to recover clean fractions from floats if within tolerance.
+ */
+export function toSimulFrac(val: number | string): SimulFrac | null {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.includes('/')) {
+      const [nStr, dStr] = trimmed.split('/');
+      const n = BigInt(nStr.trim());
+      const d = BigInt(dStr.trim());
+      if (d !== 0n) return new SimulFrac(n, d);
+    }
+    const num = parseFloat(trimmed);
+    if (isNaN(num)) return null;
+    val = num;
+  }
+
+  if (!isFinite(val)) return null;
+
+  // Suppress tiny float noise around integers
+  if (Math.abs(val - Math.round(val)) < 1e-10) {
+    return new SimulFrac(BigInt(Math.round(val)), 1n);
+  }
+
+  // Continued fraction expansion to find rational approximation p/q with q <= 100000
+  let x = val;
+  const sign = x < 0 ? -1n : 1n;
+  x = Math.abs(x);
+
+  let a = Math.floor(x);
+  let p0 = 1n, p1 = BigInt(a);
+  let q0 = 0n, q1 = 1n;
+
+  let rem = x - a;
+  let iter = 0;
+
+  while (rem > 1e-12 && iter < 15) {
+    iter++;
+    const inv = 1 / rem;
+    a = Math.floor(inv);
+    rem = inv - a;
+
+    const p2 = BigInt(a) * p1 + p0;
+    const q2 = BigInt(a) * q1 + q0;
+
+    if (q2 > 100000n) break;
+
+    p0 = p1; p1 = p2;
+    q0 = q1; q1 = q2;
+
+    const approx = Number(p1) / Number(q1);
+    if (Math.abs(approx - x) < 1e-10) {
+      return new SimulFrac(sign * p1, q1);
+    }
+  }
+
+  return new SimulFrac(sign * p1, q1);
+}
+
+// ==========================================
+// 2. Simultaneous Equation Solver (Gaussian Elimination)
+// ==========================================
+
+export interface SimulVarSolution {
+  varName: string;
+  val: number;
+  exactFraction: string;
+  decimalStr: string;
+  showFraction: boolean;
+}
+
+export interface SimulSolveResult {
+  success: boolean;
+  error?: string;
+  solutions?: SimulVarSolution[];
+}
+
+export const VAR_NAMES_4 = ['x', 'y', 'z', 't'];
+
+export function cleanNumber(val: number): string {
+  if (Math.abs(val) < 1e-11) return '0';
+  if (Math.abs(val - Math.round(val)) < 1e-10) {
+    return Math.round(val).toString();
+  }
+  const fixed = val.toFixed(10);
   const clean = parseFloat(fixed).toString();
   return clean === '-0' ? '0' : clean;
 }
 
-export function solveQuadratic(a: number, b: number, c: number): string[] {
-  if (Math.abs(a) < 1e-12) {
-    if (Math.abs(b) < 1e-12) {
-      return ['No Solution'];
+/**
+ * Solve system of linear equations using Gaussian elimination with partial pivoting.
+ * Prefers exact rational arithmetic, detects singular/inconsistent systems with tolerance.
+ */
+export function solveSimultaneousEquations(
+  rawMatrix: (number | string)[][],
+  unknowns: 2 | 3 | 4
+): SimulSolveResult {
+  const n = unknowns;
+
+  // Try exact rational Gaussian elimination first
+  let allRational = true;
+  const ratMat: SimulFrac[][] = [];
+
+  for (let i = 0; i < n; i++) {
+    ratMat[i] = [];
+    for (let j = 0; j <= n; j++) {
+      const frac = toSimulFrac(rawMatrix[i]?.[j] ?? 0);
+      if (frac) {
+        ratMat[i][j] = frac;
+      } else {
+        allRational = false;
+        break;
+      }
     }
-    const x = -c / b;
-    return [`x = ${cleanNumber(x)}`];
+    if (!allRational) break;
   }
 
-  const disc = b * b - 4 * a * c;
-  if (Math.abs(disc) < 1e-12) {
-    const x = -b / (2 * a);
-    return [`x₁ = ${cleanNumber(x)}`, `x₂ = ${cleanNumber(x)}`];
-  } else if (disc > 0) {
-    const sqrtDisc = Math.sqrt(disc);
-    const x1 = (-b + sqrtDisc) / (2 * a);
-    const x2 = (-b - sqrtDisc) / (2 * a);
-    return [`x₁ = ${cleanNumber(x1)}`, `x₂ = ${cleanNumber(x2)}`];
-  } else {
-    const real = -b / (2 * a);
-    const imag = Math.sqrt(-disc) / (2 * a);
-    const imagAbs = Math.abs(imag);
-    return [
-      `x₁ = ${cleanNumber(real)} + ${cleanNumber(imagAbs)}i`,
-      `x₂ = ${cleanNumber(real)} - ${cleanNumber(imagAbs)}i`,
-    ];
+  if (allRational) {
+    const A = ratMat.map((r) => r.map((c) => new SimulFrac(c.n, c.d)));
+
+    for (let k = 0; k < n; k++) {
+      let pivotRow = k;
+      for (let i = k + 1; i < n; i++) {
+        if (A[i][k].absCmp(A[pivotRow][k]) > 0) {
+          pivotRow = i;
+        }
+      }
+
+      if (A[pivotRow][k].isZero()) {
+        return { success: false, error: 'Math ERROR' };
+      }
+
+      if (pivotRow !== k) {
+        const tmp = A[k];
+        A[k] = A[pivotRow];
+        A[pivotRow] = tmp;
+      }
+
+      for (let i = k + 1; i < n; i++) {
+        const factor = A[i][k].div(A[k][k]);
+        for (let j = k; j <= n; j++) {
+          A[i][j] = A[i][j].sub(factor.mul(A[k][j]));
+        }
+      }
+    }
+
+    const solFracs: SimulFrac[] = new Array(n);
+    for (let i = n - 1; i >= 0; i--) {
+      let sum = A[i][n];
+      for (let j = i + 1; j < n; j++) {
+        sum = sum.sub(A[i][j].mul(solFracs[j]));
+      }
+      if (A[i][i].isZero()) {
+        return { success: false, error: 'Math ERROR' };
+      }
+      solFracs[i] = sum.div(A[i][i]);
+    }
+
+    const solutions: SimulVarSolution[] = solFracs.map((f, idx) => {
+      let numVal = f.toNumber();
+      if (Math.abs(numVal - Math.round(numVal)) < 1e-10) {
+        numVal = Math.round(numVal);
+      }
+      const exactFracStr = f.toString();
+      const decStr = cleanNumber(numVal);
+      return {
+        varName: VAR_NAMES_4[idx] || `x${idx + 1}`,
+        val: numVal,
+        exactFraction: exactFracStr,
+        decimalStr: decStr,
+        showFraction: exactFracStr.includes('/'),
+      };
+    });
+
+    return { success: true, solutions };
   }
+
+  // Floating-point Gaussian elimination with partial pivoting & tolerance
+  const A: number[][] = [];
+  for (let i = 0; i < n; i++) {
+    A[i] = [];
+    for (let j = 0; j <= n; j++) {
+      const v = typeof rawMatrix[i]?.[j] === 'number'
+        ? (rawMatrix[i][j] as number)
+        : parseFloat(String(rawMatrix[i]?.[j] || '0'));
+      A[i][j] = isNaN(v) ? 0 : v;
+    }
+  }
+
+  for (let k = 0; k < n; k++) {
+    let pivotRow = k;
+    let maxVal = Math.abs(A[k][k]);
+
+    for (let i = k + 1; i < n; i++) {
+      const cur = Math.abs(A[i][k]);
+      if (cur > maxVal) {
+        maxVal = cur;
+        pivotRow = i;
+      }
+    }
+
+    if (maxVal < 1e-10) {
+      return { success: false, error: 'Math ERROR' };
+    }
+
+    if (pivotRow !== k) {
+      const tmp = A[k];
+      A[k] = A[pivotRow];
+      A[pivotRow] = tmp;
+    }
+
+    for (let i = k + 1; i < n; i++) {
+      const factor = A[i][k] / A[k][k];
+      for (let j = k; j <= n; j++) {
+        A[i][j] -= factor * A[k][j];
+      }
+    }
+  }
+
+  const x: number[] = new Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = A[i][n];
+    for (let j = i + 1; j < n; j++) {
+      sum -= A[i][j] * x[j];
+    }
+    if (Math.abs(A[i][i]) < 1e-10) {
+      return { success: false, error: 'Math ERROR' };
+    }
+    x[i] = sum / A[i][i];
+  }
+
+  const solutions: SimulVarSolution[] = x.map((rawVal, idx) => {
+    let val = rawVal;
+    if (Math.abs(val - Math.round(val)) < 1e-9) {
+      val = Math.round(val);
+    }
+    const frac = toSimulFrac(val);
+    const exactFracStr = frac ? frac.toString() : cleanNumber(val);
+    const decStr = cleanNumber(val);
+    return {
+      varName: VAR_NAMES_4[idx] || `x${idx + 1}`,
+      val,
+      exactFraction: exactFracStr,
+      decimalStr: decStr,
+      showFraction: exactFracStr.includes('/'),
+    };
+  });
+
+  return { success: true, solutions };
 }
 
-export function solveCubic(a: number, b: number, c: number, d: number): string[] {
-  if (Math.abs(a) < 1e-12) {
-    return solveQuadratic(b, c, d);
-  }
+// ==========================================
+// 3. Polynomial Equation Solver (Degrees 2 & 3)
+// Delegated to shared polySolver module
+// ==========================================
 
-  // Depressed cubic t³ + pt + q = 0 via x = t - b/(3a)
-  const B = b / a;
-  const C = c / a;
-  const D = d / a;
-  const shift = B / 3;
+import { solveQuadratic, solveCubic, solveQuartic } from './polySolver';
+export { solveQuadratic, solveCubic, solveQuartic };
 
-  const p = C - (B * B) / 3;
-  const q = (2 * B * B * B) / 27 - (B * C) / 3 + D;
 
-  const delta = (q * q) / 4 + (p * p * p) / 27;
+// ==========================================
+// 4. Mode Module Implementation
+// ==========================================
 
-  if (Math.abs(delta) < 1e-12) {
-    if (Math.abs(p) < 1e-12 && Math.abs(q) < 1e-12) {
-      const x = -shift;
-      return [
-        `x₁ = ${cleanNumber(x)}`,
-        `x₂ = ${cleanNumber(x)}`,
-        `x₃ = ${cleanNumber(x)}`,
-      ];
-    }
-    const u = Math.cbrt(-q / 2);
-    const x1 = 2 * u - shift;
-    const x2 = -u - shift;
-    const x3 = -u - shift;
+export interface CellEntry {
+  raw: string;
+  val: number;
+}
+
+export function createInitialSimulMatrix(n: 2 | 3 | 4): CellEntry[][] {
+  if (n === 2) {
+    // 2x + y = 5, x - y = 1 (Solution: x = 2, y = 1)
     return [
-      `x₁ = ${cleanNumber(x1)}`,
-      `x₂ = ${cleanNumber(x2)}`,
-      `x₃ = ${cleanNumber(x3)}`,
-    ];
-  } else if (delta < 0) {
-    // 3 distinct real roots (Trigonometric method)
-    const r = Math.sqrt(-(p * p * p) / 27);
-    const phi = Math.acos(Math.max(-1, Math.min(1, -q / (2 * r))));
-    const factor = 2 * Math.sqrt(-p / 3);
-
-    const t1 = factor * Math.cos(phi / 3);
-    const t2 = factor * Math.cos((phi + 2 * Math.PI) / 3);
-    const t3 = factor * Math.cos((phi + 4 * Math.PI) / 3);
-
-    const roots = [t1 - shift, t2 - shift, t3 - shift].sort((m, n) => n - m);
-    return [
-      `x₁ = ${cleanNumber(roots[0])}`,
-      `x₂ = ${cleanNumber(roots[1])}`,
-      `x₃ = ${cleanNumber(roots[2])}`,
-    ];
-  } else {
-    // 1 real root, 2 complex conjugate roots (Cardano's method)
-    const sqrtDelta = Math.sqrt(delta);
-    const u = Math.cbrt(-q / 2 + sqrtDelta);
-    const v = Math.cbrt(-q / 2 - sqrtDelta);
-
-    const x1 = u + v - shift;
-    const realPart = -(u + v) / 2 - shift;
-    const imagPart = Math.abs((Math.sqrt(3) * (u - v)) / 2);
-
-    return [
-      `x₁ = ${cleanNumber(x1)}`,
-      `x₂ = ${cleanNumber(realPart)} + ${cleanNumber(imagPart)}i`,
-      `x₃ = ${cleanNumber(realPart)} - ${cleanNumber(imagPart)}i`,
+      [{ raw: '2', val: 2 }, { raw: '1', val: 1 }, { raw: '5', val: 5 }],
+      [{ raw: '1', val: 1 }, { raw: '-1', val: -1 }, { raw: '1', val: 1 }],
     ];
   }
+  if (n === 3) {
+    // x + y + z = 6, 2y + 5z = -4, 2x + 5y - z = 27 (Solution: x = 5, y = 3, z = -2)
+    return [
+      [{ raw: '1', val: 1 }, { raw: '1', val: 1 }, { raw: '1', val: 1 }, { raw: '6', val: 6 }],
+      [{ raw: '0', val: 0 }, { raw: '2', val: 2 }, { raw: '5', val: 5 }, { raw: '-4', val: -4 }],
+      [{ raw: '2', val: 2 }, { raw: '5', val: 5 }, { raw: '-1', val: -1 }, { raw: '27', val: 27 }],
+    ];
+  }
+  // 4 Unknowns
+  return [
+    [{ raw: '1', val: 1 }, { raw: '1', val: 1 }, { raw: '1', val: 1 }, { raw: '1', val: 1 }, { raw: '10', val: 10 }],
+    [{ raw: '1', val: 1 }, { raw: '-1', val: -1 }, { raw: '2', val: 2 }, { raw: '-1', val: -1 }, { raw: '2', val: 2 }],
+    [{ raw: '2', val: 2 }, { raw: '1', val: 1 }, { raw: '-1', val: -1 }, { raw: '2', val: 2 }, { raw: '11', val: 11 }],
+    [{ raw: '3', val: 3 }, { raw: '2', val: 2 }, { raw: '1', val: 1 }, { raw: '-1', val: -1 }, { raw: '9', val: 9 }],
+  ];
 }
 
 export const eqnModeModule: ModeModule = {
@@ -139,41 +400,80 @@ export const eqnModeModule: ModeModule = {
     mode: 'EQN',
     screen: 'SELECT_TYPE',
     data: {
-      eqnType: 'POLY', // 'SIMUL' | 'POLY'
+      eqnType: 'SIMUL', // 'SIMUL' | 'POLY'
+      unknowns: 2, // 2 | 3 | 4
+      unknownsCursor: 2, // for display arrow selection
+      simulMatrix: createInitialSimulMatrix(2),
+      simulRow: 0,
+      simulCol: 0,
+      simulSolutions: null,
+      simulSolIndex: 0,
+      simulError: null,
+
+      // Polynomial state
       degree: 2, // 2 | 3
-      coeffs: [1, -5, 6], // Default: x² - 5x + 6 = 0
-      currentCoeffIdx: 0,
+      polyDegreeCursor: 2,
+      polyCoeffs: [1, -5, 6],
+      polyCoeffIdx: 0,
+      polySolutions: null,
+      polySolIndex: 0,
+
       inputBuffer: '',
-      solutions: null,
-      solIndex: 0,
     },
   }),
 
   handleKey: (key: string, ctx: ModeContext): boolean => {
     const { modeState, setModeState } = ctx;
 
+    // AC / ON global handling
     if (key === 'AC' || key === 'ON') {
+      if (modeState.screen === 'SIMUL_SOLUTIONS') {
+        // Return to coefficient input without losing values
+        setModeState((prev) => ({
+          ...prev,
+          screen: 'SIMUL_COEFF_INPUT',
+          data: { ...prev.data, inputBuffer: '' },
+        }));
+        return true;
+      }
+      if (modeState.screen === 'SIMUL_COEFF_INPUT') {
+        if (modeState.data.inputBuffer) {
+          setModeState((prev) => ({
+            ...prev,
+            data: { ...prev.data, inputBuffer: '' },
+          }));
+          return true;
+        }
+        setModeState((prev) => ({ ...prev, screen: 'SIMUL_SELECT_UNKNOWNS' }));
+        return true;
+      }
+      if (modeState.screen === 'SIMUL_SELECT_UNKNOWNS') {
+        setModeState((prev) => ({ ...prev, screen: 'SELECT_TYPE' }));
+        return true;
+      }
       if (modeState.screen === 'SOLUTIONS') {
         setModeState((prev) => ({
           ...prev,
           screen: 'COEFF_INPUT',
-          data: { ...prev.data, inputBuffer: '', currentCoeffIdx: 0 },
+          data: { ...prev.data, inputBuffer: '', polyCoeffIdx: 0 },
         }));
-      } else if (modeState.screen === 'SELECT_DEGREE') {
-        setModeState((prev) => ({ ...prev, screen: 'SELECT_TYPE' }));
-      } else {
-        setModeState((prev) => ({ ...prev, screen: 'SELECT_TYPE' }));
+        return true;
       }
+      if (modeState.screen === 'SELECT_DEGREE') {
+        setModeState((prev) => ({ ...prev, screen: 'SELECT_TYPE' }));
+        return true;
+      }
+      setModeState((prev) => ({ ...prev, screen: 'SELECT_TYPE' }));
       return true;
     }
 
-    // 1. Select Equation Type screen
+    // 1. SELECT_TYPE screen
     if (modeState.screen === 'SELECT_TYPE') {
       if (key === '1') {
         setModeState((prev) => ({
           ...prev,
-          screen: 'COEFF_INPUT',
-          data: { ...prev.data, eqnType: 'SIMUL', degree: 2, coeffs: [1, 1, 5, 2, -1, 4], currentCoeffIdx: 0, inputBuffer: '' },
+          screen: 'SIMUL_SELECT_UNKNOWNS',
+          data: { ...prev.data, eqnType: 'SIMUL', unknownsCursor: prev.data.unknowns || 2 },
         }));
         return true;
       }
@@ -181,69 +481,341 @@ export const eqnModeModule: ModeModule = {
         setModeState((prev) => ({
           ...prev,
           screen: 'SELECT_DEGREE',
+          data: { ...prev.data, eqnType: 'POLY', polyDegreeCursor: prev.data.degree || 2 },
         }));
         return true;
       }
       return true;
     }
 
-    // 2. Select Degree screen for Polynomial
-    if (modeState.screen === 'SELECT_DEGREE') {
-      if (key === '2') {
+    // 2. SIMUL_SELECT_UNKNOWNS: Choose number of unknowns (2, 3, 4)
+    if (modeState.screen === 'SIMUL_SELECT_UNKNOWNS') {
+      const cur = modeState.data.unknownsCursor || 2;
+
+      if (key === 'UP') {
+        const next = cur > 2 ? cur - 1 : 4;
+        setModeState((prev) => ({ ...prev, data: { ...prev.data, unknownsCursor: next } }));
+        return true;
+      }
+      if (key === 'DOWN') {
+        const next = cur < 4 ? cur + 1 : 2;
+        setModeState((prev) => ({ ...prev, data: { ...prev.data, unknownsCursor: next } }));
+        return true;
+      }
+      if (key === '2' || (key === '=' && cur === 2)) {
         setModeState((prev) => ({
           ...prev,
-          screen: 'COEFF_INPUT',
-          data: { ...prev.data, eqnType: 'POLY', degree: 2, coeffs: [1, -5, 6], currentCoeffIdx: 0, inputBuffer: '' },
+          screen: 'SIMUL_COEFF_INPUT',
+          data: {
+            ...prev.data,
+            unknowns: 2,
+            simulMatrix: prev.data.unknowns === 2 && prev.data.simulMatrix ? prev.data.simulMatrix : createInitialSimulMatrix(2),
+            simulRow: 0,
+            simulCol: 0,
+            inputBuffer: '',
+          },
         }));
         return true;
       }
-      if (key === '3') {
+      if (key === '3' || (key === '=' && cur === 3)) {
         setModeState((prev) => ({
           ...prev,
-          screen: 'COEFF_INPUT',
-          data: { ...prev.data, eqnType: 'POLY', degree: 3, coeffs: [1, -6, 11, -6], currentCoeffIdx: 0, inputBuffer: '' },
+          screen: 'SIMUL_COEFF_INPUT',
+          data: {
+            ...prev.data,
+            unknowns: 3,
+            simulMatrix: prev.data.unknowns === 3 && prev.data.simulMatrix ? prev.data.simulMatrix : createInitialSimulMatrix(3),
+            simulRow: 0,
+            simulCol: 0,
+            inputBuffer: '',
+          },
+        }));
+        return true;
+      }
+      if (key === '4' || (key === '=' && cur === 4)) {
+        setModeState((prev) => ({
+          ...prev,
+          screen: 'SIMUL_COEFF_INPUT',
+          data: {
+            ...prev.data,
+            unknowns: 4,
+            simulMatrix: prev.data.unknowns === 4 && prev.data.simulMatrix ? prev.data.simulMatrix : createInitialSimulMatrix(4),
+            simulRow: 0,
+            simulCol: 0,
+            inputBuffer: '',
+          },
         }));
         return true;
       }
       return true;
     }
 
-    // 3. Coefficient Input screen
-    if (modeState.screen === 'COEFF_INPUT') {
-      if (key === 'LEFT') {
-        setModeState((prev) => {
-          const cur = prev.data.currentCoeffIdx || 0;
-          const max = (prev.data.coeffs?.length || 3) - 1;
-          const nextIdx = cur > 0 ? cur - 1 : max;
-          return {
-            ...prev,
-            data: { ...prev.data, currentCoeffIdx: nextIdx, inputBuffer: '' },
-          };
-        });
-        return true;
-      }
+    // 3. SIMUL_COEFF_INPUT: Coefficient matrix input
+    if (modeState.screen === 'SIMUL_COEFF_INPUT') {
+      const u = (modeState.data.unknowns as 2 | 3 | 4) || 2;
+      const numRows = u;
+      const numCols = u + 1;
+      let r = modeState.data.simulRow || 0;
+      let c = modeState.data.simulCol || 0;
+      const buf = modeState.data.inputBuffer || '';
+      const matrix: CellEntry[][] = modeState.data.simulMatrix || createInitialSimulMatrix(u);
 
+      // Helper to evaluate and commit active cell buffer if typed
+      const commitActiveBuffer = () => {
+        if (!buf) return;
+        const evalRes = evaluateMathExpression(
+          buf.replace(/×/g, '*').replace(/÷/g, '/'),
+          ctx.angleMode,
+          { ...ctx.sharedMemory },
+          ctx.sharedMemory.Ans
+        );
+        const val = evalRes.success && evalRes.result !== undefined ? evalRes.result : (parseFloat(buf) || 0);
+        const raw = evalRes.exactResult || buf;
+        if (!matrix[r]) matrix[r] = [];
+        matrix[r][c] = { raw, val };
+      };
+
+      // D-Pad navigation between cells
       if (key === 'RIGHT') {
-        setModeState((prev) => {
-          const cur = prev.data.currentCoeffIdx || 0;
-          const max = (prev.data.coeffs?.length || 3) - 1;
-          const nextIdx = cur < max ? cur + 1 : 0;
-          return {
-            ...prev,
-            data: { ...prev.data, currentCoeffIdx: nextIdx, inputBuffer: '' },
-          };
-        });
+        commitActiveBuffer();
+        if (c < numCols - 1) {
+          c++;
+        } else if (r < numRows - 1) {
+          r++;
+          c = 0;
+        } else {
+          r = 0;
+          c = 0;
+        }
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, simulMatrix: [...matrix], simulRow: r, simulCol: c, inputBuffer: '' },
+        }));
+        return true;
+      }
+
+      if (key === 'LEFT') {
+        commitActiveBuffer();
+        if (c > 0) {
+          c--;
+        } else if (r > 0) {
+          r--;
+          c = numCols - 1;
+        } else {
+          r = numRows - 1;
+          c = numCols - 1;
+        }
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, simulMatrix: [...matrix], simulRow: r, simulCol: c, inputBuffer: '' },
+        }));
+        return true;
+      }
+
+      if (key === 'DOWN') {
+        commitActiveBuffer();
+        r = (r + 1) % numRows;
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, simulMatrix: [...matrix], simulRow: r, simulCol: c, inputBuffer: '' },
+        }));
+        return true;
+      }
+
+      if (key === 'UP') {
+        commitActiveBuffer();
+        r = (r - 1 + numRows) % numRows;
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, simulMatrix: [...matrix], simulRow: r, simulCol: c, inputBuffer: '' },
+        }));
         return true;
       }
 
       if (key === 'DEL') {
-        setModeState((prev) => {
-          const buf = prev.data.inputBuffer || '';
-          return {
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, inputBuffer: buf.slice(0, -1) },
+        }));
+        return true;
+      }
+
+      // Enter key '=': confirms cell and advances, or solves if at end
+      if (key === '=') {
+        commitActiveBuffer();
+        const isLastCell = r === numRows - 1 && c === numCols - 1;
+
+        if (isLastCell) {
+          // Solve system using Gaussian Elimination with partial pivoting
+          const rawValues: (number | string)[][] = matrix.map((row) =>
+            row.map((cell) => cell.raw || cell.val || 0)
+          );
+          const solveRes = solveSimultaneousEquations(rawValues, u);
+
+          setModeState((prev) => ({
             ...prev,
-            data: { ...prev.data, inputBuffer: buf.slice(0, -1) },
+            screen: 'SIMUL_SOLUTIONS',
+            data: {
+              ...prev.data,
+              simulMatrix: [...matrix],
+              simulSolutions: solveRes.solutions || null,
+              simulError: solveRes.error || null,
+              simulSolIndex: 0,
+              inputBuffer: '',
+            },
+          }));
+        } else {
+          // Advance to next cell
+          if (c < numCols - 1) {
+            c++;
+          } else {
+            r++;
+            c = 0;
+          }
+          setModeState((prev) => ({
+            ...prev,
+            data: { ...prev.data, simulMatrix: [...matrix], simulRow: r, simulCol: c, inputBuffer: '' },
+          }));
+        }
+        return true;
+      }
+
+      // Input characters: accepts numbers, fractions, operations, sqrt, pi, Ans
+      let charToAdd = '';
+      if (/^[0-9.\-]$/.test(key)) {
+        charToAdd = key;
+      } else if (key === '+' || key === '-' || key === '*' || key === '×') {
+        charToAdd = key === '×' ? '*' : key;
+      } else if (key === '/' || key === '÷' || key === '■/□') {
+        charToAdd = '/';
+      } else if (key === '√' || key === 'sqrt') {
+        charToAdd = '√(';
+      } else if (key === 'π' || key === 'PI') {
+        charToAdd = 'π';
+      } else if (key === 'Ans') {
+        charToAdd = 'Ans';
+      } else if (key === '(' || key === ')') {
+        charToAdd = key;
+      } else if (key === '^') {
+        charToAdd = '^';
+      } else if (key === '²') {
+        charToAdd = '^2';
+      }
+
+      if (charToAdd) {
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, inputBuffer: buf + charToAdd },
+        }));
+        return true;
+      }
+
+      return true;
+    }
+
+    // 4. SIMUL_SOLUTIONS: Display variable solutions with S<=>D toggle
+    if (modeState.screen === 'SIMUL_SOLUTIONS') {
+      const sols = modeState.data.simulSolutions || [];
+      const curIdx = modeState.data.simulSolIndex || 0;
+
+      if (key === 'DOWN' || key === '=') {
+        if (sols.length > 0) {
+          setModeState((prev) => ({
+            ...prev,
+            data: { ...prev.data, simulSolIndex: (curIdx + 1) % sols.length },
+          }));
+        }
+        return true;
+      }
+
+      if (key === 'UP') {
+        if (sols.length > 0) {
+          setModeState((prev) => ({
+            ...prev,
+            data: { ...prev.data, simulSolIndex: (curIdx - 1 + sols.length) % sols.length },
+          }));
+        }
+        return true;
+      }
+
+      // S<=>D toggle fraction vs decimal
+      if (key === 'S_D' || key === 'FORMAT') {
+        if (sols.length > 0) {
+          const updated = [...sols];
+          updated[curIdx] = {
+            ...updated[curIdx],
+            showFraction: !updated[curIdx].showFraction,
           };
-        });
+          setModeState((prev) => ({
+            ...prev,
+            data: { ...prev.data, simulSolutions: updated },
+          }));
+        }
+        return true;
+      }
+
+      return true;
+    }
+
+    // 5. Polynomial SELECT_DEGREE screen
+    if (modeState.screen === 'SELECT_DEGREE') {
+      const cur = modeState.data.polyDegreeCursor || 2;
+      if (key === 'UP' || key === 'DOWN') {
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, polyDegreeCursor: cur === 2 ? 3 : 2 },
+        }));
+        return true;
+      }
+      if (key === '2' || (key === '=' && cur === 2)) {
+        setModeState((prev) => ({
+          ...prev,
+          screen: 'COEFF_INPUT',
+          data: { ...prev.data, eqnType: 'POLY', degree: 2, polyCoeffs: [1, -5, 6], polyCoeffIdx: 0, inputBuffer: '' },
+        }));
+        return true;
+      }
+      if (key === '3' || (key === '=' && cur === 3)) {
+        setModeState((prev) => ({
+          ...prev,
+          screen: 'COEFF_INPUT',
+          data: { ...prev.data, eqnType: 'POLY', degree: 3, polyCoeffs: [1, -6, 11, -6], polyCoeffIdx: 0, inputBuffer: '' },
+        }));
+        return true;
+      }
+      return true;
+    }
+
+    // 6. Polynomial COEFF_INPUT screen
+    if (modeState.screen === 'COEFF_INPUT') {
+      const cur = modeState.data.polyCoeffIdx || 0;
+      const deg = modeState.data.degree || 2;
+      const defaultCoeffs = deg === 3 ? [1, -6, 11, -6] : [1, -5, 6];
+      const coeffs = [...(modeState.data.polyCoeffs || defaultCoeffs)];
+      const max = coeffs.length - 1;
+
+      if (key === 'LEFT') {
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, polyCoeffIdx: cur > 0 ? cur - 1 : max, inputBuffer: '' },
+        }));
+        return true;
+      }
+
+      if (key === 'RIGHT') {
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, polyCoeffIdx: cur < max ? cur + 1 : 0, inputBuffer: '' },
+        }));
+        return true;
+      }
+
+      if (key === 'DEL') {
+        const buf = modeState.data.inputBuffer || '';
+        setModeState((prev) => ({
+          ...prev,
+          data: { ...prev.data, inputBuffer: buf.slice(0, -1) },
+        }));
         return true;
       }
 
@@ -257,59 +829,44 @@ export const eqnModeModule: ModeModule = {
 
       if (key === '=') {
         const buf = modeState.data.inputBuffer;
-        const curIdx = modeState.data.currentCoeffIdx || 0;
-        const degree = modeState.data.degree || 2;
-        const defaultCoeffs = degree === 3 ? [1, -6, 11, -6] : [1, -5, 6];
-        const coeffs = [...(modeState.data.coeffs || defaultCoeffs)];
-
         if (buf && buf !== '-' && buf !== '.') {
-          coeffs[curIdx] = parseFloat(buf) || 0;
+          coeffs[cur] = parseFloat(buf) || 0;
         }
 
-        if (curIdx < coeffs.length - 1) {
+        if (cur < max) {
           setModeState((prev) => ({
             ...prev,
-            data: { ...prev.data, coeffs, currentCoeffIdx: curIdx + 1, inputBuffer: '' },
+            data: { ...prev.data, polyCoeffs: coeffs, polyCoeffIdx: cur + 1, inputBuffer: '' },
           }));
         } else {
-          // Final coefficient entered: solve equation!
-          let sols: string[] = [];
-          if (degree === 3) {
-            sols = solveCubic(coeffs[0], coeffs[1], coeffs[2], coeffs[3]);
-          } else {
-            sols = solveQuadratic(coeffs[0], coeffs[1], coeffs[2]);
-          }
+          const sols = deg === 3
+            ? solveCubic(coeffs[0], coeffs[1], coeffs[2], coeffs[3])
+            : solveQuadratic(coeffs[0], coeffs[1], coeffs[2]);
 
           setModeState((prev) => ({
             ...prev,
             screen: 'SOLUTIONS',
-            data: { ...prev.data, coeffs, solutions: sols, solIndex: 0, inputBuffer: '' },
+            data: { ...prev.data, polyCoeffs: coeffs, polySolutions: sols, polySolIndex: 0, inputBuffer: '' },
           }));
         }
         return true;
       }
     }
 
-    // 4. Solutions Display screen
+    // 7. Polynomial SOLUTIONS screen
     if (modeState.screen === 'SOLUTIONS') {
-      const sols = modeState.data.solutions || [];
+      const sols = modeState.data.polySolutions || [];
       if (key === 'DOWN' || key === '=') {
         setModeState((prev) => ({
           ...prev,
-          data: {
-            ...prev.data,
-            solIndex: ((prev.data.solIndex || 0) + 1) % Math.max(1, sols.length),
-          },
+          data: { ...prev.data, polySolIndex: ((prev.data.polySolIndex || 0) + 1) % Math.max(1, sols.length) },
         }));
         return true;
       }
       if (key === 'UP') {
         setModeState((prev) => ({
           ...prev,
-          data: {
-            ...prev.data,
-            solIndex: ((prev.data.solIndex || 0) - 1 + sols.length) % Math.max(1, sols.length),
-          },
+          data: { ...prev.data, polySolIndex: ((prev.data.polySolIndex || 0) - 1 + sols.length) % Math.max(1, sols.length) },
         }));
         return true;
       }
@@ -322,7 +879,7 @@ export const eqnModeModule: ModeModule = {
   renderDisplay: (ctx: ModeContext) => {
     const { modeState } = ctx;
 
-    // 1. Select Type
+    // 1. SELECT_TYPE
     if (modeState.screen === 'SELECT_TYPE') {
       return React.createElement(
         'div',
@@ -338,27 +895,241 @@ export const eqnModeModule: ModeModule = {
           { className: 'space-y-1.5 text-xs my-auto' },
           React.createElement(
             'div',
-            { className: 'flex items-center gap-1.5' },
-            React.createElement('span', { className: 'font-bold px-1 py-0.5 rounded bg-[var(--display-text)]/15 text-[var(--label-shift)] text-[10px]' }, '1:'),
-            React.createElement('span', { className: 'font-semibold' }, 'Simul Equation')
+            { className: 'flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--display-text)]/10 border border-[var(--display-text)]/20' },
+            React.createElement('span', { className: 'font-bold px-1.5 py-0.5 rounded bg-[var(--display-text)]/20 text-[var(--label-shift)] text-[10px]' }, '1:'),
+            React.createElement('span', { className: 'font-semibold' }, 'Simul Equation'),
+            React.createElement('span', { className: 'text-[9.5px] opacity-70 ml-auto' }, '2 ~ 4 Unknowns')
           ),
           React.createElement(
             'div',
-            { className: 'flex items-center gap-1.5' },
-            React.createElement('span', { className: 'font-bold px-1 py-0.5 rounded bg-[var(--display-text)]/15 text-[var(--label-shift)] text-[10px]' }, '2:'),
-            React.createElement('span', { className: 'font-semibold' }, 'Polynomial')
+            { className: 'flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--display-text)]/5 border border-[var(--display-text)]/20' },
+            React.createElement('span', { className: 'font-bold px-1.5 py-0.5 rounded bg-[var(--display-text)]/20 text-[var(--label-shift)] text-[10px]' }, '2:'),
+            React.createElement('span', { className: 'font-semibold' }, 'Polynomial'),
+            React.createElement('span', { className: 'text-[9.5px] opacity-70 ml-auto' }, 'Degree 2 ~ 3')
           )
         ),
         React.createElement(
           'div',
           { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' },
-          'Press [1] or [2] to select'
+          'Press [1] or [2]'
         )
       );
     }
 
-    // 2. Select Degree for Polynomial
+    // 2. SIMUL_SELECT_UNKNOWNS (Choose 2, 3, 4 Unknowns)
+    if (modeState.screen === 'SIMUL_SELECT_UNKNOWNS') {
+      const cur = modeState.data.unknownsCursor || 2;
+      return React.createElement(
+        'div',
+        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        React.createElement(
+          'div',
+          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between' },
+          React.createElement('span', null, 'Simul Equation'),
+          React.createElement('span', { className: 'text-[9.5px] opacity-70 font-normal' }, 'Unknowns? 2~4')
+        ),
+        React.createElement(
+          'div',
+          { className: 'space-y-1 text-xs my-auto' },
+          [
+            { num: 2, label: '2 Unknowns (x, y)' },
+            { num: 3, label: '3 Unknowns (x, y, z)' },
+            { num: 4, label: '4 Unknowns (x, y, z, t)' },
+          ].map((item) => {
+            const isSelected = item.num === cur;
+            return React.createElement(
+              'div',
+              {
+                key: item.num,
+                className: `flex items-center justify-between px-2 py-1 rounded transition-colors border ${
+                  isSelected
+                    ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold'
+                    : 'border-[var(--display-text)]/20 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                }`,
+              },
+              React.createElement('span', { className: 'font-bold mr-2' }, `${item.num}:`),
+              React.createElement('span', { className: 'flex-1 text-left' }, item.label),
+              isSelected && React.createElement('span', { className: 'text-[10px]' }, '◄')
+            );
+          })
+        ),
+        React.createElement(
+          'div',
+          { className: 'text-[9px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between' },
+          React.createElement('span', null, '[AC] Back'),
+          React.createElement('span', null, '[▲▼] Select  [=] Confirm')
+        )
+      );
+    }
+
+    // 3. SIMUL_COEFF_INPUT (Matrix Grid)
+    if (modeState.screen === 'SIMUL_COEFF_INPUT') {
+      const u = (modeState.data.unknowns as 2 | 3 | 4) || 2;
+      const r = modeState.data.simulRow || 0;
+      const c = modeState.data.simulCol || 0;
+      const buf = modeState.data.inputBuffer || '';
+      const matrix: CellEntry[][] = modeState.data.simulMatrix || createInitialSimulMatrix(u);
+      const colLabels = u === 2 ? ['x', 'y', '=k'] : u === 3 ? ['x', 'y', 'z', '=k'] : ['x', 'y', 'z', 't', '=k'];
+
+      // Formula header
+      let formula = '';
+      if (u === 2) formula = `Eq${r + 1}: a${r + 1}x + b${r + 1}y = c${r + 1}`;
+      else if (u === 3) formula = `Eq${r + 1}: a${r + 1}x + b${r + 1}y + c${r + 1}z = d${r + 1}`;
+      else formula = `Eq${r + 1}: a${r + 1}x + b${r + 1}y + c${r + 1}z + d${r + 1}t = e${r + 1}`;
+
+      const activeCellVal = matrix[r]?.[c]?.raw ?? matrix[r]?.[c]?.val ?? '0';
+
+      return React.createElement(
+        'div',
+        { className: 'flex flex-col h-full justify-between p-1.5 font-mono select-none text-[var(--display-text)]' },
+        // Top status
+        React.createElement(
+          'div',
+          { className: 'text-[11px] font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center' },
+          React.createElement('span', { className: 'truncate' }, formula),
+          React.createElement('span', { className: 'text-[9px] text-[var(--display-text)]/70 font-normal shrink-0 ml-1' }, `${u} Unknowns`)
+        ),
+        // Grid Table
+        React.createElement(
+          'div',
+          { className: 'my-auto overflow-x-auto no-scrollbar w-full' },
+          React.createElement(
+            'div',
+            { className: 'inline-block min-w-full text-center text-xs' },
+            // Column Headers
+            React.createElement(
+              'div',
+              { className: 'flex items-center gap-1 pb-1 border-b border-[var(--display-text)]/15 text-[10px] text-[var(--display-text)]/75' },
+              React.createElement('div', { className: 'w-5 shrink-0' }, '#'),
+              colLabels.map((lbl, idx) =>
+                React.createElement(
+                  'div',
+                  { key: idx, className: `flex-1 min-w-[34px] font-bold ${idx === c ? 'text-[var(--label-shift)]' : ''}` },
+                  lbl
+                )
+              )
+            ),
+            // Rows
+            matrix.slice(0, u).map((row, rowIdx) => {
+              const isCurrentRow = rowIdx === r;
+              return React.createElement(
+                'div',
+                {
+                  key: rowIdx,
+                  className: `flex items-center gap-1 py-0.5 ${isCurrentRow ? 'bg-[var(--display-text)]/5 rounded' : ''}`,
+                },
+                React.createElement('div', { className: `w-5 shrink-0 text-[10px] font-bold ${isCurrentRow ? 'text-[var(--label-shift)]' : 'opacity-60'}` }, `${rowIdx + 1}:`),
+                row.map((cell, colIdx) => {
+                  const isSelected = isCurrentRow && colIdx === c;
+                  const displayStr = isSelected && buf !== '' ? buf : cell?.raw ?? cell?.val ?? '0';
+                  return React.createElement(
+                    'div',
+                    {
+                      key: colIdx,
+                      className: `flex-1 min-w-[34px] px-1 py-0.5 rounded text-[11px] truncate border transition-all ${
+                        isSelected
+                          ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)] font-bold shadow-sm'
+                          : 'border-[var(--display-text)]/20 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                      }`,
+                    },
+                    displayStr
+                  );
+                })
+              );
+            })
+          )
+        ),
+        // Cell preview & instructions
+        React.createElement(
+          'div',
+          { className: 'text-[9.5px] border-t border-[var(--display-text)]/20 pt-0.5 flex justify-between items-center text-[var(--display-text)]/80' },
+          React.createElement('span', null, `Cell [${r + 1}, ${colLabels[c]}]: `, React.createElement('strong', { className: 'text-[var(--label-shift)]' }, buf !== '' ? buf : activeCellVal)),
+          React.createElement('span', { className: 'text-[9px] opacity-70' }, '[▲▼◄►] [=]')
+        )
+      );
+    }
+
+    // 4. SIMUL_SOLUTIONS (One at a time with S<=>D toggle)
+    if (modeState.screen === 'SIMUL_SOLUTIONS') {
+      const u = (modeState.data.unknowns as 2 | 3 | 4) || 2;
+      const err = modeState.data.simulError;
+      const sols: SimulVarSolution[] = modeState.data.simulSolutions || [];
+      const curIdx = modeState.data.simulSolIndex || 0;
+      const activeSol = sols[curIdx];
+
+      if (err || sols.length === 0) {
+        return React.createElement(
+          'div',
+          { className: 'flex flex-col h-full justify-between p-3 font-mono text-[var(--display-text)] select-none text-center' },
+          React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Simul Equation'),
+          React.createElement(
+            'div',
+            { className: 'my-auto space-y-1' },
+            React.createElement('div', { className: 'text-base font-bold text-rose-400 tracking-wider animate-pulse' }, 'Math ERROR'),
+            React.createElement('div', { className: 'text-xs text-[var(--display-text)]/80' }, 'No Unique Solution')
+          ),
+          React.createElement('div', { className: 'text-[10px] text-[var(--display-text)]/60 border-t border-[var(--display-text)]/20 pt-1' }, 'Press [AC] to edit coefficients')
+        );
+      }
+
+      const displayVal = activeSol.showFraction ? activeSol.exactFraction : activeSol.decimalStr;
+
+      return React.createElement(
+        'div',
+        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        // Top Status
+        React.createElement(
+          'div',
+          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center' },
+          React.createElement('span', null, `Simul Eqn (${u} Unknowns)`),
+          React.createElement('span', { className: 'text-[9px] text-[var(--display-text)]/70 font-normal' }, '[S⇔D] Fraction/Dec')
+        ),
+        // Active Variable Display
+        React.createElement(
+          'div',
+          { className: 'my-auto text-center py-2' },
+          React.createElement('div', { className: 'text-sm font-bold text-[var(--label-shift)] mb-1' }, `${activeSol.varName} =`),
+          React.createElement(
+            'div',
+            { className: 'text-2xl sm:text-3xl font-extrabold tracking-wider text-[var(--display-text)] px-2 py-1 rounded bg-[var(--display-text)]/10 border border-[var(--display-text)]/20 inline-block min-w-[120px]' },
+            displayVal
+          )
+        ),
+        // Variable Selectors & Navigation footer
+        React.createElement(
+          'div',
+          { className: 'space-y-1 border-t border-[var(--display-text)]/20 pt-1' },
+          React.createElement(
+            'div',
+            { className: 'flex justify-center gap-1.5 text-xs' },
+            sols.map((s, idx) =>
+              React.createElement(
+                'div',
+                {
+                  key: s.varName,
+                  className: `px-2 py-0.5 rounded text-[11px] font-bold ${
+                    idx === curIdx
+                      ? 'bg-[var(--label-shift)] text-[var(--display-bg)]'
+                      : 'bg-[var(--display-text)]/10 text-[var(--display-text)]'
+                  }`,
+                },
+                s.varName
+              )
+            )
+          ),
+          React.createElement(
+            'div',
+            { className: 'text-[9px] text-[var(--display-text)]/60 flex justify-between items-center' },
+            React.createElement('span', null, '[AC] Edit Coeffs'),
+            React.createElement('span', null, '[▲▼] [=] Next Root')
+          )
+        )
+      );
+    }
+
+    // 5. SELECT_DEGREE (Polynomial)
     if (modeState.screen === 'SELECT_DEGREE') {
+      const cur = modeState.data.polyDegreeCursor || 2;
       return React.createElement(
         'div',
         { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
@@ -371,33 +1142,39 @@ export const eqnModeModule: ModeModule = {
         React.createElement(
           'div',
           { className: 'space-y-1.5 text-xs my-auto' },
-          React.createElement(
-            'div',
-            { className: 'flex items-center justify-between px-2 py-1 rounded border border-[var(--display-text)]/20 bg-[var(--display-text)]/5' },
-            React.createElement('span', { className: 'font-bold text-[var(--label-shift)] mr-2' }, '2:'),
-            React.createElement('span', { className: 'font-medium flex-1 text-left' }, 'ax² + bx + c = 0'),
-            React.createElement('span', { className: 'text-[9.5px] opacity-70' }, 'Degree 2')
-          ),
-          React.createElement(
-            'div',
-            { className: 'flex items-center justify-between px-2 py-1 rounded border border-[var(--display-text)]/20 bg-[var(--display-text)]/5' },
-            React.createElement('span', { className: 'font-bold text-[var(--label-shift)] mr-2' }, '3:'),
-            React.createElement('span', { className: 'font-medium flex-1 text-left' }, 'ax³ + bx² + cx + d = 0'),
-            React.createElement('span', { className: 'text-[9.5px] opacity-70' }, 'Degree 3')
-          )
+          [
+            { deg: 2, formula: 'ax² + bx + c = 0', name: 'Degree 2' },
+            { deg: 3, formula: 'ax³ + bx² + cx + d = 0', name: 'Degree 3' },
+          ].map((item) => {
+            const isSelected = item.deg === cur;
+            return React.createElement(
+              'div',
+              {
+                key: item.deg,
+                className: `flex items-center justify-between px-2 py-1 rounded border transition-colors ${
+                  isSelected
+                    ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold'
+                    : 'border-[var(--display-text)]/20 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                }`,
+              },
+              React.createElement('span', { className: 'font-bold mr-2' }, `${item.deg}:`),
+              React.createElement('span', { className: 'font-medium flex-1 text-left' }, item.formula),
+              isSelected && React.createElement('span', { className: 'text-[10px]' }, '◄')
+            );
+          })
         ),
         React.createElement(
           'div',
           { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20 flex justify-between' },
           React.createElement('span', null, '[AC] Back'),
-          React.createElement('span', null, 'Press [2] or [3]')
+          React.createElement('span', null, '[▲▼] Select  [=] Confirm')
         )
       );
     }
 
-    // 3. Solutions screen (Answer Display)
+    // 6. SOLUTIONS (Polynomial)
     if (modeState.screen === 'SOLUTIONS') {
-      const sols = modeState.data.solutions || [];
+      const sols = modeState.data.polySolutions || [];
       const degree = modeState.data.degree || 2;
       return React.createElement(
         'div',
@@ -417,13 +1194,13 @@ export const eqnModeModule: ModeModule = {
               {
                 key: idx,
                 className: `px-2 py-0.5 rounded transition-colors flex items-center justify-between ${
-                  idx === (modeState.data.solIndex || 0)
+                  idx === (modeState.data.polySolIndex || 0)
                     ? 'bg-[var(--display-text)]/20 text-[var(--display-text)] border border-[var(--display-text)]/40'
                     : 'text-[var(--display-text)]/85'
                 }`,
               },
               React.createElement('span', null, s),
-              idx === (modeState.data.solIndex || 0) && React.createElement('span', { className: 'text-[10px] text-[var(--label-shift)]' }, '◄')
+              idx === (modeState.data.polySolIndex || 0) && React.createElement('span', { className: 'text-[10px] text-[var(--label-shift)]' }, '◄')
             )
           )
         ),
@@ -436,11 +1213,11 @@ export const eqnModeModule: ModeModule = {
       );
     }
 
-    // 4. Coefficient input table
+    // 7. COEFF_INPUT (Polynomial)
     const degree = modeState.data.degree || 2;
     const defaultCoeffs = degree === 3 ? [1, -6, 11, -6] : [1, -5, 6];
-    const coeffs = modeState.data.coeffs || defaultCoeffs;
-    const curIdx = modeState.data.currentCoeffIdx || 0;
+    const coeffs = modeState.data.polyCoeffs || defaultCoeffs;
+    const curIdx = modeState.data.polyCoeffIdx || 0;
     const buf = modeState.data.inputBuffer;
     const labels = degree === 3 ? ['a', 'b', 'c', 'd'] : ['a', 'b', 'c'];
     const formula = degree === 3 ? 'ax³ + bx² + cx + d = 0' : 'ax² + bx + c = 0';

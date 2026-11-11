@@ -1114,6 +1114,12 @@ export default function App() {
     if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
+
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('■/□', modeContext) || currentModeModule.handleKey('/', modeContext);
+      if (handled) return;
+    }
+
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
@@ -1154,6 +1160,12 @@ export default function App() {
     if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
+
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('√', modeContext) || currentModeModule.handleKey('sqrt', modeContext);
+      if (handled) return;
+    }
+
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
@@ -1174,6 +1186,12 @@ export default function App() {
     if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
+
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('^', modeContext);
+      if (handled) return;
+    }
+
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
@@ -1194,6 +1212,12 @@ export default function App() {
     if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
+
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey(op, modeContext);
+      if (handled) return;
+    }
+
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
@@ -1249,6 +1273,12 @@ export default function App() {
   const handleFormatCycle = () => {
     if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('action');
+
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('S_D', modeContext) || currentModeModule.handleKey('FORMAT', modeContext);
+      if (handled) return;
+    }
+
     if (!isCalculated) return;
 
     if (lastExactResult) {
