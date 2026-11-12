@@ -55,7 +55,7 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
             e.stopPropagation();
             onSetCursor(slotId, 0);
           }}
-          className={`inline-flex items-center justify-center min-w-[1em] min-h-[1em] px-0.5 rounded transition-colors cursor-pointer font-mono select-none ${
+          className={`inline-flex items-center justify-center min-w-[1em] min-h-[1em] px-0.5 rounded transition-colors cursor-pointer font-sans select-none ${
             isCurrentSlot
               ? 'border border-dashed border-[var(--display-text)] bg-[var(--display-text)]/15 text-[var(--display-text)]'
               : 'border border-dashed border-[var(--display-text)]/35 text-[var(--display-text)]/40 hover:border-[var(--display-text)]/60'
@@ -260,7 +260,7 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
               : ''
           }`}
         >
-          <span className="text-[0.85em] font-mono text-[var(--display-text)] select-none mr-0.5">
+          <span className="text-[0.85em] font-sans text-[var(--display-text)] select-none mr-0.5">
             log
           </span>
           {/* Subscript Base */}
@@ -291,7 +291,7 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
         paddingTop: '0.25rem',
         paddingBottom: '0.25rem',
       }}
-      className="w-full whitespace-nowrap font-mono tabular-nums text-[var(--display-text)] flex items-center no-scrollbar tracking-wide select-none cursor-text min-h-[38px]"
+      className="w-full whitespace-nowrap font-sans tabular-nums text-[var(--display-text)] flex items-center no-scrollbar tracking-wide select-none cursor-text min-h-[38px]"
     >
       {nodes.length === 0 ? (
         <span className="text-[var(--display-text)]/40 flex items-center">

@@ -199,9 +199,9 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
               <TrendingUp className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold font-mono text-slate-100 flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-bold font-sans text-slate-100 flex items-center gap-2">
                 Definite Integral & Area Calculator
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-sans bg-emerald-950 text-emerald-300 border border-emerald-800">
                   ∫ |f(x)| dx
                 </span>
               </h2>
@@ -223,7 +223,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
         </div>
 
         {/* Mode Selector Tabs */}
-        <div className="p-2.5 bg-[#14141A] border-b border-slate-800 flex gap-1.5 text-xs font-mono">
+        <div className="p-2.5 bg-[#14141A] border-b border-slate-800 flex gap-1.5 text-xs font-sans">
           <button
             onClick={() => {
               playKeyClick('action');
@@ -275,7 +275,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
           
           {/* Interactive Visual Graph Canvas */}
           <div className="bg-[#0B0B0E] border border-slate-800 rounded-xl p-2.5 relative shadow-inner">
-            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1 px-1">
+            <div className="flex items-center justify-between text-[11px] font-sans text-slate-400 mb-1 px-1">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-1 bg-emerald-400 rounded-full inline-block"></span>
                 <span>f(x) = {fExpr}</span>
@@ -384,13 +384,13 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
 
               {/* Boundary Labels */}
               <div 
-                className="absolute top-1 text-[9px] font-mono text-amber-400 bg-slate-900/90 px-1 py-0.5 rounded border border-amber-400/40"
+                className="absolute top-1 text-[9px] font-sans text-amber-400 bg-slate-900/90 px-1 py-0.5 rounded border border-amber-400/40"
                 style={{ left: `${Math.min(90, Math.max(5, (toSvgX(parsedA) / svgWidth) * 100))}%` }}
               >
                 a = {boundA}
               </div>
               <div 
-                className="absolute bottom-1 text-[9px] font-mono text-amber-400 bg-slate-900/90 px-1 py-0.5 rounded border border-amber-400/40"
+                className="absolute bottom-1 text-[9px] font-sans text-amber-400 bg-slate-900/90 px-1 py-0.5 rounded border border-amber-400/40"
                 style={{ left: `${Math.min(90, Math.max(5, (toSvgX(parsedB) / svgWidth) * 100))}%` }}
               >
                 b = {boundB}
@@ -402,7 +402,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
           <div className="space-y-2 bg-[#141419] p-3 rounded-xl border border-slate-800">
             {/* Function f(x) */}
             <div>
-              <label className="text-[11px] font-mono text-emerald-400 font-semibold block mb-1">
+              <label className="text-[11px] font-sans text-emerald-400 font-semibold block mb-1">
                 Function f(x):
               </label>
               <input
@@ -410,14 +410,14 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
                 value={fExpr}
                 onChange={(e) => setFExpr(e.target.value)}
                 placeholder="e.g. 4 - x^2 or sin(x)"
-                className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-400"
+                className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-sans text-emerald-300 focus:outline-none focus:border-emerald-400"
               />
             </div>
 
             {/* Optional Function g(x) for between-curves */}
             {calcMode === 'BETWEEN' && (
               <div>
-                <label className="text-[11px] font-mono text-cyan-400 font-semibold block mb-1">
+                <label className="text-[11px] font-sans text-cyan-400 font-semibold block mb-1">
                   Second Function g(x):
                 </label>
                 <input
@@ -425,7 +425,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
                   value={f2Expr}
                   onChange={(e) => setF2Expr(e.target.value)}
                   placeholder="e.g. x"
-                  className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-400"
+                  className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-sans text-cyan-300 focus:outline-none focus:border-cyan-400"
                 />
               </div>
             )}
@@ -433,25 +433,25 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
             {/* Interval Bounds [a, b] */}
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div>
-                <label className="text-[11px] font-mono text-slate-400 block mb-1">
+                <label className="text-[11px] font-sans text-slate-400 block mb-1">
                   Lower Limit (a):
                 </label>
                 <input
                   type="text"
                   value={boundA}
                   onChange={(e) => setBoundA(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
+                  className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-sans text-amber-300 focus:outline-none focus:border-amber-400"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-mono text-slate-400 block mb-1">
+                <label className="text-[11px] font-sans text-slate-400 block mb-1">
                   Upper Limit (b):
                 </label>
                 <input
                   type="text"
                   value={boundB}
                   onChange={(e) => setBoundB(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
+                  className="w-full px-3 py-1.5 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-sans text-amber-300 focus:outline-none focus:border-amber-400"
                 />
               </div>
             </div>
@@ -459,7 +459,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
 
           {/* Quick Presets */}
           <div>
-            <span className="text-[11px] font-mono text-slate-400 block mb-1.5">
+            <span className="text-[11px] font-sans text-slate-400 block mb-1.5">
               Quick Calculation Presets:
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -474,7 +474,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
                     setBoundB(p.b);
                     setCalcMode(p.mode);
                   }}
-                  className="px-2.5 py-1 rounded bg-[#1C1C24] hover:bg-slate-700 text-slate-300 text-[10px] font-mono border border-slate-800 hover:border-slate-700 transition-colors"
+                  className="px-2.5 py-1 rounded bg-[#1C1C24] hover:bg-slate-700 text-slate-300 text-[10px] font-sans border border-slate-800 hover:border-slate-700 transition-colors"
                 >
                   {p.label}
                 </button>
@@ -485,7 +485,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
           {/* Results Summary Box */}
           <div className="bg-[#14141D] border border-amber-400/30 rounded-xl p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-amber-400">
+              <span className="text-xs font-sans font-bold text-amber-400">
                 {calcMode === 'GEOMETRIC' 
                   ? 'Total Geometric Area (Units²)' 
                   : calcMode === 'NET' 
@@ -494,19 +494,19 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
               </span>
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1 text-[11px] font-mono text-slate-400 hover:text-white"
+                className="flex items-center gap-1 text-[11px] font-sans text-slate-400 hover:text-white"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
             </div>
 
-            <div className="text-2xl sm:text-3xl font-mono font-bold text-slate-100 lcd-dot-text tracking-tight">
+            <div className="text-2xl sm:text-3xl font-sans font-bold text-slate-100 lcd-dot-text tracking-tight">
               = {results.activeVal !== null ? results.activeVal : 'Math ERROR'}
             </div>
 
             {/* Comparison detail */}
-            <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800 text-slate-400">
+            <div className="grid grid-cols-2 gap-2 text-[11px] font-sans pt-1 border-t border-slate-800 text-slate-400">
               <div>
                 <span>Net Integral: </span>
                 <span className="text-emerald-300 font-semibold">{results.net ?? 'N/A'}</span>
@@ -526,7 +526,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
             {/* Insert Formula into calculator */}
             <button
               onClick={handleInsertExpr}
-              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-mono text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-sans text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
             >
               <CornerDownLeft className="w-3.5 h-3.5 text-amber-400" />
               <span>Insert Formula</span>
@@ -535,7 +535,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
             {/* Insert Value into calculator */}
             <button
               onClick={handleInsertVal}
-              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-mono text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-sans text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
             >
               <CornerDownLeft className="w-3.5 h-3.5 text-emerald-400" />
               <span>Insert Value</span>
@@ -544,7 +544,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
 
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono font-bold text-xs shadow-md"
+            className="px-4 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-sans font-bold text-xs shadow-md"
           >
             Done
           </button>

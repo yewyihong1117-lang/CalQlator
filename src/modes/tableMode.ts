@@ -192,7 +192,7 @@ export const tableModeModule: ModeModule = {
       const expr = modeState.data.fExpr || '';
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Table: Define f(x)'),
         React.createElement(
           'div',
@@ -209,7 +209,7 @@ export const tableModeModule: ModeModule = {
       const expr = modeState.data.gExpr || '';
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Table: Define g(x) (Optional)'),
         React.createElement(
           'div',
@@ -225,14 +225,14 @@ export const tableModeModule: ModeModule = {
     if (modeState.screen === 'RANGE') {
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Table Range'),
         React.createElement(
           'div',
           { className: 'space-y-1 text-xs my-auto' },
-          React.createElement('div', null, 'Start: ', React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)]' }, modeState.data.rangeStart ?? 1)),
-          React.createElement('div', null, 'End: ', React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)]' }, modeState.data.rangeEnd ?? 5)),
-          React.createElement('div', null, 'Step: ', React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)]' }, modeState.data.rangeStep ?? 1))
+          React.createElement('div', null, 'Start: ', React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeStart ?? 1)),
+          React.createElement('div', null, 'End: ', React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeEnd ?? 5)),
+          React.createElement('div', null, 'Step: ', React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeStep ?? 1))
         ),
         React.createElement('div', { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' }, 'Press [=] to generate table')
       );
@@ -244,7 +244,7 @@ export const tableModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-1.5 font-mono select-none text-[var(--display-text)]' },
+      { className: 'flex flex-col h-full justify-between p-1.5 font-sans select-none text-[var(--display-text)]' },
       React.createElement(
         'div',
         { className: 'flex justify-between items-center text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)]' },

@@ -122,7 +122,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-[#16161D]">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-            <span className="font-mono text-sm tracking-wide font-semibold text-slate-100 uppercase">
+            <span className="font-sans text-sm tracking-wide font-semibold text-slate-100 uppercase">
               fx-570 Advanced Modes
             </span>
           </div>
@@ -159,7 +159,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   playKeyClick('func');
                   setActiveTab(tab.id as ModeTab);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono whitespace-nowrap transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-sans whitespace-nowrap transition-all ${
                   isActive 
                     ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20' 
                     : 'bg-[#181820] text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -192,7 +192,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
 
               <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800 space-y-3">
                 <div>
-                  <label className="text-xs font-mono text-emerald-400 font-semibold block mb-1">
+                  <label className="text-xs font-sans text-emerald-400 font-semibold block mb-1">
                     Function f(x):
                   </label>
                   <input
@@ -200,44 +200,44 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                     value={areaF}
                     onChange={(e) => setAreaF(e.target.value)}
                     placeholder="e.g. 4 - x^2 or sin(x)"
-                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-mono text-xs text-emerald-300"
+                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-sans text-xs text-emerald-300"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">
+                    <label className="text-xs font-sans text-slate-400 block mb-1">
                       Lower Bound (a):
                     </label>
                     <input
                       type="text"
                       value={areaA}
                       onChange={(e) => setAreaA(e.target.value)}
-                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-mono text-xs text-amber-300"
+                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-sans text-xs text-amber-300"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">
+                    <label className="text-xs font-sans text-slate-400 block mb-1">
                       Upper Bound (b):
                     </label>
                     <input
                       type="text"
                       value={areaB}
                       onChange={(e) => setAreaB(e.target.value)}
-                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-mono text-xs text-amber-300"
+                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded font-sans text-xs text-amber-300"
                     />
                   </div>
                 </div>
 
                 {/* Results Card */}
                 <div className="bg-[#14141E] p-3 rounded-xl border border-amber-400/30 space-y-2 mt-2">
-                  <div className="flex justify-between items-center text-xs font-mono">
+                  <div className="flex justify-between items-center text-xs font-sans">
                     <span className="text-amber-400 font-bold">Total Geometric Area:</span>
                     <span className="text-lg font-bold text-slate-100">
                       {isNaN(drawerGeomArea) ? 'Math ERROR' : drawerGeomArea.toFixed(5)} units²
                     </span>
                   </div>
-                  <div className="flex justify-between items-center text-xs font-mono text-slate-400 border-t border-slate-800 pt-1.5">
+                  <div className="flex justify-between items-center text-xs font-sans text-slate-400 border-t border-slate-800 pt-1.5">
                     <span>Net Definite Integral:</span>
                     <span className="text-emerald-400 font-semibold">
                       {isNaN(drawerNetIntegral) ? 'Math ERROR' : drawerNetIntegral.toFixed(5)}
@@ -253,7 +253,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       onInsertValue(`Area(${areaF}, ${areaA}, ${areaB})`);
                       onClose();
                     }}
-                    className="flex-1 py-2 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors"
+                    className="flex-1 py-2 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-sans font-bold flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <CornerDownLeft className="w-3.5 h-3.5" />
                     <span>Insert Area Formula</span>
@@ -267,7 +267,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       }
                       onClose();
                     }}
-                    className="flex-1 py-2 px-3 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                    className="flex-1 py-2 px-3 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-sans font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <span>Insert Area Result</span>
                   </button>
@@ -298,33 +298,33 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 font-mono">Dataset X (separated by space or comma):</label>
+                <label className="text-xs text-slate-400 font-sans">Dataset X (separated by space or comma):</label>
                 <textarea
                   value={statXInput}
                   onChange={(e) => setStatXInput(e.target.value)}
                   rows={2}
-                  className="w-full mt-1 p-2 bg-[#0B0B0E] border border-slate-700 rounded-lg text-sm font-mono text-amber-300 focus:outline-none focus:border-amber-400"
+                  className="w-full mt-1 p-2 bg-[#0B0B0E] border border-slate-700 rounded-lg text-sm font-sans text-amber-300 focus:outline-none focus:border-amber-400"
                 />
               </div>
 
               {useTwoVar && (
                 <div>
-                  <label className="text-xs text-slate-400 font-mono">Dataset Y (corresponding items):</label>
+                  <label className="text-xs text-slate-400 font-sans">Dataset Y (corresponding items):</label>
                   <textarea
                     value={statYInput}
                     onChange={(e) => setStatYInput(e.target.value)}
                     rows={2}
-                    className="w-full mt-1 p-2 bg-[#0B0B0E] border border-slate-700 rounded-lg text-sm font-mono text-pink-300 focus:outline-none focus:border-pink-400"
+                    className="w-full mt-1 p-2 bg-[#0B0B0E] border border-slate-700 rounded-lg text-sm font-sans text-pink-300 focus:outline-none focus:border-pink-400"
                   />
                 </div>
               )}
 
               {statRes && (
                 <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800 space-y-2">
-                  <span className="text-xs font-mono text-slate-400 uppercase tracking-wider block border-b border-slate-800 pb-1">
+                  <span className="text-xs font-sans text-slate-400 uppercase tracking-wider block border-b border-slate-800 pb-1">
                     Results Telemetry
                   </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-sans">
                     <div className="bg-slate-900/60 p-2 rounded border border-slate-800/80">
                       <span className="text-slate-400 block">Sample Size (n)</span>
                       <span className="text-base text-slate-100 font-bold">{statRes.n}</span>
@@ -352,7 +352,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   </div>
 
                   {statRes.regression && (
-                    <div className="mt-3 pt-2 border-t border-slate-800 space-y-1 text-xs font-mono">
+                    <div className="mt-3 pt-2 border-t border-slate-800 space-y-1 text-xs font-sans">
                       <span className="text-pink-400 block font-semibold">Linear Regression (y = a + bx)</span>
                       <div className="grid grid-cols-3 gap-2">
                         <div className="bg-slate-900/60 p-2 rounded border border-slate-800/80">
@@ -396,7 +396,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   <h3 className="text-sm font-semibold text-slate-100">Matrix Operations</h3>
                   <p className="text-xs text-slate-400">Determinant, Inversion, Transpose, and Multiplication.</p>
                 </div>
-                <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg text-xs font-mono">
+                <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg text-xs font-sans">
                   <button 
                     onClick={() => handleDimChange(2)}
                     className={`px-2 py-1 rounded ${matDim === 2 ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-400'}`}
@@ -415,7 +415,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
               {/* MatA & MatB Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800">
-                  <span className="text-xs font-mono text-amber-300 font-semibold block mb-2">Matrix A</span>
+                  <span className="text-xs font-sans text-amber-300 font-semibold block mb-2">Matrix A</span>
                   <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${matDim}, minmax(0, 1fr))` }}>
                     {matA.map((row, r) =>
                       row.map((val, c) => (
@@ -428,7 +428,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                             newMat[r][c] = parseFloat(e.target.value) || 0;
                             setMatA(newMat);
                           }}
-                          className="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-mono text-sm text-slate-100 focus:outline-none focus:border-amber-400"
+                          className="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-sans text-sm text-slate-100 focus:outline-none focus:border-amber-400"
                         />
                       ))
                     )}
@@ -436,7 +436,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                 </div>
 
                 <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800">
-                  <span className="text-xs font-mono text-pink-300 font-semibold block mb-2">Matrix B</span>
+                  <span className="text-xs font-sans text-pink-300 font-semibold block mb-2">Matrix B</span>
                   <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${matDim}, minmax(0, 1fr))` }}>
                     {matB.map((row, r) =>
                       row.map((val, c) => (
@@ -449,7 +449,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                             newMat[r][c] = parseFloat(e.target.value) || 0;
                             setMatB(newMat);
                           }}
-                          className="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-mono text-sm text-slate-100 focus:outline-none focus:border-pink-400"
+                          className="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-sans text-sm text-slate-100 focus:outline-none focus:border-pink-400"
                         />
                       ))
                     )}
@@ -465,7 +465,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                     const d = matrixDet(matA);
                     setMatrixResult(`det(MatA) = ${parseFloat(d.toFixed(6))}`);
                   }}
-                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-sans rounded-lg border border-slate-700 transition-colors"
                 >
                   det(MatA)
                 </button>
@@ -480,7 +480,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       setMatrixResult(`MatA⁻¹ =\n${str}`);
                     }
                   }}
-                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-sans rounded-lg border border-slate-700 transition-colors"
                 >
                   MatA⁻¹
                 </button>
@@ -491,7 +491,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                     const str = tr.map(r => `[ ${r.join(', ')} ]`).join('\n');
                     setMatrixResult(`MatAᵀ =\n${str}`);
                   }}
-                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-sans rounded-lg border border-slate-700 transition-colors"
                 >
                   MatAᵀ
                 </button>
@@ -506,7 +506,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       setMatrixResult(`MatA × MatB =\n${str}`);
                     }
                   }}
-                  className="py-2 px-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs font-mono rounded-lg transition-colors"
+                  className="py-2 px-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs font-sans rounded-lg transition-colors"
                 >
                   MatA × MatB
                 </button>
@@ -514,7 +514,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
 
               {matrixResult && (
                 <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800">
-                  <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">{matrixResult}</pre>
+                  <pre className="text-xs font-sans text-emerald-400 whitespace-pre-wrap">{matrixResult}</pre>
                 </div>
               )}
             </div>
@@ -528,7 +528,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   <h3 className="text-sm font-semibold text-slate-100">Vector Operations</h3>
                   <p className="text-xs text-slate-400">Dot Product, Cross Product, and Magnitude.</p>
                 </div>
-                <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg text-xs font-mono">
+                <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg text-xs font-sans">
                   <button 
                     onClick={() => {
                       setVctDim(2);
@@ -556,7 +556,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800">
-                  <span className="text-xs font-mono text-amber-300 font-semibold block mb-2">Vector A (u)</span>
+                  <span className="text-xs font-sans text-amber-300 font-semibold block mb-2">Vector A (u)</span>
                   <div className="flex gap-2">
                     {vctA.map((v, i) => (
                       <input
@@ -568,7 +568,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                           n[i] = parseFloat(e.target.value) || 0;
                           setVctA(n);
                         }}
-                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-mono text-sm text-slate-100 focus:outline-none focus:border-amber-400"
+                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-sans text-sm text-slate-100 focus:outline-none focus:border-amber-400"
                         placeholder={['x', 'y', 'z'][i]}
                       />
                     ))}
@@ -576,7 +576,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                 </div>
 
                 <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800">
-                  <span className="text-xs font-mono text-pink-300 font-semibold block mb-2">Vector B (v)</span>
+                  <span className="text-xs font-sans text-pink-300 font-semibold block mb-2">Vector B (v)</span>
                   <div className="flex gap-2">
                     {vctB.map((v, i) => (
                       <input
@@ -588,7 +588,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                           n[i] = parseFloat(e.target.value) || 0;
                           setVctB(n);
                         }}
-                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-mono text-sm text-slate-100 focus:outline-none focus:border-pink-400"
+                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-sans text-sm text-slate-100 focus:outline-none focus:border-pink-400"
                         placeholder={['x', 'y', 'z'][i]}
                       />
                     ))}
@@ -603,7 +603,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                     const dot = vectorDot(vctA, vctB);
                     setVectorResult(`VctA · VctB = ${dot}`);
                   }}
-                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-sans rounded-lg border border-slate-700 transition-colors"
                 >
                   Dot Product (·)
                 </button>
@@ -618,7 +618,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       setVectorResult(`Cross determinant (k) = ${cross2d}`);
                     }
                   }}
-                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-sans rounded-lg border border-slate-700 transition-colors"
                 >
                   Cross Product (×)
                 </button>
@@ -629,7 +629,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                     const magB = vectorMag(vctB);
                     setVectorResult(`|VctA| = ${magA.toFixed(4)}\n|VctB| = ${magB.toFixed(4)}`);
                   }}
-                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+                  className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-xs font-sans rounded-lg border border-slate-700 transition-colors"
                 >
                   Magnitudes (|v|)
                 </button>
@@ -637,7 +637,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
 
               {vectorResult && (
                 <div className="bg-[#0B0B0E] p-3 rounded-xl border border-slate-800">
-                  <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">{vectorResult}</pre>
+                  <pre className="text-xs font-sans text-emerald-400 whitespace-pre-wrap">{vectorResult}</pre>
                 </div>
               )}
             </div>
@@ -651,7 +651,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   <h3 className="text-sm font-semibold text-slate-100">Equation Solver</h3>
                   <p className="text-xs text-slate-400">Quadratic & 2-Variable Simultaneous systems.</p>
                 </div>
-                <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg text-xs font-mono">
+                <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg text-xs font-sans">
                   <button 
                     onClick={() => { setEqType('quad'); setEqResult(null); }}
                     className={`px-2 py-1 rounded ${eqType === 'quad' ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-400'}`}
@@ -669,33 +669,33 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
 
               {eqType === 'quad' ? (
                 <div className="bg-[#0B0B0E] p-4 rounded-xl border border-slate-800 space-y-3">
-                  <span className="text-xs font-mono text-slate-400 block">Enter coefficients: ax² + bx + c = 0</span>
+                  <span className="text-xs font-sans text-slate-400 block">Enter coefficients: ax² + bx + c = 0</span>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="text-[10px] text-slate-400 block font-mono">a</label>
+                      <label className="text-[10px] text-slate-400 block font-sans">a</label>
                       <input
                         type="number"
                         value={quadA}
                         onChange={(e) => setQuadA(e.target.value)}
-                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-mono text-sm text-slate-100"
+                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-sans text-sm text-slate-100"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 block font-mono">b</label>
+                      <label className="text-[10px] text-slate-400 block font-sans">b</label>
                       <input
                         type="number"
                         value={quadB}
                         onChange={(e) => setQuadB(e.target.value)}
-                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-mono text-sm text-slate-100"
+                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-sans text-sm text-slate-100"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 block font-mono">c</label>
+                      <label className="text-[10px] text-slate-400 block font-sans">c</label>
                       <input
                         type="number"
                         value={quadC}
                         onChange={(e) => setQuadC(e.target.value)}
-                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-mono text-sm text-slate-100"
+                        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-center font-sans text-sm text-slate-100"
                       />
                     </div>
                   </div>
@@ -712,28 +712,28 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                 </div>
               ) : (
                 <div className="bg-[#0B0B0E] p-4 rounded-xl border border-slate-800 space-y-3">
-                  <span className="text-xs font-mono text-slate-400 block">System: a₁x + b₁y = c₁ & a₂x + b₂y = c₂</span>
+                  <span className="text-xs font-sans text-slate-400 block">System: a₁x + b₁y = c₁ & a₂x + b₂y = c₂</span>
                   <div className="grid grid-cols-3 gap-2">
                     <input
                       type="number"
                       value={simA1}
                       onChange={(e) => setSimA1(e.target.value)}
                       placeholder="a1"
-                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-mono"
+                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-sans"
                     />
                     <input
                       type="number"
                       value={simB1}
                       onChange={(e) => setSimB1(e.target.value)}
                       placeholder="b1"
-                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-mono"
+                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-sans"
                     />
                     <input
                       type="number"
                       value={simC1}
                       onChange={(e) => setSimC1(e.target.value)}
                       placeholder="c1"
-                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-mono"
+                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-sans"
                     />
 
                     <input
@@ -741,21 +741,21 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       value={simA2}
                       onChange={(e) => setSimA2(e.target.value)}
                       placeholder="a2"
-                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-mono"
+                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-sans"
                     />
                     <input
                       type="number"
                       value={simB2}
                       onChange={(e) => setSimB2(e.target.value)}
                       placeholder="b2"
-                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-mono"
+                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-sans"
                     />
                     <input
                       type="number"
                       value={simC2}
                       onChange={(e) => setSimC2(e.target.value)}
                       placeholder="c2"
-                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-mono"
+                      className="p-1.5 bg-slate-900 border border-slate-700 rounded text-center text-xs font-sans"
                     />
                   </div>
                   <button
@@ -784,8 +784,8 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
 
               {eqResult && (
                 <div className="bg-[#0B0B0E] p-4 rounded-xl border border-slate-800 space-y-2">
-                  <span className="text-xs font-mono text-slate-400 block border-b border-slate-800 pb-1">Roots / Solution:</span>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <span className="text-xs font-sans text-slate-400 block border-b border-slate-800 pb-1">Roots / Solution:</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-sans">
                     <div className="bg-slate-900 p-2 rounded">
                       <span className="text-slate-400 block">Root 1</span>
                       <span className="text-amber-300 font-bold text-sm">{eqResult.x1}</span>
@@ -796,7 +796,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                     </div>
                   </div>
                   {eqResult.extra && (
-                    <div className="text-xs font-mono text-slate-300 pt-1">{eqResult.extra}</div>
+                    <div className="text-xs font-sans text-slate-300 pt-1">{eqResult.extra}</div>
                   )}
                 </div>
               )}
@@ -820,7 +820,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                         playKeyClick('func');
                         setBaseType(b);
                       }}
-                      className={`flex-1 py-1 text-xs font-mono rounded ${
+                      className={`flex-1 py-1 text-xs font-sans rounded ${
                         baseType === b ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'
                       }`}
                     >
@@ -833,7 +833,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   type="text"
                   value={baseVal}
                   onChange={(e) => setBaseVal(e.target.value)}
-                  className="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-lg text-base font-mono text-amber-300 focus:outline-none focus:border-amber-400"
+                  className="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-lg text-base font-sans text-amber-300 focus:outline-none focus:border-amber-400"
                   placeholder="Enter integer..."
                 />
 
@@ -848,10 +848,10 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                     intVal = 0;
                   }
 
-                  if (isNaN(intVal)) return <div className="text-xs text-red-400 font-mono">Invalid number for {baseType}</div>;
+                  if (isNaN(intVal)) return <div className="text-xs text-red-400 font-sans">Invalid number for {baseType}</div>;
 
                   return (
-                    <div className="space-y-2 pt-2 border-t border-slate-800 text-xs font-mono">
+                    <div className="space-y-2 pt-2 border-t border-slate-800 text-xs font-sans">
                       <div className="flex justify-between items-center p-2 bg-slate-900/60 rounded">
                         <span className="text-slate-400">DEC:</span>
                         <span className="text-amber-300 font-bold">{intVal.toString(10)}</span>
@@ -889,7 +889,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                 placeholder="Search constant (e.g. c, h, electron, planck)..."
                 value={constSearch}
                 onChange={(e) => setConstSearch(e.target.value)}
-                className="w-full p-2 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-mono text-slate-200"
+                className="w-full p-2 bg-[#0B0B0E] border border-slate-700 rounded-lg text-xs font-sans text-slate-200"
               />
               <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-1">
                 {SCIENTIFIC_CONSTANTS.filter(c => 
@@ -907,14 +907,14 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-amber-400 font-bold">{c.sym}</span>
+                        <span className="text-xs font-sans text-amber-400 font-bold">{c.sym}</span>
                         <span className="text-xs text-slate-200">{c.name}</span>
                       </div>
-                      <span className="text-[10px] text-slate-500 font-mono">Code [{c.code}] · {c.unit}</span>
+                      <span className="text-[10px] text-slate-500 font-sans">Code [{c.code}] · {c.unit}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs font-mono text-slate-300">{c.val.toExponential(4)}</span>
-                      <span className="block text-[10px] text-amber-400/80 font-mono">Tap to insert</span>
+                      <span className="text-xs font-sans text-slate-300">{c.val.toExponential(4)}</span>
+                      <span className="block text-[10px] text-amber-400/80 font-sans">Tap to insert</span>
                     </div>
                   </div>
                 ))}
@@ -930,12 +930,12 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                 <p className="text-xs text-slate-400">Exact formula conversions per Casio fx-570 library.</p>
               </div>
               <div className="flex gap-2 items-center bg-[#0B0B0E] p-2 rounded-lg border border-slate-800">
-                <span className="text-xs text-slate-400 font-mono">Input Value:</span>
+                <span className="text-xs text-slate-400 font-sans">Input Value:</span>
                 <input
                   type="number"
                   value={convInputVal}
                   onChange={(e) => setConvInputVal(e.target.value)}
-                  className="flex-1 p-1 bg-slate-900 border border-slate-700 rounded font-mono text-xs text-amber-300"
+                  className="flex-1 p-1 bg-slate-900 border border-slate-700 rounded font-sans text-xs text-amber-300"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto pr-1">
@@ -952,7 +952,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       }}
                       className="p-2.5 bg-[#0B0B0E] hover:bg-slate-800/80 border border-slate-800 rounded-lg cursor-pointer transition-colors"
                     >
-                      <div className="flex justify-between items-center text-xs font-mono">
+                      <div className="flex justify-between items-center text-xs font-sans">
                         <span className="text-slate-400">[{conv.code}] {conv.name}</span>
                         <span className="text-amber-400 font-bold">{parseFloat(res.toFixed(5))}</span>
                       </div>
@@ -986,7 +986,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
               </div>
 
               {history.length === 0 ? (
-                <div className="text-center py-10 text-xs text-slate-500 font-mono">
+                <div className="text-center py-10 text-xs text-slate-500 font-sans">
                   No calculations recorded yet. Use the calculator to populate history.
                 </div>
               ) : (
@@ -1001,17 +1001,17 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                       }}
                       className="p-3 bg-[#0B0B0E] hover:bg-slate-800/80 border border-slate-800 rounded-xl cursor-pointer transition-colors group"
                     >
-                      <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+                      <div className="flex items-center justify-between text-xs font-sans text-slate-400">
                         <span className="truncate max-w-[200px]">{item.expression}</span>
                         <span className="text-[10px] text-slate-600">
                           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <div className="mt-1 text-right text-base font-mono font-bold text-emerald-400 group-hover:text-amber-400 transition-colors">
+                      <div className="mt-1 text-right text-base font-sans font-bold text-emerald-400 group-hover:text-amber-400 transition-colors">
                         = {item.result}
                       </div>
                       {item.exactResult && item.exactResult !== item.result && (
-                        <div className="text-right text-xs font-mono text-slate-400">
+                        <div className="text-right text-xs font-sans text-slate-400">
                           Standard form: {item.exactResult}
                         </div>
                       )}

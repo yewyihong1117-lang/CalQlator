@@ -40,7 +40,7 @@ export const distModeModule: ModeModule = {
   renderDisplay: (_ctx: ModeContext) => {
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-3 font-mono text-[var(--display-text)] select-none text-center' },
+      { className: 'flex flex-col h-full justify-between p-3 font-sans text-[var(--display-text)] select-none text-center' },
       React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, '7: Distribution'),
       React.createElement(
         'div',

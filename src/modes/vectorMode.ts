@@ -174,7 +174,7 @@ export const vectorModeModule: ModeModule = {
       const page = VECTOR_SUBMENU_PAGES[pageIdx];
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'flex justify-between items-center border-b border-[var(--display-text)]/20 pb-1 text-xs font-bold text-[var(--label-shift)]' },
@@ -207,7 +207,7 @@ export const vectorModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-mono select-none' },
+      { className: 'flex flex-col h-full justify-between p-2 font-sans select-none' },
       React.createElement(
         'div',
         { className: 'flex justify-between text-xs text-[var(--display-text)] font-semibold border-b border-[var(--display-text)]/20 pb-1' },
@@ -223,7 +223,7 @@ export const vectorModeModule: ModeModule = {
           React.createElement('div', { className: 'text-[var(--display-text)]/70 text-[10px] mb-0.5' }, 'VctA (3D):'),
           React.createElement(
             'div',
-            { className: 'border border-[var(--display-text)]/30 px-1.5 py-0.5 bg-[var(--display-text)]/10 rounded text-[11px] text-[var(--display-text)] font-mono' },
+            { className: 'border border-[var(--display-text)]/30 px-1.5 py-0.5 bg-[var(--display-text)]/10 rounded text-[11px] text-[var(--display-text)] font-sans' },
             `[ ${vctA.join(', ')} ]`
           )
         ),

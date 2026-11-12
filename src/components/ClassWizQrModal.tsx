@@ -29,7 +29,7 @@ export const ClassWizQrModal: React.FC<ClassWizQrModalProps> = ({
       >
         {/* Header */}
         <div className="w-full flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
+          <div className="flex items-center gap-1.5 text-xs font-sans font-bold text-amber-400">
             <QrCode className="w-4 h-4" />
             <span>CLASSWIZ QR CODE</span>
           </div>
@@ -54,7 +54,7 @@ export const ClassWizQrModal: React.FC<ClassWizQrModalProps> = ({
         </div>
 
         {/* Calculation Preview */}
-        <div className="w-full bg-[#0B0B0E] p-2.5 rounded-lg border border-slate-800 mb-3 text-left font-mono">
+        <div className="w-full bg-[#0B0B0E] p-2.5 rounded-lg border border-slate-800 mb-3 text-left font-sans">
           <div className="text-[11px] text-slate-400 truncate">
             {expression || '0'}
           </div>
@@ -72,7 +72,7 @@ export const ClassWizQrModal: React.FC<ClassWizQrModalProps> = ({
             playKeyClick('action');
             onClose();
           }}
-          className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono font-bold text-xs shadow-md active:scale-98 transition-all"
+          className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-sans font-bold text-xs shadow-md active:scale-98 transition-all"
         >
           Done
         </button>

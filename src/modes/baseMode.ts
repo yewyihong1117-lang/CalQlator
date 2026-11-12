@@ -365,7 +365,7 @@ export const baseModeModule: ModeModule = {
       const page = BASE_SUBMENU_PAGES[pageIdx];
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'flex justify-between items-center border-b border-[var(--display-text)]/20 pb-1 text-xs font-bold text-[var(--label-shift)]' },
@@ -399,7 +399,7 @@ export const baseModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+      { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
       React.createElement(
         'div',
         { className: 'flex justify-between text-xs text-[var(--label-shift)] font-semibold border-b border-[var(--display-text)]/20 pb-1' },
@@ -418,7 +418,7 @@ export const baseModeModule: ModeModule = {
         React.createElement(
           'span',
           { 
-            className: 'font-mono text-xl sm:text-2xl font-bold tracking-wider text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2'
+            className: 'font-sans text-xl sm:text-2xl font-bold tracking-wider text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2'
           },
           res
         )

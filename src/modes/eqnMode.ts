@@ -883,7 +883,7 @@ export const eqnModeModule: ModeModule = {
     if (modeState.screen === 'SELECT_TYPE') {
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between' },
@@ -921,7 +921,7 @@ export const eqnModeModule: ModeModule = {
       const cur = modeState.data.unknownsCursor || 2;
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between' },
@@ -981,7 +981,7 @@ export const eqnModeModule: ModeModule = {
 
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-1.5 font-mono select-none text-[var(--display-text)]' },
+        { className: 'flex flex-col h-full justify-between p-1.5 font-sans select-none text-[var(--display-text)]' },
         // Top status
         React.createElement(
           'div',
@@ -1060,7 +1060,7 @@ export const eqnModeModule: ModeModule = {
       if (err || sols.length === 0) {
         return React.createElement(
           'div',
-          { className: 'flex flex-col h-full justify-between p-3 font-mono text-[var(--display-text)] select-none text-center' },
+          { className: 'flex flex-col h-full justify-between p-3 font-sans text-[var(--display-text)] select-none text-center' },
           React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Simul Equation'),
           React.createElement(
             'div',
@@ -1076,7 +1076,7 @@ export const eqnModeModule: ModeModule = {
 
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         // Top Status
         React.createElement(
           'div',
@@ -1132,7 +1132,7 @@ export const eqnModeModule: ModeModule = {
       const cur = modeState.data.polyDegreeCursor || 2;
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between' },
@@ -1178,7 +1178,7 @@ export const eqnModeModule: ModeModule = {
       const degree = modeState.data.degree || 2;
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center' },
@@ -1224,7 +1224,7 @@ export const eqnModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-mono select-none text-[var(--display-text)]' },
+      { className: 'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)]' },
       React.createElement(
         'div',
         { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between' },

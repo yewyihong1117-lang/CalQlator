@@ -230,7 +230,7 @@ export const statModeModule: ModeModule = {
       const page = STAT_SUBMENU_PAGES[0];
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'flex justify-between items-center border-b border-[var(--display-text)]/20 pb-1 text-xs font-bold text-[var(--label-shift)]' },
@@ -261,7 +261,7 @@ export const statModeModule: ModeModule = {
     if (modeState.screen === 'SELECT_TYPE') {
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Select Stat Type:'),
         React.createElement(
           'div',
@@ -280,13 +280,13 @@ export const statModeModule: ModeModule = {
       if (!stats) {
         return React.createElement(
           'div',
-          { className: 'p-2 font-mono text-xs text-[var(--display-text)]/70' },
+          { className: 'p-2 font-sans text-xs text-[var(--display-text)]/70' },
           'No Data Available. Press [AC] to enter data.'
         );
       }
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-mono text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
         React.createElement(
           'div',
           { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 flex justify-between text-[var(--label-shift)]' },
@@ -296,12 +296,12 @@ export const statModeModule: ModeModule = {
         React.createElement(
           'div',
           { className: 'grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] my-auto' },
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'x̄ = '), React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)] tracking-wider' }, stats.meanX)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'Σx = '), React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)] tracking-wider' }, stats.sumX)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'sx = '), React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)] tracking-wider' }, stats.sx)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'minX = '), React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)] tracking-wider' }, stats.minX)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'med = '), React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)] tracking-wider' }, stats.med)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'maxX = '), React.createElement('span', { className: 'font-mono font-bold text-[var(--display-text)] tracking-wider' }, stats.maxX))
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'x̄ = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.meanX)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'Σx = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.sumX)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'sx = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.sx)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'minX = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.minX)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'med = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.med)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'maxX = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.maxX))
         ),
         React.createElement('div', { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' }, '[AC] Return to Table')
       );
@@ -313,7 +313,7 @@ export const statModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-mono select-none text-[var(--display-text)]' },
+      { className: 'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)]' },
       React.createElement(
         'div',
         { className: 'flex justify-between items-center text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' },

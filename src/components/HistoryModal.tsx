@@ -60,9 +60,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               <Clock className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold font-mono text-slate-100 flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-bold font-sans text-slate-100 flex items-center gap-2">
                 Calculation History Log
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-amber-400 border border-slate-700">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-sans bg-slate-800 text-amber-400 border border-slate-700">
                   {history.length} {history.length === 1 ? 'entry' : 'entries'}
                 </span>
               </h2>
@@ -77,7 +77,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               <>
                 {showClearConfirm ? (
                   <div className="flex items-center gap-1 bg-red-950/60 p-1 rounded border border-red-800">
-                    <span className="text-[10px] text-red-300 font-mono">Clear all?</span>
+                    <span className="text-[10px] text-red-300 font-sans">Clear all?</span>
                     <button
                       onClick={() => {
                         playKeyClick('action');
@@ -132,7 +132,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 placeholder="Search past equations or answers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-[#0B0B0E] border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-400/50"
+                className="w-full pl-8 pr-3 py-1.5 bg-[#0B0B0E] border border-slate-800 rounded-lg text-xs font-sans text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-400/50"
               />
               {searchTerm && (
                 <button
@@ -153,18 +153,18 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               <div className="w-12 h-12 mx-auto rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 mb-3">
                 <Calculator className="w-6 h-6" />
               </div>
-              <p className="text-sm font-semibold text-slate-300 font-mono">No Calculations Yet</p>
+              <p className="text-sm font-semibold text-slate-300 font-sans">No Calculations Yet</p>
               <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
                 Perform calculations like integrals, derivatives, or algebra to record them into your Casio fx-570EX history tape.
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-1.5 text-[11px] font-mono text-amber-400/80">
+              <div className="mt-4 flex flex-wrap justify-center gap-1.5 text-[11px] font-sans text-amber-400/80">
                 <span className="px-2 py-1 rounded bg-slate-900 border border-slate-800">∫(x², 0, 3)</span>
                 <span className="px-2 py-1 rounded bg-slate-900 border border-slate-800">d/dx(x³, 2)</span>
                 <span className="px-2 py-1 rounded bg-slate-900 border border-slate-800">Σ(x, 1, 10)</span>
               </div>
             </div>
           ) : filteredHistory.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500 font-mono">
+            <div className="py-8 text-center text-xs text-slate-500 font-sans">
               No calculations matching &quot;{searchTerm}&quot;
             </div>
           ) : (
@@ -174,7 +174,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 className="bg-[#14141A] border border-slate-800/90 hover:border-slate-700/80 rounded-xl p-3 transition-all hover:bg-[#181822] group shadow-sm"
               >
                 {/* Top Item Meta */}
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1.5">
+                <div className="flex items-center justify-between text-[11px] font-sans text-slate-400 mb-1.5">
                   <span className="font-semibold text-amber-400/90 flex items-center gap-1">
                     #{history.length - idx}
                   </span>
@@ -184,24 +184,24 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 </div>
 
                 {/* Mathematical Expression */}
-                <div className="font-mono text-sm sm:text-base text-[var(--display-text)] py-1 break-all tracking-wide">
+                <div className="font-sans text-sm sm:text-base text-[var(--display-text)] py-1 break-all tracking-wide">
                   {item.expression}
                 </div>
 
                 {/* Computed Result */}
                 <div className="flex items-baseline justify-between pt-1 border-t border-slate-800/60 mt-1">
-                  <div className="text-xs font-mono text-slate-400">
+                  <div className="text-xs font-sans text-slate-400">
                     {item.exactResult && item.exactResult !== item.result && (
                       <span className="text-amber-400/80 mr-2">Exact: {item.exactResult}</span>
                     )}
                   </div>
-                  <div className="text-right text-lg sm:text-xl font-mono font-bold text-slate-100 lcd-dot-text">
+                  <div className="text-right text-lg sm:text-xl font-sans font-bold text-slate-100 lcd-dot-text">
                     = {item.result}
                   </div>
                 </div>
 
                 {/* Action Buttons Toolbar */}
-                <div className="mt-2.5 pt-2 border-t border-slate-800/40 flex items-center justify-between text-xs font-mono">
+                <div className="mt-2.5 pt-2 border-t border-slate-800/40 flex items-center justify-between text-xs font-sans">
                   <div className="flex items-center gap-1.5">
                     {/* Load Expression Button */}
                     <button
@@ -264,7 +264,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         </div>
 
         {/* Footer Hint */}
-        <div className="px-4 py-2.5 bg-[#0D0D11] border-t border-slate-800/80 text-[10px] sm:text-xs font-mono text-slate-500 flex items-center justify-between">
+        <div className="px-4 py-2.5 bg-[#0D0D11] border-t border-slate-800/80 text-[10px] sm:text-xs font-sans text-slate-500 flex items-center justify-between">
           <span>Tip: Use REPLAY ▲/▼ D-Pad on the calculator to cycle expressions</span>
           <button
             onClick={onClose}

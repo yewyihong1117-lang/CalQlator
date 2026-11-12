@@ -1652,7 +1652,7 @@ export default function App() {
       
       {/* Floating Performance Metrics HUD (?perf=1) */}
       {perfMetrics?.isPerf && (
-        <div className="fixed top-2 left-2 z-50 p-2.5 bg-black/95 border border-emerald-500/80 rounded-lg font-mono text-[10px] text-emerald-400 pointer-events-none shadow-2xl max-w-[320px] leading-tight select-none">
+        <div className="fixed top-2 left-2 z-50 p-2.5 bg-black/95 border border-emerald-500/80 rounded-lg font-sans text-[10px] text-emerald-400 pointer-events-none shadow-2xl max-w-[320px] leading-tight select-none">
           <div className="font-bold text-amber-300 border-b border-emerald-800 pb-1 mb-1 flex justify-between items-center">
             <span>fx-570EX GEOMETRY & PERF</span>
             <span className="text-[9px] text-emerald-300">?perf=1</span>
@@ -1687,7 +1687,7 @@ export default function App() {
       >
         {/* Key-Path Trainer Floating Pill (Study Mode) */}
         {calcMode === 'STUDY' && trainerRoute && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-mono font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-sans font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
             <Sparkles className="w-3 h-3 text-slate-950" />
             <span>Path: {trainerRoute}</span>
           </div>
@@ -1704,7 +1704,7 @@ export default function App() {
         >
           {isPoweredOff ? (
             /* Power-Off Standby Display */
-            <div className="h-full flex flex-col items-center justify-center text-slate-800 font-mono select-none">
+            <div className="h-full flex flex-col items-center justify-center text-slate-800 font-sans select-none">
               <Power className="w-5 h-5 mb-1 opacity-20" />
               <span className="text-[10px] tracking-widest opacity-25">CASIO CLASSWIZ [STANDBY]</span>
               <span className="text-[9px] text-slate-700 opacity-20 mt-0.5">Press ON to power up</span>
@@ -1712,7 +1712,7 @@ export default function App() {
           ) : (
             <>
               {/* TOP THIN STATUS INDICATOR STRIP: S, A, D/R/G, Norm1, Math, arrows, and settings gear */}
-              <div className="flex items-center justify-between text-[11px] font-mono tabular-nums tracking-wider pb-1 select-none text-[var(--display-text)]/70 w-full shrink-0">
+              <div className="flex items-center justify-between text-[11px] font-sans tabular-nums tracking-wider pb-1 select-none text-[var(--display-text)]/70 w-full shrink-0">
                 <div className="flex items-center gap-1.5">
                   {/* [S] Indicator: Shown ONLY when active */}
                   {shiftActive && (
@@ -1811,12 +1811,13 @@ export default function App() {
                 /* 1. IN-DISPLAY MENU GRID: 2 rows × 3 columns per page, authentic ClassWiz LCD */
                 <div 
                   data-testid="in-display-menu"
-                  className="flex-1 w-full min-h-[92px] flex flex-col justify-between py-1 font-mono select-none"
+                  className="flex-1 w-full min-h-[92px] flex flex-col justify-between py-1 font-sans select-none"
                 >
                   <div className="grid grid-cols-3 grid-rows-2 gap-1.5 flex-1 min-h-[72px] w-full items-stretch">
                     {currentMenuGrid.map((item, idx) => {
                       const absoluteIndex = menuPage * 6 + idx;
                       const isSelected = absoluteIndex === menuHighlightIndex;
+                      const isLong = item.shortName.length >= 10;
                       return (
                         <button
                           key={item.id}
@@ -1824,16 +1825,24 @@ export default function App() {
                             setMenuHighlightIndex(absoluteIndex);
                             handleSelectMode(item.code);
                           }}
-                          className={`flex flex-col items-start justify-center px-2 py-1 rounded min-h-[34px] transition-colors text-left border cursor-pointer ${
+                          className={`flex flex-col items-start justify-center px-2 py-1.5 rounded-lg transition-colors text-left border cursor-pointer overflow-hidden ${
                             isSelected 
                               ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold border-[var(--display-text)] shadow-sm'
-                              : 'bg-[var(--display-text)]/10 text-[var(--display-text)] border-[var(--display-text)]/20 hover:bg-[var(--display-text)]/20'
+                              : 'bg-[var(--display-text)]/15 text-[var(--display-text)] border-[var(--display-text)]/30 hover:bg-[var(--display-text)]/25'
                           }`}
                         >
-                          <span className={`text-[9.5px] font-bold ${isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--label-shift)]'}`}>
+                          <span className={`text-[clamp(9.5px,min(2.4cqw,1.5cqh),11px)] font-extrabold leading-none mb-0.5 ${
+                            isSelected ? 'text-[var(--display-bg)]/85' : 'text-[var(--label-shift)]'
+                          }`}>
                             {item.key}:
                           </span>
-                          <span className="text-[10px] leading-tight truncate w-full font-medium">
+                          <span className={`font-bold leading-[1.15] w-full tracking-tight break-words ${
+                            isLong 
+                              ? 'text-[clamp(10px,min(2.8cqw,1.8cqh),12px)]' 
+                              : 'text-[clamp(11.5px,min(3.5cqw,2.2cqh),14px)]'
+                          } ${
+                            isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--display-text)]'
+                          }`}>
                             {item.shortName}
                           </span>
                         </button>
@@ -1848,7 +1857,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'SETUP' ? (
                 /* 2. IN-DISPLAY SETUP LIST: Scrollable list of 4 items per page */
-                <div className="flex-1 flex flex-col justify-between py-1 overflow-hidden font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 overflow-hidden font-sans">
                   <div className="space-y-1 flex-1">
                     <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5 mb-1 flex justify-between">
                       <span>SETUP MENU</span>
@@ -1882,7 +1891,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'SETUP_ANGLE' ? (
                 /* Angle Unit Sub-menu */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
                     <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">ANGLE UNIT</div>
                     {[
@@ -1912,7 +1921,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'SETUP_FORMAT' ? (
                 /* Number Format Sub-menu */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
                     <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">NUMBER FORMAT</div>
                     {[
@@ -1937,7 +1946,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'SETUP_FIX' ? (
                 /* Fix Digits Prompt */
-                <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
+                <div className="flex-1 flex flex-col justify-between py-2 font-sans text-center">
                   <div className="py-2">
                     <div className="text-sm font-bold text-[var(--display-text)]">Fix 0~9?</div>
                     <p className="text-[10px] text-[var(--display-text)]/70 mt-1">Specify number of decimal places (e.g. press 2 for Fix2)</p>
@@ -1949,7 +1958,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'SETUP_SCI' ? (
                 /* Sci Digits Prompt */
-                <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
+                <div className="flex-1 flex flex-col justify-between py-2 font-sans text-center">
                   <div className="py-2">
                     <div className="text-sm font-bold text-[var(--display-text)]">Sci 0~9?</div>
                     <p className="text-[10px] text-[var(--display-text)]/70 mt-1">Specify significant figures (0 = 10 digits)</p>
@@ -1961,7 +1970,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'SETUP_NORM' ? (
                 /* Norm1 / Norm2 Selection */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
                     <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">NORM FORMAT</div>
                     <button
@@ -1996,7 +2005,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'OPTN' ? (
                 /* 3. OPTN MENU */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
                     <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">OPTIONS (OPTN)</div>
                     {[
@@ -2021,7 +2030,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'CONST_CAT' ? (
                 /* 4. SCIENTIFIC CONSTANTS CATEGORIES */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-0.5">
                     <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">SCIENTIFIC CONSTANTS</div>
                     <div className="grid grid-cols-2 gap-1 text-[11px]">
@@ -2047,7 +2056,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'CONST_LIST' ? (
                 /* Constants List */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-0.5">
                     <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">
                       {CONST_CATEGORIES[constCatIndex]?.name.toUpperCase()} CONSTANTS
@@ -2072,7 +2081,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'RESET' ? (
                 /* 5. RESET MENU */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
                     <div className="text-[10px] font-bold text-rose-400 border-b border-[var(--display-text)]/20 pb-0.5">RESET ?</div>
                     {[
@@ -2100,7 +2109,7 @@ export default function App() {
                 </div>
               ) : displayMenu === 'RESET_CONFIRM' ? (
                 /* Reset Confirmation */
-                <div className="flex-1 flex flex-col justify-between py-2 font-mono text-center">
+                <div className="flex-1 flex flex-col justify-between py-2 font-sans text-center">
                   <div className="py-2">
                     <div className="text-sm font-bold text-[var(--label-shift)]">Reset All?</div>
                     <div className="mt-2 text-xs text-[var(--display-text)]">
@@ -2114,7 +2123,7 @@ export default function App() {
                 </div>
               ) : (
                 /* Generic In-Display Sub-menu (CONV, STAT, MATRIX, VECTOR) */
-                <div className="flex-1 flex flex-col justify-between py-1 font-mono">
+                <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5 uppercase">
                     {displayMenu} MENU
                   </div>
@@ -2168,7 +2177,7 @@ export default function App() {
                   if (alphaActive) setAlphaActive(false);
                 }}
                 aria-label="SHIFT key"
-                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
+                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
                   shiftActive ? 'text-slate-950 bg-[var(--label-shift)] shadow-[0_0_10px_var(--label-shift)]' : 'theme-label-shift'
                 }`}
               >
@@ -2189,7 +2198,7 @@ export default function App() {
                   if (shiftActive) setShiftActive(false);
                 }}
                 aria-label="ALPHA key"
-                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
+                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
                   alphaActive ? 'text-white bg-[var(--label-alpha)] shadow-[0_0_10px_var(--label-alpha)]' : 'theme-label-alpha'
                 }`}
               >
@@ -2245,7 +2254,7 @@ export default function App() {
             {/* Col 5, Row 1: MENU / SETUP */}
             <div className="col-start-5 row-start-1 key-wrapper relative z-20">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,1vh,9px)] font-mono theme-label-shift font-semibold tracking-tighter leading-none">SETUP</span>
+                <span className="text-[clamp(7.5px,1vh,9px)] font-sans theme-label-shift font-semibold tracking-tighter leading-none">SETUP</span>
                 <span></span>
               </div>
               <button
@@ -2261,7 +2270,7 @@ export default function App() {
                 }}
                 aria-label="MENU key"
                 data-testid="menu-key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-semibold key-hardware-round text-slate-200 flex items-center justify-center cursor-pointer select-none"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-semibold key-hardware-round text-slate-200 flex items-center justify-center cursor-pointer select-none"
               >
                 MENU
               </button>
@@ -2270,13 +2279,13 @@ export default function App() {
             {/* Col 6, Row 1: ON */}
             <div className="col-start-6 row-start-1 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,1vh,9px)] font-mono text-slate-500 tracking-tighter leading-none">CLR</span>
+                <span className="text-[clamp(7.5px,1vh,9px)] font-sans text-slate-500 tracking-tighter leading-none">CLR</span>
                 <span></span>
               </div>
               <button
                 onClick={handleOn}
                 aria-label="ON key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-mono text-[10px] sm:text-xs font-bold key-hardware-round text-slate-100 border border-slate-600/50 flex items-center justify-center"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round text-slate-100 border border-slate-600/50 flex items-center justify-center"
               >
                 ON
               </button>
@@ -2376,7 +2385,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleFractionKey(), () => handleFractionKey())}
                 aria-label="Fraction key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 ■/□
               </button>
@@ -2391,7 +2400,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleSqrtKey(), () => handleToken('³√('))}
                 aria-label="Square root key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 √■
               </button>
@@ -2406,7 +2415,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handlePostfixKey('²'), () => handlePostfixKey('³'), undefined, 'func', 'x²')}
                 aria-label="x squared key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 x²
               </button>
@@ -2421,7 +2430,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handlePowerKey(), () => handleToken('^('), undefined, 'func', 'x^□')}
                 aria-label="x to power key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 x<sup>□</sup>
               </button>
@@ -2436,7 +2445,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleLogBaseKey(), () => handleToken('10^('), undefined, 'func', 'log')}
                 aria-label="log base key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-[11px]"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-[11px]"
               >
                 log<sub>□</sub>
               </button>
@@ -2451,7 +2460,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleToken('ln('), () => handleToken('e^('), undefined, 'func', 'ln')}
                 aria-label="ln key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 ln
               </button>
@@ -2472,7 +2481,7 @@ export default function App() {
                   '(-)'
                 )}
                 aria-label="Negation key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 (-)
               </button>
@@ -2498,7 +2507,7 @@ export default function App() {
                   "° ' \""
                 )}
                 aria-label="Degrees minutes seconds key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 °&apos;&quot;
               </button>
@@ -2518,7 +2527,7 @@ export default function App() {
                   'hyp'
                 )}
                 aria-label="x inverse key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 x⁻¹
               </button>
@@ -2538,7 +2547,7 @@ export default function App() {
                   'sin'
                 )}
                 aria-label="sine key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 sin
               </button>
@@ -2558,7 +2567,7 @@ export default function App() {
                   'cos'
                 )}
                 aria-label="cosine key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 cos
               </button>
@@ -2578,7 +2587,7 @@ export default function App() {
                   'tan'
                 )}
                 aria-label="tangent key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 tan
               </button>
@@ -2598,7 +2607,7 @@ export default function App() {
                   () => handleVariableOperation('X')
                 )}
                 aria-label="Store key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 STO
               </button>
@@ -2618,7 +2627,7 @@ export default function App() {
                   'ENG'
                 )}
                 aria-label="Engineering format key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 ENG
               </button>
@@ -2633,7 +2642,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleToken('('), () => handleToken('Abs('))}
                 aria-label="Left bracket key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-sm"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-sm"
               >
                 (
               </button>
@@ -2652,7 +2661,7 @@ export default function App() {
                   () => handleToken('x', 'num', 'VAR')
                 )}
                 aria-label="Right bracket key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-sm"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-sm"
               >
                 )
               </button>
@@ -2671,7 +2680,7 @@ export default function App() {
                   () => handleVariableOperation('Y')
                 )}
                 aria-label="S to D toggle key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 S⇔D
               </button>
@@ -2690,7 +2699,7 @@ export default function App() {
                   () => handleVariableOperation('M')
                 )}
                 aria-label="Memory plus key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-mono text-xs font-semibold"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 M+
               </button>

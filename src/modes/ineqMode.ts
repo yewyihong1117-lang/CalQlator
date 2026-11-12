@@ -569,7 +569,7 @@ export const ineqModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-mono select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
@@ -649,7 +649,7 @@ export const ineqModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-mono select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
@@ -726,7 +726,7 @@ export const ineqModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-mono select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
@@ -822,7 +822,7 @@ export const ineqModeModule: ModeModule = {
       'div',
       {
         className:
-          'flex flex-col h-full justify-between p-2 font-mono select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+          'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
       },
       React.createElement(
         'div',
@@ -894,7 +894,7 @@ export const ineqModeModule: ModeModule = {
           React.createElement('span', { className: 'text-[var(--label-shift)]' }, `${activeLabel} =`),
           React.createElement(
             'span',
-            { className: 'truncate max-w-[200px] text-right font-mono' },
+            { className: 'truncate max-w-[200px] text-right font-sans' },
             activeValue
           )
         ),

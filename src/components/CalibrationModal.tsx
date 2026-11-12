@@ -24,7 +24,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in">
-      <div className="w-full max-w-md bg-[#13151D] border border-slate-700/80 rounded-2xl shadow-2xl p-5 font-mono text-slate-100 flex flex-col gap-4">
+      <div className="w-full max-w-md bg-[#13151D] border border-slate-700/80 rounded-2xl shadow-2xl p-5 font-sans text-slate-100 flex flex-col gap-4">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
