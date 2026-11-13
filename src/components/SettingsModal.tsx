@@ -13,7 +13,7 @@ import {
 import { AngleMode, DisplayFormat } from '../calcEngine';
 
 export type CalculatorMode = 'EXAM' | 'STUDY';
-export type CalculatorTheme = 'default' | 'qiqi';
+export type CalculatorTheme = 'default' | 'icy';
 export type EditorMode = 'CLASSIC' | 'PHONE';
 
 interface SettingsModalProps {
@@ -165,7 +165,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Row 2: Theme Selector (Segmented Button) */}
             {onSetTheme && (
-              <div className="min-h-[56px] flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-white/5">
+              <div
+                style={{ borderColor: 'var(--m3-outline-variant)' }}
+                className="min-h-[56px] flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t"
+              >
                 <div className="flex items-center gap-3">
                   <div 
                     style={{ backgroundColor: 'var(--m3-surface-container-high, #262632)' }}
@@ -179,7 +182,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       style={{ color: 'var(--m3-on-surface-variant, #94A3B8)' }}
                       className="text-xs leading-normal"
                     >
-                      {theme === 'default' ? 'Classic Casio ClassWiz hardware' : 'Qiqi icy cyan & purple palette'}
+                      {theme === 'default' ? 'Classic Casio ClassWiz hardware' : 'Icy cyan & purple palette'}
                     </span>
                   </div>
                 </div>
@@ -201,14 +204,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onSetTheme('qiqi')}
+                    onClick={() => onSetTheme('icy')}
                     style={{
-                      backgroundColor: theme === 'qiqi' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
-                      color: theme === 'qiqi' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
+                      backgroundColor: theme === 'icy' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
+                      color: theme === 'icy' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                     }}
                     className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
                   >
-                    Qiqi
+                    Icy
                   </button>
                 </div>
               </div>
@@ -216,7 +219,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Row 3: Editor Behavior (Classic Casio vs Phone Edit) */}
             {onSetEditorMode && (
-              <div className="min-h-[56px] flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-white/5">
+              <div
+                style={{ borderColor: 'var(--m3-outline-variant)' }}
+                className="min-h-[56px] flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t"
+              >
                 <div className="flex items-center gap-3">
                   <div 
                     style={{ backgroundColor: 'var(--m3-surface-container-high, #262632)' }}
@@ -326,7 +332,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {/* Display Notation Format: Norm1 / Norm2 / Fix / Sci */}
-            <div className="min-h-[56px] flex flex-col gap-2.5 pt-3 border-t border-white/5">
+            <div
+              style={{ borderColor: 'var(--m3-outline-variant)' }}
+              className="min-h-[56px] flex flex-col gap-2.5 pt-3 border-t"
+            >
               <div className="flex items-center gap-3">
                 <div 
                   style={{ backgroundColor: 'var(--m3-surface-container-high, #262632)' }}
@@ -521,8 +530,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
               <span 
-                style={{ color: 'var(--m3-on-surface-variant, #94A3B8)' }}
-                className="text-xs font-semibold px-3 py-1 rounded-full bg-white/5"
+                style={{
+                  backgroundColor: 'var(--m3-surface-container-high, #262632)',
+                  color: 'var(--m3-on-surface-variant, #94A3B8)',
+                }}
+                className="text-xs font-semibold px-3 py-1 rounded-full"
               >
                 Open
               </span>
@@ -554,8 +566,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
               <span 
-                style={{ color: 'var(--m3-on-surface-variant, #94A3B8)' }}
-                className="text-xs font-semibold px-3 py-1 rounded-full bg-white/5"
+                style={{
+                  backgroundColor: 'var(--m3-surface-container-high, #262632)',
+                  color: 'var(--m3-on-surface-variant, #94A3B8)',
+                }}
+                className="text-xs font-semibold px-3 py-1 rounded-full"
               >
                 ?test=1
               </span>
@@ -574,7 +589,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
             style={{ 
               backgroundColor: 'var(--m3-surface-container, #1C1C24)',
-              color: '#F87171',
+              color: 'var(--ui-danger, #F87171)',
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all hover:opacity-85 active:scale-95"
           >

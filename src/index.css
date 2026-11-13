@@ -36,15 +36,17 @@
     --ui-accent: #E5A93C;
     --ui-accent-text: #171104;
     --ui-accent-tonal: rgba(229, 169, 60, 0.16);
+    --ui-danger: #F87171;
     --m3-surface: #14141A;
     --m3-surface-container: #1C1C24;
     --m3-surface-container-high: #262632;
     --m3-on-surface: #E2E8F0;
     --m3-on-surface-variant: #94A3B8;
+    --m3-outline-variant: rgba(226, 232, 240, 0.08);
   }
 
-  /* Qiqi Theme */
-  [data-theme="qiqi"] {
+  /* Icy Theme */
+  [data-theme="icy"] {
     --bg: #0E0B16;
     --key-fn: #1C1830;
     --key-fn-text: #EDE7FF;
@@ -63,15 +65,17 @@
     --display-dot-color: rgba(143, 227, 255, 0.2);
     --display-glow: rgba(168, 238, 255, 0.4);
 
-    /* Material 3 Expressive UI Surfaces & Single Accent (Qiqi) */
+    /* Material 3 Expressive UI Surfaces & Single Accent (Icy) */
     --ui-accent: #8FE3FF;
     --ui-accent-text: #05161C;
     --ui-accent-tonal: rgba(143, 227, 255, 0.16);
+    --ui-danger: #F08CFF;
     --m3-surface: #120F1D;
     --m3-surface-container: #1D1830;
     --m3-surface-container-high: #292342;
     --m3-on-surface: #EDE7FF;
     --m3-on-surface-variant: #A8A0C2;
+    --m3-outline-variant: rgba(143, 227, 255, 0.12);
   }
 
   *, *::before, *::after {
@@ -223,7 +227,7 @@
 }
 
 /* Casio Key Hardware Styling with Theme-Driven CSS Variables */
-/* 1. Function Keys (Charcoal / Qiqi Indigo) */
+/* 1. Function Keys (Charcoal / Icy Indigo) */
 .key-hardware-charcoal {
   background: var(--key-fn);
   color: var(--key-fn-text);
@@ -257,7 +261,7 @@
   filter: brightness(0.93);
 }
 
-/* 3. Action Keys (DEL, AC - Blue / Qiqi Purple Accent) */
+/* 3. Action Keys (DEL, AC - Blue / Icy Purple Accent) */
 .key-hardware-blue {
   background: var(--key-accent);
   color: var(--key-accent-text);

@@ -12,7 +12,8 @@ export type TokenType = 'DEFAULT' | 'OP_NPR' | 'OP_NCR' | 'VAR' | 'FUNC';
 export type MathNode =
   | { type: 'token'; id: string; val: string; tokenType?: TokenType }
   | { type: 'frac'; id: string; num: MathNode[]; den: MathNode[] }
-  | { type: 'int'; id: string; integrand: MathNode[]; lower: MathNode[]; upper: MathNode[] }
+  | { type: 'int'; id: string; integrand: MathNode[]; lower: MathNode[]; upper: MathNode[]; variable?: string }
+  | { type: 'deriv'; id: string; expr: MathNode[]; at: MathNode[]; variable?: string }
   | { type: 'sqrt'; id: string; content: MathNode[] }
   | { type: 'power'; id: string; base: MathNode[]; exp: MathNode[] }
   | { type: 'postfix'; id: string; op: PostfixOp; target: MathNode[] }
@@ -60,6 +61,11 @@ export function getSlotNodes(root: MathNode[], slotId: string): MathNode[] | nul
         getSlotNodes(node.integrand, slotId) ||
         getSlotNodes(node.lower, slotId) ||
         getSlotNodes(node.upper, slotId);
+      if (sub) return sub;
+    } else if (node.type === 'deriv') {
+      if (`${node.id}_expr` === slotId) return node.expr;
+      if (`${node.id}_at` === slotId) return node.at;
+      const sub = getSlotNodes(node.expr, slotId) || getSlotNodes(node.at, slotId);
       if (sub) return sub;
     } else if (node.type === 'sqrt') {
       if (`${node.id}_content` === slotId) return node.content;
@@ -121,6 +127,14 @@ export function findSlotParentInfo(
         findSlotParentInfo(root, targetSlotId, `${node.id}_integrand`) ||
         findSlotParentInfo(root, targetSlotId, `${node.id}_lower`) ||
         findSlotParentInfo(root, targetSlotId, `${node.id}_upper`);
+      if (deeper) return deeper;
+    } else if (node.type === 'deriv') {
+      if (`${node.id}_expr` === targetSlotId || `${node.id}_at` === targetSlotId) {
+        return { parentNode: node, parentSlotId, parentIndex: i };
+      }
+      const deeper =
+        findSlotParentInfo(root, targetSlotId, `${node.id}_expr`) ||
+        findSlotParentInfo(root, targetSlotId, `${node.id}_at`);
       if (deeper) return deeper;
     } else if (node.type === 'sqrt') {
       if (`${node.id}_content` === targetSlotId) {
@@ -485,6 +499,7 @@ export function insertIntegral(state: MathAstState): MathAstState {
     integrand: [],
     lower: [],
     upper: [],
+    variable: 'x',
   };
 
   slotNodes.splice(offset, 0, intNode);
@@ -492,6 +507,35 @@ export function insertIntegral(state: MathAstState): MathAstState {
   return {
     root: newRoot,
     cursor: { slotId: `${intId}_integrand`, offset: 0 },
+    pendingDeleteTemplateId: null,
+  };
+}
+
+/**
+ * Natural Display: Derivative Key (d/dx)
+ * Insert structured derivative template: d/dx(□)|_{x=□}
+ */
+export function insertDerivative(state: MathAstState): MathAstState {
+  const newRoot = cloneAst(state.root);
+  const slotNodes = getSlotNodes(newRoot, state.cursor.slotId);
+  if (!slotNodes) return state;
+
+  const derivId = generateUniqueId('deriv');
+  const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
+
+  const derivNode: MathNode = {
+    type: 'deriv',
+    id: derivId,
+    expr: [],
+    at: [],
+    variable: 'x',
+  };
+
+  slotNodes.splice(offset, 0, derivNode);
+
+  return {
+    root: newRoot,
+    cursor: { slotId: `${derivId}_expr`, offset: 0 },
     pendingDeleteTemplateId: null,
   };
 }
@@ -562,26 +606,69 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
   const slotId = cursor.slotId;
   const offset = cursor.offset;
 
+  const slotEndOffset = (targetSlotId: string) => (getSlotNodes(root, targetSlotId) || []).length;
+
+  // Walk ancestor slots to find an enclosing template (e.g. int or deriv) that has a vertical neighbor
+  const findAncestorVerticalTarget = (dir: 'up' | 'down'): string | null => {
+    let walkSlotId = slotId;
+    while (walkSlotId !== 'root') {
+      const info = findSlotParentInfo(root, walkSlotId);
+      if (!info || !info.parentNode) break;
+      const pNode = info.parentNode;
+      if (pNode.type === 'int') {
+        if (dir === 'up' && (walkSlotId === `${pNode.id}_integrand` || walkSlotId === `${pNode.id}_lower`)) {
+          return `${pNode.id}_upper`;
+        }
+        if (dir === 'down' && (walkSlotId === `${pNode.id}_integrand` || walkSlotId === `${pNode.id}_upper`)) {
+          return `${pNode.id}_lower`;
+        }
+      } else if (pNode.type === 'deriv') {
+        if (dir === 'up' && walkSlotId === `${pNode.id}_at`) {
+          return `${pNode.id}_expr`;
+        }
+        if (dir === 'down' && walkSlotId === `${pNode.id}_expr`) {
+          return `${pNode.id}_at`;
+        }
+      }
+      walkSlotId = info.parentSlotId;
+    }
+    return null;
+  };
+
   if (direction === 'up') {
+    const immediateParent = findSlotParentInfo(root, slotId);
     // 1. Fraction: In denominator, UP moves to numerator
     if (slotId.endsWith('_den')) {
       const baseId = slotId.replace(/_den$/, '');
-      return { ...state, cursor: { slotId: `${baseId}_num`, offset: 0 }, pendingDeleteTemplateId: null };
+      const target = `${baseId}_num`;
+      return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
     }
     // 2. Integral: In integrand or lower limit, UP moves to upper limit
     if (slotId.endsWith('_integrand') || slotId.endsWith('_lower')) {
       const baseId = slotId.replace(/_(integrand|lower)$/, '');
-      return { ...state, cursor: { slotId: `${baseId}_upper`, offset: 0 }, pendingDeleteTemplateId: null };
+      const target = `${baseId}_upper`;
+      return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
     }
-    // 3. Power: In base, UP moves to exponent
+    // 3. Derivative: In evaluation point (_at), UP moves to expression (_expr)
+    if (slotId.endsWith('_at')) {
+      const baseId = slotId.replace(/_at$/, '');
+      const target = `${baseId}_expr`;
+      return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
+    }
+    // 4. Power / LogBase: distinguish via parent node type
     if (slotId.endsWith('_base')) {
       const baseId = slotId.replace(/_base$/, '');
-      return { ...state, cursor: { slotId: `${baseId}_exp`, offset: 0 }, pendingDeleteTemplateId: null };
+      if (immediateParent?.parentNode?.type === 'logBase') {
+        const target = `${baseId}_arg`;
+        return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
+      }
+      const target = `${baseId}_exp`;
+      return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
     }
-    // 4. LogBase: In base, UP moves to argument
-    if (slotId.endsWith('_base')) {
-      const baseId = slotId.replace(/_base$/, '');
-      return { ...state, cursor: { slotId: `${baseId}_arg`, offset: 0 }, pendingDeleteTemplateId: null };
+    // 5. Escaping nested templates (e.g. power exp, frac num, sqrt content) to enclosing int/deriv vertical neighbor
+    const ancestorUp = findAncestorVerticalTarget('up');
+    if (ancestorUp) {
+      return { ...state, cursor: { slotId: ancestorUp, offset: slotEndOffset(ancestorUp) }, pendingDeleteTemplateId: null };
     }
     return state;
   }
@@ -590,14 +677,27 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
     // 1. Fraction: In numerator, DOWN moves to denominator
     if (slotId.endsWith('_num')) {
       const baseId = slotId.replace(/_num$/, '');
-      return { ...state, cursor: { slotId: `${baseId}_den`, offset: 0 }, pendingDeleteTemplateId: null };
+      const target = `${baseId}_den`;
+      return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
     }
     // 2. Integral: In integrand or upper limit, DOWN moves to lower limit
     if (slotId.endsWith('_integrand') || slotId.endsWith('_upper')) {
       const baseId = slotId.replace(/_(integrand|upper)$/, '');
-      return { ...state, cursor: { slotId: `${baseId}_lower`, offset: 0 }, pendingDeleteTemplateId: null };
+      const target = `${baseId}_lower`;
+      return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
     }
-    // 3. Power: In exponent, DOWN breaks out to parent slot after power node
+    // 3. Derivative: In expression (_expr), DOWN moves to evaluation point (_at)
+    if (slotId.endsWith('_expr')) {
+      const baseId = slotId.replace(/_expr$/, '');
+      const target = `${baseId}_at`;
+      return { ...state, cursor: { slotId: target, offset: slotEndOffset(target) }, pendingDeleteTemplateId: null };
+    }
+    // 4. Nested template inside int/deriv (e.g. x^2 or 1/x inside integrand/expr): jump to enclosing int_lower or deriv_at
+    const ancestorDown = findAncestorVerticalTarget('down');
+    if (ancestorDown) {
+      return { ...state, cursor: { slotId: ancestorDown, offset: slotEndOffset(ancestorDown) }, pendingDeleteTemplateId: null };
+    }
+    // 5. Power at top-level or non-int/deriv parent: DOWN breaks out to parent slot after power node
     if (slotId.endsWith('_exp')) {
       const parentInfo = findSlotParentInfo(root, slotId);
       if (parentInfo) {
@@ -619,7 +719,10 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
         return { ...state, cursor: { slotId: `${nextNode.id}_num`, offset: 0 }, pendingDeleteTemplateId: null };
       }
       if (nextNode.type === 'int') {
-        return { ...state, cursor: { slotId: `${nextNode.id}_integrand`, offset: 0 }, pendingDeleteTemplateId: null };
+        return { ...state, cursor: { slotId: `${nextNode.id}_lower`, offset: 0 }, pendingDeleteTemplateId: null };
+      }
+      if (nextNode.type === 'deriv') {
+        return { ...state, cursor: { slotId: `${nextNode.id}_expr`, offset: 0 }, pendingDeleteTemplateId: null };
       }
       if (nextNode.type === 'sqrt') {
         return { ...state, cursor: { slotId: `${nextNode.id}_content`, offset: 0 }, pendingDeleteTemplateId: null };
@@ -656,6 +759,22 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
 
     // Power: Rule 2 specifies "The right arrow exits the slot to after the power node"
     if (slotId.endsWith('_exp')) {
+      const parentInfo = findSlotParentInfo(root, slotId);
+      if (parentInfo) {
+        return {
+          ...state,
+          cursor: { slotId: parentInfo.parentSlotId, offset: parentInfo.parentIndex + 1 },
+          pendingDeleteTemplateId: null,
+        };
+      }
+    }
+
+    // Derivative: _expr -> _at -> breakout
+    if (slotId.endsWith('_expr')) {
+      const baseId = slotId.replace(/_expr$/, '');
+      return { ...state, cursor: { slotId: `${baseId}_at`, offset: 0 }, pendingDeleteTemplateId: null };
+    }
+    if (slotId.endsWith('_at')) {
       const parentInfo = findSlotParentInfo(root, slotId);
       if (parentInfo) {
         return {
@@ -705,6 +824,10 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
         const intNodes = prevNode.integrand;
         return { ...state, cursor: { slotId: `${prevNode.id}_integrand`, offset: intNodes.length }, pendingDeleteTemplateId: null };
       }
+      if (prevNode.type === 'deriv') {
+        const atNodes = prevNode.at;
+        return { ...state, cursor: { slotId: `${prevNode.id}_at`, offset: atNodes.length }, pendingDeleteTemplateId: null };
+      }
       if (prevNode.type === 'sqrt') {
         const cNodes = prevNode.content;
         return { ...state, cursor: { slotId: `${prevNode.id}_content`, offset: cNodes.length }, pendingDeleteTemplateId: null };
@@ -727,8 +850,23 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
 
     if (slotId.endsWith('_den')) {
       const baseId = slotId.replace(/_den$/, '');
-      const numNodes = getSlotNodes(root, `${baseId}_num`) || [];
-      return { ...state, cursor: { slotId: `${baseId}_num`, offset: numNodes.length }, pendingDeleteTemplateId: null };
+      return { ...state, cursor: { slotId: `${baseId}_num`, offset: slotEndOffset(`${baseId}_num`) }, pendingDeleteTemplateId: null };
+    }
+    if (slotId.endsWith('_integrand')) {
+      const baseId = slotId.replace(/_integrand$/, '');
+      return { ...state, cursor: { slotId: `${baseId}_upper`, offset: slotEndOffset(`${baseId}_upper`) }, pendingDeleteTemplateId: null };
+    }
+    if (slotId.endsWith('_upper')) {
+      const baseId = slotId.replace(/_upper$/, '');
+      return { ...state, cursor: { slotId: `${baseId}_lower`, offset: slotEndOffset(`${baseId}_lower`) }, pendingDeleteTemplateId: null };
+    }
+    if (slotId.endsWith('_at')) {
+      const baseId = slotId.replace(/_at$/, '');
+      return { ...state, cursor: { slotId: `${baseId}_expr`, offset: slotEndOffset(`${baseId}_expr`) }, pendingDeleteTemplateId: null };
+    }
+    if (slotId.endsWith('_arg')) {
+      const baseId = slotId.replace(/_arg$/, '');
+      return { ...state, cursor: { slotId: `${baseId}_base`, offset: slotEndOffset(`${baseId}_base`) }, pendingDeleteTemplateId: null };
     }
 
     // Break out to parent left
@@ -877,6 +1015,10 @@ export function astToExpression(nodes: MathNode[]): string {
       const lowerExpr = astToExpression(node.lower) || '0';
       const upperExpr = astToExpression(node.upper) || '1';
       expr += `∫(${integrandExpr}, ${lowerExpr}, ${upperExpr})`;
+    } else if (node.type === 'deriv') {
+      const innerExpr = astToExpression(node.expr) || 'x';
+      const atExpr = astToExpression(node.at) || '0';
+      expr += `d/dx(${innerExpr}, ${atExpr})`;
     } else if (node.type === 'sqrt') {
       const radExpr = astToExpression(node.content) || '0';
       expr += `√(${radExpr})`;
@@ -902,7 +1044,7 @@ export function astToDisplayText(nodes: MathNode[]): string {
     } else if (node.type === 'frac') {
       const numText = astToDisplayText(node.num) || '□';
       const denText = astToDisplayText(node.den) || '□';
-      text += `[${numText}/${denText}]`;
+      text += `(${numText}/${denText})`;
     } else if (node.type === 'postfix') {
       const targetText = astToDisplayText(node.target);
       text += `${targetText}${node.op}`;
@@ -914,14 +1056,20 @@ export function astToDisplayText(nodes: MathNode[]): string {
       const intText = astToDisplayText(node.integrand) || '□';
       const lowText = astToDisplayText(node.lower) || '□';
       const upText = astToDisplayText(node.upper) || '□';
-      text += `∫_{${lowText}}^{${upText}} (${intText}) dx`;
+      const v = node.variable || 'x';
+      text += `∫(${intText}, ${lowText}→${upText}) d${v}`;
+    } else if (node.type === 'deriv') {
+      const exprText = astToDisplayText(node.expr) || '□';
+      const atText = astToDisplayText(node.at) || '□';
+      const v = node.variable || 'x';
+      text += `d/d${v}(${exprText})|${v}=${atText}`;
     } else if (node.type === 'sqrt') {
       const radText = astToDisplayText(node.content) || '□';
       text += `√(${radText})`;
     } else if (node.type === 'logBase') {
       const bText = astToDisplayText(node.base) || '□';
       const aText = astToDisplayText(node.arg) || '□';
-      text += `log_{${bText}}(${aText})`;
+      text += `log(${bText}, ${aText})`;
     }
   }
 
@@ -955,6 +1103,9 @@ export function astToStructureDescription(state: MathAstState): string {
     }
     if (node.type === 'int') {
       return `int(...)`;
+    }
+    if (node.type === 'deriv') {
+      return `deriv(...)`;
     }
     if (node.type === 'logBase') {
       return `logBase(...)`;

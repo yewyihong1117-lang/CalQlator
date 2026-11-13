@@ -166,7 +166,50 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
 
           {/* dx Differential Token in italics */}
           <span className="text-[0.85em] font-serif italic text-[var(--display-text)]/90 select-none tracking-normal ml-0.5">
-            dx
+            d{node.variable || 'x'}
+          </span>
+        </span>
+      );
+    }
+
+    if (node.type === 'deriv') {
+      const varName = node.variable || 'x';
+      return (
+        <span
+          key={node.id}
+          style={{ verticalAlign: 'middle' }}
+          className={`inline-flex items-center align-middle mx-1 my-0.5 rounded px-0.5 transition-all ${
+            isPendingDelete
+              ? 'border border-dashed border-red-500 bg-red-950/30 animate-pulse'
+              : 'border border-transparent'
+          }`}
+        >
+          {/* d/dx Stacked Prefix */}
+          <span className="inline-flex flex-col items-center justify-center align-middle mr-1 leading-none select-none">
+            <span className="text-[0.7em] font-serif italic px-0.5 border-b border-[var(--display-text)] text-[var(--display-text)] leading-tight">
+              d
+            </span>
+            <span className="text-[0.7em] font-serif italic px-0.5 text-[var(--display-text)] leading-tight">
+              d{varName}
+            </span>
+          </span>
+
+          {/* Expression Box inside Parentheses */}
+          <span className="inline-flex items-center text-[0.9em]">
+            <span className="text-[var(--display-text)]/80 mr-0.5">(</span>
+            <span>{renderSlotList(node.expr, `${node.id}_expr`, '□')}</span>
+            <span className="text-[var(--display-text)]/80 ml-0.5">)</span>
+          </span>
+
+          {/* Evaluation Point Bar |_{x=□} */}
+          <span className="inline-flex items-end ml-0.5 select-none">
+            <span className="text-[1.25em] font-light text-[var(--display-text)]/70 leading-none">
+              |
+            </span>
+            <span className="inline-flex items-center text-[0.65em] leading-none ml-0.5 -mb-0.5">
+              <span className="font-serif italic mr-0.5 text-[var(--display-text)]/90">{varName}=</span>
+              {renderSlotList(node.at, `${node.id}_at`, '□')}
+            </span>
           </span>
         </span>
       );

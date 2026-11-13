@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { 
   AngleMode, DisplayFormat, HistoryItem,
-  evaluateMathExpression, formatResult,
+  evaluateMathExpression, evaluateMathAst, formatResult,
   toEngineering, decimalToDms, primeFactorization,
   solveEquation,
   SCIENTIFIC_CONSTANTS, METRIC_CONVERSIONS,
@@ -29,8 +29,8 @@ import {
   HapticKeyType 
 } from './audioFeedback';
 import { 
-  MathAstState, createInitialAstState,
-  insertToken, insertFraction, insertIntegral, insertSqrt,
+  MathAstState, MathNode, createInitialAstState,
+  insertToken, insertFraction, insertIntegral, insertDerivative, insertSqrt,
   insertPower, insertPostfix, PostfixOp, insertLogBase, navigateAst, deleteAst,
   astToExpression, astToDisplayText, parseStringToAst, TokenType
 } from './mathAst';
@@ -361,14 +361,21 @@ export default function App() {
     return 'EXAM';
   });
 
-  // Theme System: 'default' (Classic ClassWiz) vs 'qiqi' (Qiqi Theme)
+  // Theme System: 'default' (Classic ClassWiz) vs 'icy' (Icy Theme)
   const [theme, setTheme] = useState<CalculatorTheme>(() => {
     try {
       const saved = localStorage.getItem('casio_theme');
-      if (saved === 'qiqi' || saved === 'default') return saved as CalculatorTheme;
+      if (saved === 'icy' || saved === 'qiqi') return 'icy';
+      if (saved === 'default') return 'default';
     } catch {}
     return 'default';
   });
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch {}
+  }, [theme]);
 
   // Physical card calibration mm scale factor
   const [calibrationScale, setCalibrationScale] = useState<number>(() => {
@@ -674,15 +681,8 @@ export default function App() {
       return;
     }
 
-    const expr = astToExpression(astState.root);
-    if (!expr || expr === '0') {
-      setLivePreviewResult('0');
-      setLastValidPreviewResult('0');
-      return;
-    }
-
     try {
-      const evalResult = evaluateMathExpression(expr, angleMode, variables, lastAns);
+      const evalResult = evaluateMathAst(astState.root, angleMode, variables, lastAns);
       if (evalResult.success && evalResult.result !== undefined) {
         let formatted: string;
         if (evalResult.exactResult !== undefined && displayFormat.startsWith('NORM')) {
@@ -1289,6 +1289,32 @@ export default function App() {
     if (alphaActive) setAlphaActive(false);
   };
 
+  // Natural Display: Derivative Key (SHIFT + ∫dx -> d/dx)
+  const handleDerivativeKey = () => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('func');
+    setKeystrokes((k) => k + 1);
+    if (errorMessage) setErrorMessage(null);
+    pushUndoState(astState);
+
+    let currentState = astState;
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = createInitialAstState();
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
+      commitPendingHistory();
+      currentState = createInitialAstState();
+      setIsCalculated(false);
+    }
+
+    setAstState(insertDerivative(currentState));
+    if (shiftActive) setShiftActive(false);
+    if (alphaActive) setAlphaActive(false);
+  };
+
   // Natural Display: Square Root Key (√■)
   const handleSqrtKey = () => {
     if (isPoweredOff || displayMenu !== 'NONE') return;
@@ -1635,10 +1661,9 @@ export default function App() {
       if (handled) return;
     }
 
-    const expr = astToExpression(astState.root);
-    if (!expr || expr === '0') return;
+    if (astState.root.length === 0) return;
 
-    const evalResult = evaluateMathExpression(expr, angleMode, variables, lastAns);
+    const evalResult = evaluateMathAst(astState.root, angleMode, variables, lastAns);
 
     if (evalResult.success && evalResult.result !== undefined) {
       const numVal = evalResult.result;
@@ -1898,7 +1923,10 @@ export default function App() {
   const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   return (
-    <div className="w-full h-[100dvh] bg-[#0A0A0F] flex items-center justify-center p-0 m-0 overflow-hidden select-none font-sans">
+    <div
+      data-theme={theme}
+      className="w-full h-[100dvh] bg-[var(--bg)] flex items-center justify-center p-0 m-0 overflow-hidden select-none font-sans"
+    >
       
       {/* Floating Performance Metrics HUD (?perf=1) */}
       {perfMetrics?.isPerf && (
@@ -1932,7 +1960,6 @@ export default function App() {
           transform: calibrationScale !== 1.0 ? `scale(${calibrationScale})` : undefined,
           transformOrigin: 'top center',
         }}
-        data-theme={theme}
         className="w-full max-w-[440px] h-[100dvh] bg-[var(--bg)] flex flex-col justify-between relative overflow-hidden select-none"
       >
         {/* Key-Path Trainer Floating Pill (Study Mode) */}
@@ -2053,6 +2080,11 @@ export default function App() {
                         onRemoveSlot3={(id) => {
                           setDisplayEntries((prev) => prev.filter((it) => it.id !== id));
                         }}
+                        editorMode={editorMode}
+                        justCommitted={justCommitted}
+                        livePreviewResult={livePreviewResult}
+                        lastValidPreviewResult={lastValidPreviewResult}
+                        onCursorTouched={() => setJustCommitted(false)}
                       />
                     ))}
                   </div>
@@ -2597,7 +2629,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(
                   () => handleIntegralKey(),
-                  () => handleToken('d/dx('),
+                  () => handleDerivativeKey(),
                   () => handleToken(':')
                 )}
                 aria-label="Integral key"
@@ -3353,6 +3385,14 @@ export default function App() {
         onSetTheme={(t) => {
           setTheme(t);
           localStorage.setItem('casio_theme', t);
+        }}
+        editorMode={editorMode}
+        onSetEditorMode={(m) => {
+          setEditorMode(m);
+          localStorage.setItem('casio_editor_mode', m);
+          setJustCommitted(false);
+          setLivePreviewResult('');
+          setLastValidPreviewResult('');
         }}
         onSetCalcMode={(mode) => {
           setCalcMode(mode);

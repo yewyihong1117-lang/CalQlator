@@ -345,42 +345,184 @@ export const METRIC_CONVERSIONS = [
   { code: '40', name: 'cal ➔ J', fn: (v: number) => v * 4.184 },
 ];
 
-// Helper to evaluate a mathematical sub-expression for a given value of variable x
-export function evaluateSubExprForX(subExpr: string, xVal: number, angleMode: AngleMode = 'DEG'): number {
-  const res = evaluateMathExpression(subExpr, angleMode, { x: xVal, X: xVal });
-  return res.success && typeof res.result === 'number' ? res.result : NaN;
+// Clean floating-point noise (e.g. 2.0000000001 -> 2, 1e-16 -> 0)
+export function cleanFloatNoise(val: number): number {
+  if (!isFinite(val) || isNaN(val)) return val;
+  if (Math.abs(val) < 1e-13) return 0;
+  if (Math.abs(val) <= 1e9) {
+    const nearest = Math.round(val);
+    if (Math.abs(val - nearest) <= 1e-9 * Math.max(1, Math.abs(nearest))) {
+      return nearest;
+    }
+  }
+  return val;
 }
 
-// Numerical Definite Integration using Simpson's 1/3 Rule
+// Convert numeric result to expression-safe literal (avoids raw '1e-17' conflicting with Euler 'e')
+function numToSafeExpr(val: number): string {
+  const cleaned = cleanFloatNoise(val);
+  if (cleaned === 0) return '0';
+  const str = cleaned.toString();
+  const expMatch = /^(-?\d+(?:\.\d+)?)[eE]([+-]?\d+)$/.exec(str);
+  if (expMatch) {
+    return `((${expMatch[1]})×10^(${expMatch[2]}))`;
+  }
+  return `(${str})`;
+}
+
+// Helper to evaluate a mathematical sub-expression for a given bound variable value
+export function evaluateSubExprForX(
+  subExpr: string,
+  xVal: number,
+  angleMode: AngleMode = 'DEG',
+  variables: Record<string, number> = {},
+  ans = 0,
+  varName = 'x'
+): number {
+  const boundVars = { ...variables, [varName]: xVal, x: xVal, X: xVal };
+  const res = evaluateMathExpression(subExpr, angleMode, boundVars, ans);
+  if (!res.success || typeof res.result !== 'number' || !isFinite(res.result)) {
+    return NaN;
+  }
+  return res.result;
+}
+
+// QUADPACK G7-K15 Gauss-Kronrod nodes & weights on [0, 1] (mirrored on [-1, 0])
+const GK_X = [
+  0.9914553711208126,
+  0.9491079123427585,
+  0.8648644233597691,
+  0.7415311855993944,
+  0.5860872354676911,
+  0.4058451513773972,
+  0.2077849550078985,
+  0.0,
+];
+const GK_WK = [
+  0.02293532201052922,
+  0.06309209262997855,
+  0.1047900103222502,
+  0.1406532597155259,
+  0.1690047266392679,
+  0.1903505780647854,
+  0.2044329400752989,
+  0.2094821410847278,
+];
+const GK_WG = [
+  0.1294849661688697,
+  0.2797053914892767,
+  0.3818300505051189,
+  0.4179591836734694,
+];
+
+function adaptiveGaussKronrod(
+  evalFn: (x: number) => number,
+  aIn: number,
+  bIn: number,
+  absTol = 1e-11,
+  relTol = 1e-10,
+  maxDepth = 20,
+  timeLimitMs = 1500
+): number {
+  if (!isFinite(aIn) || !isFinite(bIn) || isNaN(aIn) || isNaN(bIn)) {
+    throw new Error('Math ERROR');
+  }
+  if (aIn === bIn) return 0;
+
+  let a = aIn;
+  let b = bIn;
+  let sign = 1;
+  if (b < a) {
+    a = bIn;
+    b = aIn;
+    sign = -1;
+  }
+
+  const startTime = Date.now();
+
+  const evalSafe = (x: number): number => {
+    const y = evalFn(x);
+    if (isNaN(y) || !isFinite(y)) {
+      throw new Error('Math ERROR');
+    }
+    return y;
+  };
+
+  const gk15 = (lo: number, hi: number): { resK15: number; err: number } => {
+    const center = 0.5 * (lo + hi);
+    const half = 0.5 * (hi - lo);
+    const fCenter = evalSafe(center);
+    let resK15 = GK_WK[7] * fCenter;
+    let resG7 = GK_WG[3] * fCenter;
+
+    for (let j = 0; j < 7; j++) {
+      const absc = half * GK_X[j];
+      const fSum = evalSafe(center - absc) + evalSafe(center + absc);
+      resK15 += GK_WK[j] * fSum;
+      if (j % 2 === 1) {
+        resG7 += GK_WG[(j - 1) >> 1] * fSum;
+      }
+    }
+
+    resK15 *= half;
+    resG7 *= half;
+    return { resK15, err: Math.abs(resK15 - resG7) };
+  };
+
+  const subdivide = (lo: number, hi: number, panel: { resK15: number; err: number }, depth: number): number => {
+    if (Date.now() - startTime > timeLimitMs) {
+      throw new Error("Can't Solve");
+    }
+
+    const scaleTol = Math.max(absTol / Math.pow(2, Math.min(depth, 10)), relTol * Math.abs(panel.resK15));
+    if (panel.err <= scaleTol) {
+      return panel.resK15;
+    }
+
+    const minSpan = 1e-13 * (1 + Math.abs(lo) + Math.abs(hi));
+    if (depth >= maxDepth || hi - lo <= minSpan) {
+      if (!isFinite(panel.resK15) || isNaN(panel.resK15)) {
+        throw new Error('Math ERROR');
+      }
+      if (panel.err > 1e-3 * Math.max(1, Math.abs(panel.resK15))) {
+        throw new Error("Can't Solve");
+      }
+      return panel.resK15;
+    }
+
+    const mid = 0.5 * (lo + hi);
+    const leftPanel = gk15(lo, mid);
+    const rightPanel = gk15(mid, hi);
+    return subdivide(lo, mid, leftPanel, depth + 1) + subdivide(mid, hi, rightPanel, depth + 1);
+  };
+
+  const rootPanel = gk15(a, b);
+  const raw = sign * subdivide(a, b, rootPanel, 0);
+  if (!isFinite(raw) || isNaN(raw)) {
+    throw new Error('Math ERROR');
+  }
+  return cleanFloatNoise(raw);
+}
+
+// Numerical Definite Integration using Adaptive Gauss-Kronrod G7-K15
 export function computeDefiniteIntegral(
   fExpr: string,
   a: number,
   b: number,
   angleMode: AngleMode = 'DEG',
-  intervals = 200
+  _intervals = 200,
+  variables: Record<string, number> = {},
+  ans = 0
 ): number {
-  if (a === b) return 0;
-  let sign = 1;
-  if (b < a) {
-    const tmp = a;
-    a = b;
-    b = tmp;
-    sign = -1;
+  try {
+    return adaptiveGaussKronrod(
+      (xVal) => evaluateSubExprForX(fExpr, xVal, angleMode, variables, ans),
+      a,
+      b
+    );
+  } catch {
+    return NaN;
   }
-  const n = intervals % 2 === 0 ? intervals : intervals + 1;
-  const h = (b - a) / n;
-
-  let sum = evaluateSubExprForX(fExpr, a, angleMode) + evaluateSubExprForX(fExpr, b, angleMode);
-  if (isNaN(sum)) return NaN;
-
-  for (let i = 1; i < n; i++) {
-    const x = a + i * h;
-    const y = evaluateSubExprForX(fExpr, x, angleMode);
-    if (isNaN(y)) return NaN;
-    sum += (i % 2 === 1 ? 4 : 2) * y;
-  }
-
-  return sign * (h / 3) * sum;
 }
 
 // Total Geometric Area under curve: ∫ |f(x)| dx from a to b
@@ -479,19 +621,100 @@ export function sampleFunctionCurve(
   return res;
 }
 
+function riddersDerivative(
+  evalFn: (x: number) => number,
+  x0: number
+): number {
+  if (!isFinite(x0) || isNaN(x0)) {
+    throw new Error('Math ERROR');
+  }
+
+  const evalSafe = (x: number): number => {
+    const y = evalFn(x);
+    if (isNaN(y) || !isFinite(y)) {
+      throw new Error('Math ERROR');
+    }
+    return y;
+  };
+
+  // Point must be in domain
+  const f0 = evalSafe(x0);
+
+  // Non-differentiability check (kinks like |x| at 0, corners, jump discontinuities)
+  const scale = Math.max(1, Math.abs(x0));
+  const h1 = 1e-5 * scale;
+  const h2 = 2e-6 * scale;
+  const dRight1 = (evalSafe(x0 + h1) - f0) / h1;
+  const dLeft1 = (f0 - evalSafe(x0 - h1)) / h1;
+  const dRight2 = (evalSafe(x0 + h2) - f0) / h2;
+  const dLeft2 = (f0 - evalSafe(x0 - h2)) / h2;
+
+  const gap1 = Math.abs(dRight1 - dLeft1);
+  const gap2 = Math.abs(dRight2 - dLeft2);
+  if (gap2 > 1e-3 * Math.max(1, Math.abs(dRight2), Math.abs(dLeft2)) && gap2 > 0.6 * gap1) {
+    throw new Error('Math ERROR');
+  }
+
+  // Ridders' method (central difference + Richardson extrapolation) with scaled step
+  const NTAB = 10;
+  const CON = 1.4;
+  const CON2 = CON * CON;
+  const SAFE = 2.0;
+
+  let hh = x0 !== 0 ? Math.max(1e-7, 1e-3 * Math.abs(x0)) : 1e-3;
+  const tab: number[][] = Array.from({ length: NTAB }, () => Array(NTAB).fill(0));
+
+  tab[0][0] = (evalSafe(x0 + hh) - evalSafe(x0 - hh)) / (2.0 * hh);
+  let ans = tab[0][0];
+  let err = Infinity;
+
+  for (let i = 1; i < NTAB; i++) {
+    hh /= CON;
+    tab[0][i] = (evalSafe(x0 + hh) - evalSafe(x0 - hh)) / (2.0 * hh);
+    let fac = CON2;
+    for (let j = 1; j <= i; j++) {
+      tab[j][i] = (tab[j - 1][i] * fac - tab[j - 1][i - 1]) / (fac - 1.0);
+      fac *= CON2;
+      const errt = Math.max(
+        Math.abs(tab[j][i] - tab[j - 1][i]),
+        Math.abs(tab[j][i] - tab[j - 1][i - 1])
+      );
+      if (errt <= err) {
+        err = errt;
+        ans = tab[j][i];
+      }
+    }
+    if (Math.abs(tab[i][i] - tab[i - 1][i - 1]) >= SAFE * err) {
+      break;
+    }
+  }
+
+  if (isNaN(ans) || !isFinite(ans)) {
+    throw new Error('Math ERROR');
+  }
+  if (err > 1e-3 * Math.max(1, Math.abs(ans))) {
+    throw new Error("Can't Solve");
+  }
+
+  return cleanFloatNoise(ans);
+}
+
 export function computeDerivative(
   fExpr: string,
   x0: number,
   angleMode: AngleMode = 'DEG',
-  h = 1e-5
+  _h = 1e-5,
+  variables: Record<string, number> = {},
+  ans = 0
 ): number {
-  const f_plus_2h = evaluateSubExprForX(fExpr, x0 + 2 * h, angleMode);
-  const f_plus_h = evaluateSubExprForX(fExpr, x0 + h, angleMode);
-  const f_minus_h = evaluateSubExprForX(fExpr, x0 - h, angleMode);
-  const f_minus_2h = evaluateSubExprForX(fExpr, x0 - 2 * h, angleMode);
-
-  if (isNaN(f_plus_h) || isNaN(f_minus_h)) return NaN;
-  return (-f_plus_2h + 8 * f_plus_h - 8 * f_minus_h + f_minus_2h) / (12 * h);
+  try {
+    return riddersDerivative(
+      (xVal) => evaluateSubExprForX(fExpr, xVal, angleMode, variables, ans),
+      x0
+    );
+  } catch {
+    return NaN;
+  }
 }
 
 export function computeSummation(
@@ -1001,6 +1224,7 @@ function formatExact(v: CalcValue): string | undefined {
 // Token types for the evaluator
 type Token =
   | { type: 'NUMBER'; raw: string; isDecimal: boolean; offset: number }
+  | { type: 'VALUE'; value: CalcValue; offset: number }
   | { type: 'OP_NCR'; offset: number }
   | { type: 'OP_NPR'; offset: number }
   | { type: 'VAR'; name: string; offset: number }
@@ -1019,6 +1243,7 @@ type Token =
   | { type: 'POST_PCT'; offset: number }
   | { type: 'LPAREN'; offset: number }
   | { type: 'RPAREN'; offset: number }
+  | { type: 'COMMA'; offset: number }
   | { type: 'FUNC'; name: string; offset: number }
   | { type: 'EOF'; offset: number };
 
@@ -1137,6 +1362,11 @@ function tokenizeExpression(expr: string): Token[] {
       i++;
       continue;
     }
+    if (ch === ',') {
+      tokens.push({ type: 'COMMA', offset });
+      i++;
+      continue;
+    }
     if (ch === 'π') {
       tokens.push({ type: 'CONST_PI', offset });
       i++;
@@ -1157,8 +1387,8 @@ function tokenizeExpression(expr: string): Token[] {
       continue;
     }
 
-    // Check functions: sin⁻¹, cos⁻¹, tan⁻¹, sinh, cosh, tanh, sin, cos, tan, ln, log, sqrt, cbrt, abs
-    const funcMatch = /^(sin⁻¹|cos⁻¹|tan⁻¹|sinh|cosh|tanh|sin|cos|tan|ln|log|√|³√|cbrt|sqrt|abs|Abs)/i.exec(slice);
+    // Check functions: sin⁻¹, cos⁻¹, tan⁻¹, sinh, cosh, tanh, sin, cos, tan, ln, log10, log, sqrt, cbrt, abs
+    const funcMatch = /^(sin⁻¹|cos⁻¹|tan⁻¹|sinh|cosh|tanh|sin|cos|tan|ln|log10|log|√|³√|cbrt|sqrt|abs|Abs)/i.exec(slice);
     if (funcMatch) {
       tokens.push({ type: 'FUNC', name: funcMatch[0], offset });
       i += funcMatch[0].length;
@@ -1243,6 +1473,685 @@ function tokenizeExpression(expr: string): Token[] {
   return tokens;
 }
 
+// Exact/high-precision logarithm with arbitrary base
+function calcLogBase(baseVal: CalcValue, argVal: CalcValue): CalcValue {
+  const b = valToNumber(baseVal);
+  const x = valToNumber(argVal);
+  if (isNaN(b) || isNaN(x) || b <= 0 || b === 1 || x <= 0) {
+    throw new Error('Math ERROR');
+  }
+  if (Math.abs(b - 10) < 1e-12) {
+    const p = Math.log10(x);
+    if (Math.abs(p - Math.round(p)) < 1e-11) {
+      return makeRational(BigInt(Math.round(p)), 1n);
+    }
+    return { type: 'decimal', value: p };
+  }
+  const res = Math.log(x) / Math.log(b);
+  if (Math.abs(res - Math.round(res)) < 1e-11) {
+    const rounded = Math.round(res);
+    if (Math.abs(Math.pow(b, rounded) - x) <= 1e-9 * Math.max(1, Math.abs(x))) {
+      return makeRational(BigInt(rounded), 1n);
+    }
+  }
+  return { type: 'decimal', value: res };
+}
+
+// Balanced-parenthesis rewriter for legacy log_(b)(x) syntax
+function rewriteSubscriptLog(expr: string): string {
+  let out = '';
+  let i = 0;
+  while (i < expr.length) {
+    if (expr.startsWith('log_', i)) {
+      let j = i + 4;
+      while (j < expr.length && /\s/.test(expr[j])) j++;
+      if (expr[j] === '(') {
+        let depth = 1;
+        const bStart = j + 1;
+        j++;
+        while (j < expr.length && depth > 0) {
+          if (expr[j] === '(') depth++;
+          else if (expr[j] === ')') depth--;
+          j++;
+        }
+        if (depth === 0) {
+          const baseInner = rewriteSubscriptLog(expr.slice(bStart, j - 1));
+          let k = j;
+          while (k < expr.length && /\s/.test(expr[k])) k++;
+          if (expr[k] === '(') {
+            let depth2 = 1;
+            const aStart = k + 1;
+            k++;
+            while (k < expr.length && depth2 > 0) {
+              if (expr[k] === '(') depth2++;
+              else if (expr[k] === ')') depth2--;
+              k++;
+            }
+            if (depth2 === 0) {
+              const argInner = rewriteSubscriptLog(expr.slice(aStart, k - 1));
+              out += `log(${baseInner}, ${argInner})`;
+              i = k;
+              continue;
+            }
+          }
+        }
+      }
+    }
+    out += expr[i];
+    i++;
+  }
+  return out;
+}
+
+// Recursive-descent parser over Token[]
+function evaluateTokens(
+  tokens: Token[],
+  angleMode: AngleMode,
+  variables: Record<string, number>,
+  ans: number
+): CalcValue {
+  let cur = 0;
+
+  function peek(): Token {
+    return tokens[cur] || { type: 'EOF', offset: 0 };
+  }
+
+  function consume(): Token {
+    const tok = peek();
+    cur++;
+    return tok;
+  }
+
+  function parseExpr(): CalcValue {
+    let left = parseTerm();
+
+    while (peek().type === 'PLUS' || peek().type === 'MINUS') {
+      const op = consume();
+      const right = parseTerm();
+      if (op.type === 'PLUS') {
+        left = calcAdd(left, right);
+      } else {
+        left = calcSub(left, right);
+      }
+    }
+    return left;
+  }
+
+  function parseTerm(): CalcValue {
+    let left = parseCombinatorics();
+
+    while (true) {
+      const next = peek();
+      if (next.type === 'TIMES') {
+        consume();
+        const right = parseCombinatorics();
+        left = calcMul(left, right);
+      } else if (next.type === 'DIVIDE') {
+        consume();
+        const right = parseCombinatorics();
+        left = calcDiv(left, right);
+      } else if (
+        next.type === 'LPAREN' ||
+        next.type === 'VALUE' ||
+        next.type === 'CONST_PI' ||
+        next.type === 'CONST_E' ||
+        next.type === 'VAR' ||
+        next.type === 'FUNC' ||
+        (next.type === 'NUMBER' &&
+          cur > 0 &&
+          (tokens[cur - 1].type === 'VAR' ||
+            tokens[cur - 1].type === 'RPAREN' ||
+            tokens[cur - 1].type === 'VALUE' ||
+            tokens[cur - 1].type.startsWith('POST_')))
+      ) {
+        const right = parseCombinatorics();
+        left = calcMul(left, right);
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  function parseCombinatorics(): CalcValue {
+    let left = parseUnary();
+
+    while (peek().type === 'OP_NCR' || peek().type === 'OP_NPR') {
+      const op = consume();
+      const right = parseUnary();
+
+      const nVal = valToNumber(left);
+      const rVal = valToNumber(right);
+
+      if (
+        !Number.isInteger(nVal) ||
+        !Number.isInteger(rVal) ||
+        nVal < 0 ||
+        rVal < 0 ||
+        rVal > nVal
+      ) {
+        throw new Error('Math ERROR');
+      }
+
+      const bigN = BigInt(nVal);
+      const bigR = BigInt(rVal);
+
+      if (op.type === 'OP_NCR') {
+        const res = computeBigNCR(bigN, bigR);
+        left = makeRational(res, 1n);
+      } else {
+        const res = computeBigNPR(bigN, bigR);
+        left = makeRational(res, 1n);
+      }
+    }
+    return left;
+  }
+
+  function parseUnary(): CalcValue {
+    if (peek().type === 'PLUS') {
+      consume();
+      return parseUnary();
+    }
+    if (peek().type === 'MINUS') {
+      consume();
+      const val = parseUnary();
+      return calcSub({ type: 'rational', num: 0n, den: 1n }, val);
+    }
+    return parsePower();
+  }
+
+  function parsePower(): CalcValue {
+    let base = parsePostfix();
+
+    if (peek().type === 'POWER') {
+      consume();
+      const exp = parseUnary();
+      base = calcPower(base, exp);
+    }
+    return base;
+  }
+
+  function parsePostfix(): CalcValue {
+    let val = parsePrimary();
+
+    while (true) {
+      const p = peek();
+      if (p.type === 'POST_SQR') {
+        consume();
+        val = calcPower(val, { type: 'rational', num: 2n, den: 1n });
+      } else if (p.type === 'POST_CUBE') {
+        consume();
+        val = calcPower(val, { type: 'rational', num: 3n, den: 1n });
+      } else if (p.type === 'POST_INV') {
+        consume();
+        val = calcDiv({ type: 'rational', num: 1n, den: 1n }, val);
+      } else if (p.type === 'POST_FACT') {
+        consume();
+        const n = valToNumber(val);
+        if (n < 0 || !Number.isInteger(n) || n > 170) throw new Error('Math ERROR');
+        let f = 1n;
+        for (let i = 2n; i <= BigInt(n); i++) f *= i;
+        val = makeRational(f, 1n);
+      } else if (p.type === 'POST_DEG') {
+        consume();
+        val = { type: 'decimal', value: toRad(valToNumber(val), angleMode) };
+      } else if (p.type === 'POST_PCT') {
+        consume();
+        val = calcDiv(val, { type: 'rational', num: 100n, den: 1n });
+      } else {
+        break;
+      }
+    }
+    return val;
+  }
+
+  function parsePrimary(): CalcValue {
+    const tok = peek();
+
+    if (tok.type === 'VALUE') {
+      consume();
+      return tok.value;
+    }
+
+    if (tok.type === 'NUMBER') {
+      consume();
+      if (tok.isDecimal) {
+        return { type: 'decimal', value: parseFloat(tok.raw) };
+      }
+      return makeRational(BigInt(tok.raw), 1n);
+    }
+
+    if (tok.type === 'CONST_PI') {
+      consume();
+      return makePi(1n, 1n);
+    }
+
+    if (tok.type === 'CONST_E') {
+      consume();
+      return { type: 'decimal', value: Math.E };
+    }
+
+    if (tok.type === 'VAR') {
+      consume();
+      if (tok.name === 'Ans') {
+        return { type: 'decimal', value: ans };
+      }
+      const varVal = variables[tok.name] !== undefined ? variables[tok.name] : 0;
+      return { type: 'decimal', value: varVal };
+    }
+
+    if (tok.type === 'LPAREN') {
+      consume();
+      const val = parseExpr();
+      if (peek().type === 'RPAREN') {
+        consume();
+      }
+      return val;
+    }
+
+    if (tok.type === 'FUNC') {
+      const fnName = tok.name;
+      consume();
+
+      if (fnName === 'log' && peek().type === 'LPAREN') {
+        consume();
+        const firstArg = parseExpr();
+        if (peek().type === 'COMMA') {
+          consume();
+          const secondArg = parseExpr();
+          if (peek().type === 'RPAREN') consume();
+          return calcLogBase(firstArg, secondArg);
+        }
+        if (peek().type === 'RPAREN') consume();
+        return calcLogBase(makeRational(10n, 1n), firstArg);
+      }
+
+      let arg: CalcValue;
+      if (peek().type === 'LPAREN') {
+        consume();
+        arg = parseExpr();
+        if (peek().type === 'RPAREN') consume();
+      } else {
+        arg = parsePrimary();
+      }
+
+      const numVal = valToNumber(arg);
+
+      if (fnName === '√' || fnName.toLowerCase() === 'sqrt') {
+        return calcSqrt(arg);
+      }
+      if (fnName === '³√' || fnName.toLowerCase() === 'cbrt') {
+        return { type: 'decimal', value: Math.cbrt(numVal) };
+      }
+      if (fnName.toLowerCase() === 'abs') {
+        if (arg.type === 'rational') return makeRational(arg.num < 0n ? -arg.num : arg.num, arg.den);
+        return { type: 'decimal', value: Math.abs(numVal) };
+      }
+      if (fnName === 'sin') {
+        if (angleMode === 'DEG' && arg.type === 'rational') {
+          const deg = (Number(arg.num) / Number(arg.den)) % 360;
+          const normDeg = deg < 0 ? deg + 360 : deg;
+          if (normDeg === 30 || normDeg === 150) return makeRational(1n, 2n);
+          if (normDeg === 210 || normDeg === 330) return makeRational(-1n, 2n);
+          if (normDeg === 0 || normDeg === 180) return makeRational(0n, 1n);
+          if (normDeg === 90) return makeRational(1n, 1n);
+          if (normDeg === 270) return makeRational(-1n, 1n);
+          if (normDeg === 60 || normDeg === 120) return makeSurd(1n, 2n, 3n);
+          if (normDeg === 240 || normDeg === 300) return makeSurd(-1n, 2n, 3n);
+          if (normDeg === 45 || normDeg === 135) return makeSurd(1n, 2n, 2n);
+          if (normDeg === 225 || normDeg === 315) return makeSurd(-1n, 2n, 2n);
+        }
+        return { type: 'decimal', value: trigSin(numVal, angleMode) };
+      }
+      if (fnName === 'cos') {
+        if (angleMode === 'DEG' && arg.type === 'rational') {
+          const deg = (Number(arg.num) / Number(arg.den)) % 360;
+          const normDeg = deg < 0 ? deg + 360 : deg;
+          if (normDeg === 60 || normDeg === 300) return makeRational(1n, 2n);
+          if (normDeg === 120 || normDeg === 240) return makeRational(-1n, 2n);
+          if (normDeg === 90 || normDeg === 270) return makeRational(0n, 1n);
+          if (normDeg === 0) return makeRational(1n, 1n);
+          if (normDeg === 180) return makeRational(-1n, 1n);
+          if (normDeg === 30 || normDeg === 330) return makeSurd(1n, 2n, 3n);
+          if (normDeg === 150 || normDeg === 210) return makeSurd(-1n, 2n, 3n);
+          if (normDeg === 45 || normDeg === 315) return makeSurd(1n, 2n, 2n);
+          if (normDeg === 135 || normDeg === 225) return makeSurd(-1n, 2n, 2n);
+        }
+        return { type: 'decimal', value: trigCos(numVal, angleMode) };
+      }
+      if (fnName === 'tan') {
+        const res = trigTan(numVal, angleMode);
+        if (isNaN(res)) throw new Error('Math ERROR');
+        return { type: 'decimal', value: res };
+      }
+      if (fnName === 'sin⁻¹') {
+        const res = trigAsin(numVal, angleMode);
+        if (isNaN(res)) throw new Error('Math ERROR');
+        return { type: 'decimal', value: res };
+      }
+      if (fnName === 'cos⁻¹') {
+        const res = trigAcos(numVal, angleMode);
+        if (isNaN(res)) throw new Error('Math ERROR');
+        return { type: 'decimal', value: res };
+      }
+      if (fnName === 'tan⁻¹') {
+        return { type: 'decimal', value: trigAtan(numVal, angleMode) };
+      }
+      if (fnName === 'sinh') return { type: 'decimal', value: Math.sinh(numVal) };
+      if (fnName === 'cosh') return { type: 'decimal', value: Math.cosh(numVal) };
+      if (fnName === 'tanh') return { type: 'decimal', value: Math.tanh(numVal) };
+      if (fnName === 'ln') {
+        if (numVal <= 0) throw new Error('Math ERROR');
+        if (Math.abs(numVal - Math.E) < 1e-12) return makeRational(1n, 1n);
+        return { type: 'decimal', value: Math.log(numVal) };
+      }
+      if (fnName === 'log' || fnName.toLowerCase() === 'log10') {
+        return calcLogBase(makeRational(10n, 1n), arg);
+      }
+    }
+
+    throw { message: 'Syntax ERROR', offset: tok.offset };
+  }
+
+  const val = parseExpr();
+
+  if (peek().type !== 'EOF') {
+    throw { message: 'Syntax ERROR', offset: peek().offset };
+  }
+
+  return val;
+}
+
+// Convert structured MathNode[] AST directly into Token[] without string round-tripping
+function astNodesToTokens(
+  nodes: MathNode[],
+  angleMode: AngleMode,
+  variables: Record<string, number>,
+  ans: number
+): Token[] {
+  const tokens: Token[] = [];
+  let i = 0;
+
+  while (i < nodes.length) {
+    const node = nodes[i];
+    const offset = i;
+
+    if (node.type === 'token') {
+      const val = node.val;
+
+      // Group adjacent numeric literal tokens (digits and decimal point)
+      if (!node.tokenType && /^[0-9.]$/.test(val)) {
+        let numStr = '';
+        let isDec = false;
+        while (i < nodes.length) {
+          const curNode = nodes[i];
+          if (curNode.type === 'token' && !curNode.tokenType && /^[0-9.]$/.test(curNode.val)) {
+            if (curNode.val === '.') isDec = true;
+            numStr += curNode.val;
+            i++;
+          } else {
+            break;
+          }
+        }
+        tokens.push({ type: 'NUMBER', raw: numStr, isDecimal: isDec, offset });
+        continue;
+      }
+
+      if (node.tokenType === 'OP_NCR') {
+        tokens.push({ type: 'OP_NCR', offset });
+      } else if (node.tokenType === 'OP_NPR') {
+        tokens.push({ type: 'OP_NPR', offset });
+      } else if (node.tokenType === 'VAR' || val === 'Ans') {
+        tokens.push({ type: 'VAR', name: val, offset });
+      } else if (val === '×10^(') {
+        tokens.push({ type: 'TIMES', offset });
+        tokens.push({ type: 'NUMBER', raw: '10', isDecimal: false, offset });
+        tokens.push({ type: 'POWER', offset });
+        tokens.push({ type: 'LPAREN', offset });
+      } else if (val === '+') {
+        tokens.push({ type: 'PLUS', offset });
+      } else if (val === '-') {
+        tokens.push({ type: 'MINUS', offset });
+      } else if (val === '×' || val === '*') {
+        tokens.push({ type: 'TIMES', offset });
+      } else if (val === '÷' || val === '/') {
+        tokens.push({ type: 'DIVIDE', offset });
+      } else if (val === '^') {
+        tokens.push({ type: 'POWER', offset });
+      } else if (val === '(') {
+        tokens.push({ type: 'LPAREN', offset });
+      } else if (val === ')') {
+        tokens.push({ type: 'RPAREN', offset });
+      } else if (val === ',') {
+        tokens.push({ type: 'COMMA', offset });
+      } else if (val === 'π') {
+        tokens.push({ type: 'CONST_PI', offset });
+      } else if (val === 'e') {
+        tokens.push({ type: 'CONST_E', offset });
+      } else if (val === '²') {
+        tokens.push({ type: 'POST_SQR', offset });
+      } else if (val === '³') {
+        tokens.push({ type: 'POST_CUBE', offset });
+      } else if (val === '⁻¹') {
+        tokens.push({ type: 'POST_INV', offset });
+      } else if (val === '!') {
+        tokens.push({ type: 'POST_FACT', offset });
+      } else if (val === '°') {
+        tokens.push({ type: 'POST_DEG', offset });
+      } else if (val === '%') {
+        tokens.push({ type: 'POST_PCT', offset });
+      } else if (val === 'nCr') {
+        tokens.push({ type: 'OP_NCR', offset });
+      } else if (val === 'nPr') {
+        tokens.push({ type: 'OP_NPR', offset });
+      } else if (val.endsWith('(')) {
+        const fnName = val.slice(0, -1);
+        tokens.push({ type: 'FUNC', name: fnName, offset });
+        tokens.push({ type: 'LPAREN', offset });
+      } else if (/^(sin⁻¹|cos⁻¹|tan⁻¹|sinh|cosh|tanh|sin|cos|tan|ln|log10|log|√|³√|cbrt|sqrt|abs|Abs)$/i.test(val)) {
+        tokens.push({ type: 'FUNC', name: val, offset });
+      } else if (val === 'C' || val === 'P') {
+        const prevTok = tokens[tokens.length - 1];
+        const isPrecededByOperand =
+          prevTok &&
+          (prevTok.type === 'NUMBER' ||
+            prevTok.type === 'VALUE' ||
+            prevTok.type === 'RPAREN' ||
+            prevTok.type.startsWith('POST_'));
+        const nextNode = nodes[i + 1];
+        const isFollowedByOperand =
+          nextNode &&
+          ((nextNode.type === 'token' && (/^[0-9(]$/.test(nextNode.val))) || nextNode.type !== 'token');
+        if (isPrecededByOperand && isFollowedByOperand) {
+          tokens.push({ type: val === 'C' ? 'OP_NCR' : 'OP_NPR', offset });
+        } else {
+          tokens.push({ type: 'VAR', name: val, offset });
+        }
+      } else if (/^[A-Za-z]$/.test(val)) {
+        tokens.push({ type: 'VAR', name: val, offset });
+      } else if (/^\d+(\.\d+)?$/.test(val)) {
+        tokens.push({ type: 'NUMBER', raw: val, isDecimal: val.includes('.'), offset });
+      } else {
+        throw { message: 'Syntax ERROR', offset };
+      }
+
+      i++;
+      continue;
+    }
+
+    if (node.type === 'frac') {
+      const numVal = node.num.length > 0 ? evaluateMathAstCalcValue(node.num, angleMode, variables, ans) : makeRational(0n, 1n);
+      const denVal = node.den.length > 0 ? evaluateMathAstCalcValue(node.den, angleMode, variables, ans) : makeRational(1n, 1n);
+      tokens.push({ type: 'VALUE', value: calcDiv(numVal, denVal), offset });
+    } else if (node.type === 'sqrt') {
+      const radVal = node.content.length > 0 ? evaluateMathAstCalcValue(node.content, angleMode, variables, ans) : makeRational(0n, 1n);
+      tokens.push({ type: 'VALUE', value: calcSqrt(radVal), offset });
+    } else if (node.type === 'power') {
+      const baseVal = node.base.length > 0 ? evaluateMathAstCalcValue(node.base, angleMode, variables, ans) : makeRational(0n, 1n);
+      const expVal = node.exp.length > 0 ? evaluateMathAstCalcValue(node.exp, angleMode, variables, ans) : makeRational(1n, 1n);
+      tokens.push({ type: 'VALUE', value: calcPower(baseVal, expVal), offset });
+    } else if (node.type === 'logBase') {
+      const baseVal = node.base.length > 0 ? evaluateMathAstCalcValue(node.base, angleMode, variables, ans) : makeRational(10n, 1n);
+      const argVal = node.arg.length > 0 ? evaluateMathAstCalcValue(node.arg, angleMode, variables, ans) : makeRational(1n, 1n);
+      tokens.push({ type: 'VALUE', value: calcLogBase(baseVal, argVal), offset });
+    } else if (node.type === 'postfix') {
+      const targetVal = evaluateMathAstCalcValue(node.target, angleMode, variables, ans);
+      let val: CalcValue = targetVal;
+      if (node.op === '²') val = calcPower(targetVal, { type: 'rational', num: 2n, den: 1n });
+      else if (node.op === '³') val = calcPower(targetVal, { type: 'rational', num: 3n, den: 1n });
+      else if (node.op === '⁻¹') val = calcDiv({ type: 'rational', num: 1n, den: 1n }, targetVal);
+      else if (node.op === '!') {
+        const n = valToNumber(targetVal);
+        if (n < 0 || !Number.isInteger(n) || n > 170) throw new Error('Math ERROR');
+        let f = 1n;
+        for (let k = 2n; k <= BigInt(n); k++) f *= k;
+        val = makeRational(f, 1n);
+      } else if (node.op === '°') {
+        val = { type: 'decimal', value: toRad(valToNumber(targetVal), angleMode) };
+      } else if (node.op === '%') {
+        val = calcDiv(targetVal, { type: 'rational', num: 100n, den: 1n });
+      }
+      tokens.push({ type: 'VALUE', value: val, offset });
+    } else if (node.type === 'int') {
+      if (node.integrand.length === 0 || node.lower.length === 0 || node.upper.length === 0) {
+        throw { message: 'Syntax ERROR', offset };
+      }
+      const varName = node.variable || 'x';
+      const aVal = valToNumber(evaluateMathAstCalcValue(node.lower, angleMode, variables, ans));
+      const bVal = valToNumber(evaluateMathAstCalcValue(node.upper, angleMode, variables, ans));
+      const evalX = (xVal: number): number => {
+        const boundVars = { ...variables, [varName]: xVal, x: xVal, X: xVal };
+        const r = evaluateMathAstCalcValue(node.integrand, angleMode, boundVars, ans);
+        return valToNumber(r);
+      };
+      const intVal = adaptiveGaussKronrod(evalX, aVal, bVal);
+      tokens.push({ type: 'VALUE', value: { type: 'decimal', value: intVal }, offset });
+    } else if (node.type === 'deriv') {
+      if (node.expr.length === 0 || node.at.length === 0) {
+        throw { message: 'Syntax ERROR', offset };
+      }
+      const varName = node.variable || 'x';
+      const atVal = valToNumber(evaluateMathAstCalcValue(node.at, angleMode, variables, ans));
+      const evalX = (xVal: number): number => {
+        const boundVars = { ...variables, [varName]: xVal, x: xVal, X: xVal };
+        const r = evaluateMathAstCalcValue(node.expr, angleMode, boundVars, ans);
+        return valToNumber(r);
+      };
+      const diffVal = riddersDerivative(evalX, atVal);
+      tokens.push({ type: 'VALUE', value: { type: 'decimal', value: diffVal }, offset });
+    }
+
+    i++;
+  }
+
+  tokens.push({ type: 'EOF', offset: nodes.length });
+  return tokens;
+}
+
+function evaluateMathAstCalcValue(
+  nodes: MathNode[],
+  angleMode: AngleMode,
+  variables: Record<string, number>,
+  ans: number
+): CalcValue {
+  if (!nodes || nodes.length === 0) {
+    return makeRational(0n, 1n);
+  }
+  const tokens = astNodesToTokens(nodes, angleMode, variables, ans);
+  return evaluateTokens(tokens, angleMode, variables, ans);
+}
+
+/**
+ * Evaluate Structured MathNode[] AST directly (never parses rendered display strings)
+ */
+export function evaluateMathAst(
+  nodes: MathNode[],
+  angleMode: AngleMode = 'DEG',
+  variables: Record<string, number> = {},
+  ans = 0
+): EvaluationResult {
+  if (!nodes || nodes.length === 0) {
+    return { success: true, result: 0, exactResult: '0', kind: 'rational' };
+  }
+
+  // Fallback for legacy macro tokens entered as plain token strings (d/dx, Σ, Area)
+  const hasMacroToken = nodes.some(
+    (n) => n.type === 'token' && (n.val.startsWith('d/dx') || n.val.startsWith('Σ') || n.val.startsWith('Area'))
+  );
+  if (hasMacroToken) {
+    return evaluateMathExpression(astToExpression(nodes), angleMode, variables, ans);
+  }
+
+  try {
+    const val = evaluateMathAstCalcValue(nodes, angleMode, variables, ans);
+    const num = valToNumber(val);
+    if (isNaN(num) || !isFinite(num)) return { success: false, error: 'Math ERROR' };
+
+    const exactStr = formatExact(val);
+    return {
+      success: true,
+      result: num,
+      exactResult: exactStr,
+      kind: val.type,
+    };
+  } catch (err: any) {
+    if (err && err.message === 'Math ERROR') {
+      return { success: false, error: 'Math ERROR' };
+    }
+    if (err && err.message === "Can't Solve") {
+      return { success: false, error: "Can't Solve" };
+    }
+    const offset = typeof err?.offset === 'number' ? err.offset : 0;
+    return { success: false, error: 'Syntax ERROR', errorIndex: offset };
+  }
+}
+
+// Balanced-parenthesis extractor for macro calls like ∫(f, a, b) or d/dx(f, a)
+function replaceBalancedCalls(
+  input: string,
+  prefixRegex: RegExp,
+  handler: (args: string[]) => string
+): string {
+  let out = input;
+  let safety = 0;
+  while (safety++ < 50) {
+    prefixRegex.lastIndex = 0;
+    const match = prefixRegex.exec(out);
+    if (!match) break;
+
+    const callStart = match.index;
+    const openIdx = callStart + match[0].length - 1; // points to '('
+    let depth = 1;
+    let i = openIdx + 1;
+    const args: string[] = [];
+    let argStart = i;
+
+    while (i < out.length && depth > 0) {
+      const c = out[i];
+      if (c === '(') depth++;
+      else if (c === ')') {
+        depth--;
+        if (depth === 0) {
+          args.push(out.slice(argStart, i).trim());
+          break;
+        }
+      } else if (c === ',' && depth === 1) {
+        args.push(out.slice(argStart, i).trim());
+        argStart = i + 1;
+      }
+      i++;
+    }
+
+    if (depth !== 0) {
+      throw { message: 'Syntax ERROR', offset: callStart };
+    }
+
+    const replacement = handler(args);
+    out = out.slice(0, callStart) + replacement + out.slice(i + 1);
+  }
+  return out;
+}
+
 /**
  * Main Expression Evaluator with Exact Algebraic Value System
  */
@@ -1260,86 +2169,100 @@ export function evaluateMathExpression(
     let clean = expr;
 
     // Substitute Ans
-    clean = clean.replace(/Ans/g, `(${ans})`);
+    clean = clean.replace(/Ans/g, numToSafeExpr(ans));
 
-    // Handle Definite Integral: ∫(f(x), a, b)
-    const integralRegex = /∫\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/g;
-    let intMatch: RegExpExecArray | null;
-    while ((intMatch = integralRegex.exec(clean)) !== null) {
-      const fExpr = intMatch[1].trim();
-      const aValRes = evaluateMathExpression(intMatch[2], angleMode, variables, ans);
-      const bValRes = evaluateMathExpression(intMatch[3], angleMode, variables, ans);
-      if (aValRes.success && bValRes.success && aValRes.result !== undefined && bValRes.result !== undefined) {
-        const intVal = computeDefiniteIntegral(fExpr, aValRes.result, bValRes.result, angleMode);
-        clean = clean.replace(intMatch[0], `(${intVal})`);
-      } else {
-        return { success: false, error: 'Math ERROR' };
+    // Handle Definite Integral: ∫(f(x), a, b) with balanced parenthesis & comma support
+    clean = replaceBalancedCalls(clean, /∫\s*\(/g, (args) => {
+      if (args.length !== 3 || !args[0] || !args[1] || !args[2]) {
+        throw { message: 'Syntax ERROR', offset: 0 };
       }
-    }
+      const [fExpr, aExpr, bExpr] = args;
+      const aValRes = evaluateMathExpression(aExpr, angleMode, variables, ans);
+      const bValRes = evaluateMathExpression(bExpr, angleMode, variables, ans);
+      if (!aValRes.success || !bValRes.success || aValRes.result === undefined || bValRes.result === undefined) {
+        throw new Error(aValRes.error || bValRes.error || 'Math ERROR');
+      }
+      const intVal = adaptiveGaussKronrod(
+        (xVal) => {
+          const boundVars = { ...variables, x: xVal, X: xVal };
+          const r = evaluateMathExpression(fExpr, angleMode, boundVars, ans);
+          if (!r.success || typeof r.result !== 'number' || !isFinite(r.result)) {
+            throw new Error(r.error || 'Math ERROR');
+          }
+          return r.result;
+        },
+        aValRes.result,
+        bValRes.result
+      );
+      return numToSafeExpr(intVal);
+    });
 
-    // Handle Area between curves: Area(f1, f2, a, b)
-    const areaBetweenRegex = /Area\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/gi;
-    let areaBtwMatch: RegExpExecArray | null;
-    while ((areaBtwMatch = areaBetweenRegex.exec(clean)) !== null) {
-      const f1Expr = areaBtwMatch[1].trim();
-      const f2Expr = areaBtwMatch[2].trim();
-      const aValRes = evaluateMathExpression(areaBtwMatch[3], angleMode, variables, ans);
-      const bValRes = evaluateMathExpression(areaBtwMatch[4], angleMode, variables, ans);
-      if (aValRes.success && bValRes.success && aValRes.result !== undefined && bValRes.result !== undefined) {
-        const areaVal = computeAreaBetweenCurves(f1Expr, f2Expr, aValRes.result, bValRes.result, angleMode);
-        clean = clean.replace(areaBtwMatch[0], `(${areaVal})`);
-      } else {
-        return { success: false, error: 'Math ERROR' };
+    // Handle Area between curves & Geometric Area: Area(f1, f2, a, b) or Area(f, a, b)
+    clean = replaceBalancedCalls(clean, /Area\s*\(/gi, (args) => {
+      if (args.length === 4) {
+        const aValRes = evaluateMathExpression(args[2], angleMode, variables, ans);
+        const bValRes = evaluateMathExpression(args[3], angleMode, variables, ans);
+        if (!aValRes.success || !bValRes.success || aValRes.result === undefined || bValRes.result === undefined) {
+          throw new Error('Math ERROR');
+        }
+        const areaVal = computeAreaBetweenCurves(args[0], args[1], aValRes.result, bValRes.result, angleMode);
+        if (isNaN(areaVal)) throw new Error('Math ERROR');
+        return numToSafeExpr(areaVal);
       }
-    }
+      if (args.length === 3) {
+        const aValRes = evaluateMathExpression(args[1], angleMode, variables, ans);
+        const bValRes = evaluateMathExpression(args[2], angleMode, variables, ans);
+        if (!aValRes.success || !bValRes.success || aValRes.result === undefined || bValRes.result === undefined) {
+          throw new Error('Math ERROR');
+        }
+        const areaVal = computeGeometricArea(args[0], aValRes.result, bValRes.result, angleMode);
+        if (isNaN(areaVal)) throw new Error('Math ERROR');
+        return numToSafeExpr(areaVal);
+      }
+      throw { message: 'Syntax ERROR', offset: 0 };
+    });
 
-    // Handle Geometric Area under single curve: Area(f, a, b)
-    const areaRegex = /Area\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/gi;
-    let areaMatch: RegExpExecArray | null;
-    while ((areaMatch = areaRegex.exec(clean)) !== null) {
-      const fExpr = areaMatch[1].trim();
-      const aValRes = evaluateMathExpression(areaMatch[2], angleMode, variables, ans);
-      const bValRes = evaluateMathExpression(areaMatch[3], angleMode, variables, ans);
-      if (aValRes.success && bValRes.success && aValRes.result !== undefined && bValRes.result !== undefined) {
-        const areaVal = computeGeometricArea(fExpr, aValRes.result, bValRes.result, angleMode);
-        clean = clean.replace(areaMatch[0], `(${areaVal})`);
-      } else {
-        return { success: false, error: 'Math ERROR' };
+    // Handle Derivative: d/dx(f(x), x0) with balanced parenthesis & comma support
+    clean = replaceBalancedCalls(clean, /d\/dx\s*\(/g, (args) => {
+      if (args.length !== 2 || !args[0] || !args[1]) {
+        throw { message: 'Syntax ERROR', offset: 0 };
       }
-    }
-
-    // Handle Derivative: d/dx(f(x), x0)
-    const diffRegex = /d\/dx\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g;
-    let diffMatch: RegExpExecArray | null;
-    while ((diffMatch = diffRegex.exec(clean)) !== null) {
-      const fExpr = diffMatch[1].trim();
-      const x0Res = evaluateMathExpression(diffMatch[2], angleMode, variables, ans);
-      if (x0Res.success && x0Res.result !== undefined) {
-        const diffVal = computeDerivative(fExpr, x0Res.result, angleMode);
-        clean = clean.replace(diffMatch[0], `(${diffVal})`);
-      } else {
-        return { success: false, error: 'Math ERROR' };
+      const [fExpr, x0Expr] = args;
+      const x0Res = evaluateMathExpression(x0Expr, angleMode, variables, ans);
+      if (!x0Res.success || x0Res.result === undefined) {
+        throw new Error(x0Res.error || 'Math ERROR');
       }
-    }
+      const diffVal = riddersDerivative(
+        (xVal) => {
+          const boundVars = { ...variables, x: xVal, X: xVal };
+          const r = evaluateMathExpression(fExpr, angleMode, boundVars, ans);
+          if (!r.success || typeof r.result !== 'number' || !isFinite(r.result)) {
+            throw new Error(r.error || 'Math ERROR');
+          }
+          return r.result;
+        },
+        x0Res.result
+      );
+      return numToSafeExpr(diffVal);
+    });
 
     // Handle Summation: Σ(f(x), a, b)
-    const sumRegex = /Σ\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/g;
-    let sumMatch: RegExpExecArray | null;
-    while ((sumMatch = sumRegex.exec(clean)) !== null) {
-      const fExpr = sumMatch[1].trim();
-      const aRes = evaluateMathExpression(sumMatch[2], angleMode, variables, ans);
-      const bRes = evaluateMathExpression(sumMatch[3], angleMode, variables, ans);
-      if (aRes.success && bRes.success && aRes.result !== undefined && bRes.result !== undefined) {
-        const sumVal = computeSummation(fExpr, aRes.result, bRes.result, angleMode);
-        clean = clean.replace(sumMatch[0], `(${sumVal})`);
-      } else {
-        return { success: false, error: 'Math ERROR' };
+    clean = replaceBalancedCalls(clean, /Σ\s*\(/g, (args) => {
+      if (args.length !== 3 || !args[0] || !args[1] || !args[2]) {
+        throw { message: 'Syntax ERROR', offset: 0 };
       }
-    }
+      const aRes = evaluateMathExpression(args[1], angleMode, variables, ans);
+      const bRes = evaluateMathExpression(args[2], angleMode, variables, ans);
+      if (!aRes.success || !bRes.success || aRes.result === undefined || bRes.result === undefined) {
+        throw new Error('Math ERROR');
+      }
+      const sumVal = computeSummation(args[0], aRes.result, bRes.result, angleMode);
+      if (isNaN(sumVal)) throw new Error('Math ERROR');
+      return numToSafeExpr(sumVal);
+    });
 
-    // Handle custom log base: log_(b)(x) or log(b, x)
-    clean = clean.replace(/log_\s*\(([^)]+)\)\s*\(([^)]+)\)/g, '(ln($2)/ln($1))');
-    clean = clean.replace(/log\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '(ln($2)/ln($1))');
+    // Rewrite log_(b)(x) using balanced parentheses; log(b, x) is parsed natively via COMMA tokens
+    clean = rewriteSubscriptLog(clean);
 
     // Handle DMS: 1°30'0" -> (1 + 30/60.0 + 0/3600.0)
     clean = clean.replace(
@@ -1348,317 +2271,12 @@ export function evaluateMathExpression(
     );
     clean = clean.replace(/(\d+(?:\.\d+)?)°\s*(\d+(?:\.\d+)?)['′]/g, '($1 + $2/60.0)');
 
-    // Tokenize cleaned expression
+    // Tokenize cleaned expression and evaluate
     const tokens = tokenizeExpression(clean);
-    let cur = 0;
-
-    function peek(): Token {
-      return tokens[cur] || { type: 'EOF', offset: clean.length };
-    }
-
-    function consume(): Token {
-      const tok = peek();
-      cur++;
-      return tok;
-    }
-
-    // Pratt / Recursive Descent Parser with exact CASIO ClassWiz precedence:
-    // parseExpr (lowest: +, -)
-    // parseTerm (*, /)
-    // parseCombinatorics (nPr, nCr: tighter than *, /)
-    // parseUnary (+, -)
-    // parsePower (^)
-    // parsePostfix (², ³, ⁻¹, !, °, %)
-    // parsePrimary (number, variable, pi, e, function call, parentheses)
-
-    function parseExpr(): CalcValue {
-      let left = parseTerm();
-
-      while (peek().type === 'PLUS' || peek().type === 'MINUS') {
-        const op = consume();
-        const right = parseTerm();
-        if (op.type === 'PLUS') {
-          left = calcAdd(left, right);
-        } else {
-          left = calcSub(left, right);
-        }
-      }
-      return left;
-    }
-
-    function parseTerm(): CalcValue {
-      let left = parseCombinatorics();
-
-      while (true) {
-        const next = peek();
-        if (next.type === 'TIMES') {
-          consume();
-          const right = parseCombinatorics();
-          left = calcMul(left, right);
-        } else if (next.type === 'DIVIDE') {
-          consume();
-          const right = parseCombinatorics();
-          left = calcDiv(left, right);
-        } else if (
-          next.type === 'LPAREN' ||
-          next.type === 'CONST_PI' ||
-          next.type === 'CONST_E' ||
-          next.type === 'VAR' ||
-          next.type === 'FUNC' ||
-          (next.type === 'NUMBER' &&
-            cur > 0 &&
-            (tokens[cur - 1].type === 'VAR' ||
-              tokens[cur - 1].type === 'RPAREN' ||
-              tokens[cur - 1].type.startsWith('POST_')))
-        ) {
-          // Implicit multiplication, e.g. 2(3), 2π, 2sin(30), 5C (where C is VAR), C2, (3)2
-          const right = parseCombinatorics();
-          left = calcMul(left, right);
-        } else {
-          break;
-        }
-      }
-      return left;
-    }
-
-    // Infix nPr and nCr: tighter than × and ÷, looser than postfix/functions
-    function parseCombinatorics(): CalcValue {
-      let left = parseUnary();
-
-      while (peek().type === 'OP_NCR' || peek().type === 'OP_NPR') {
-        const op = consume();
-        const right = parseUnary();
-
-        const nVal = valToNumber(left);
-        const rVal = valToNumber(right);
-
-        // Operands must be non-negative integers; otherwise Math ERROR
-        if (
-          !Number.isInteger(nVal) ||
-          !Number.isInteger(rVal) ||
-          nVal < 0 ||
-          rVal < 0 ||
-          rVal > nVal
-        ) {
-          throw new Error('Math ERROR');
-        }
-
-        const bigN = BigInt(nVal);
-        const bigR = BigInt(rVal);
-
-        if (op.type === 'OP_NCR') {
-          const res = computeBigNCR(bigN, bigR);
-          left = makeRational(res, 1n);
-        } else {
-          const res = computeBigNPR(bigN, bigR);
-          left = makeRational(res, 1n);
-        }
-      }
-      return left;
-    }
-
-    function parseUnary(): CalcValue {
-      if (peek().type === 'PLUS') {
-        consume();
-        return parseUnary();
-      }
-      if (peek().type === 'MINUS') {
-        consume();
-        const val = parseUnary();
-        return calcSub({ type: 'rational', num: 0n, den: 1n }, val);
-      }
-      return parsePower();
-    }
-
-    function parsePower(): CalcValue {
-      let base = parsePostfix();
-
-      if (peek().type === 'POWER') {
-        consume();
-        const exp = parseUnary(); // Right-associative
-        base = calcPower(base, exp);
-      }
-      return base;
-    }
-
-    function parsePostfix(): CalcValue {
-      let val = parsePrimary();
-
-      while (true) {
-        const p = peek();
-        if (p.type === 'POST_SQR') {
-          consume();
-          val = calcPower(val, { type: 'rational', num: 2n, den: 1n });
-        } else if (p.type === 'POST_CUBE') {
-          consume();
-          val = calcPower(val, { type: 'rational', num: 3n, den: 1n });
-        } else if (p.type === 'POST_INV') {
-          consume();
-          val = calcDiv({ type: 'rational', num: 1n, den: 1n }, val);
-        } else if (p.type === 'POST_FACT') {
-          consume();
-          const n = valToNumber(val);
-          if (n < 0 || !Number.isInteger(n) || n > 170) throw new Error('Math ERROR');
-          let f = 1n;
-          for (let i = 2n; i <= BigInt(n); i++) f *= i;
-          val = makeRational(f, 1n);
-        } else if (p.type === 'POST_DEG') {
-          consume();
-          val = { type: 'decimal', value: toRad(valToNumber(val), angleMode) };
-        } else if (p.type === 'POST_PCT') {
-          consume();
-          val = calcDiv(val, { type: 'rational', num: 100n, den: 1n });
-        } else {
-          break;
-        }
-      }
-      return val;
-    }
-
-    function parsePrimary(): CalcValue {
-      const tok = peek();
-
-      if (tok.type === 'NUMBER') {
-        consume();
-        if (tok.isDecimal) {
-          // Rule 2: Typed decimal literal is Decimal and stays Decimal
-          return { type: 'decimal', value: parseFloat(tok.raw) };
-        }
-        return makeRational(BigInt(tok.raw), 1n);
-      }
-
-      if (tok.type === 'CONST_PI') {
-        consume();
-        return makePi(1n, 1n);
-      }
-
-      if (tok.type === 'CONST_E') {
-        consume();
-        return { type: 'decimal', value: Math.E };
-      }
-
-      if (tok.type === 'VAR') {
-        consume();
-        if (tok.name === 'Ans') {
-          return { type: 'decimal', value: ans };
-        }
-        const varVal = variables[tok.name] !== undefined ? variables[tok.name] : 0;
-        return { type: 'decimal', value: varVal };
-      }
-
-      if (tok.type === 'LPAREN') {
-        consume();
-        const val = parseExpr();
-        if (peek().type === 'RPAREN') {
-          consume();
-        }
-        return val;
-      }
-
-      if (tok.type === 'FUNC') {
-        const fnName = tok.name;
-        consume();
-        let arg: CalcValue;
-        if (peek().type === 'LPAREN') {
-          consume();
-          arg = parseExpr();
-          if (peek().type === 'RPAREN') consume();
-        } else {
-          arg = parsePrimary();
-        }
-
-        const numVal = valToNumber(arg);
-
-        if (fnName === '√' || fnName.toLowerCase() === 'sqrt') {
-          return calcSqrt(arg);
-        }
-        if (fnName === '³√' || fnName.toLowerCase() === 'cbrt') {
-          return { type: 'decimal', value: Math.cbrt(numVal) };
-        }
-        if (fnName.toLowerCase() === 'abs') {
-          if (arg.type === 'rational') return makeRational(arg.num < 0n ? -arg.num : arg.num, arg.den);
-          return { type: 'decimal', value: Math.abs(numVal) };
-        }
-        if (fnName === 'sin') {
-          if (angleMode === 'DEG' && arg.type === 'rational') {
-            const deg = (Number(arg.num) / Number(arg.den)) % 360;
-            const normDeg = deg < 0 ? deg + 360 : deg;
-            if (normDeg === 30 || normDeg === 150) return makeRational(1n, 2n);
-            if (normDeg === 210 || normDeg === 330) return makeRational(-1n, 2n);
-            if (normDeg === 0 || normDeg === 180) return makeRational(0n, 1n);
-            if (normDeg === 90) return makeRational(1n, 1n);
-            if (normDeg === 270) return makeRational(-1n, 1n);
-            if (normDeg === 60 || normDeg === 120) return makeSurd(1n, 2n, 3n);
-            if (normDeg === 240 || normDeg === 300) return makeSurd(-1n, 2n, 3n);
-            if (normDeg === 45 || normDeg === 135) return makeSurd(1n, 2n, 2n);
-            if (normDeg === 225 || normDeg === 315) return makeSurd(-1n, 2n, 2n);
-          }
-          return { type: 'decimal', value: trigSin(numVal, angleMode) };
-        }
-        if (fnName === 'cos') {
-          if (angleMode === 'DEG' && arg.type === 'rational') {
-            const deg = (Number(arg.num) / Number(arg.den)) % 360;
-            const normDeg = deg < 0 ? deg + 360 : deg;
-            if (normDeg === 60 || normDeg === 300) return makeRational(1n, 2n);
-            if (normDeg === 120 || normDeg === 240) return makeRational(-1n, 2n);
-            if (normDeg === 90 || normDeg === 270) return makeRational(0n, 1n);
-            if (normDeg === 0) return makeRational(1n, 1n);
-            if (normDeg === 180) return makeRational(-1n, 1n);
-            if (normDeg === 30 || normDeg === 330) return makeSurd(1n, 2n, 3n);
-            if (normDeg === 150 || normDeg === 210) return makeSurd(-1n, 2n, 3n);
-            if (normDeg === 45 || normDeg === 315) return makeSurd(1n, 2n, 2n);
-            if (normDeg === 135 || normDeg === 225) return makeSurd(-1n, 2n, 2n);
-          }
-          return { type: 'decimal', value: trigCos(numVal, angleMode) };
-        }
-        if (fnName === 'tan') {
-          const res = trigTan(numVal, angleMode);
-          if (isNaN(res)) throw new Error('Math ERROR');
-          return { type: 'decimal', value: res };
-        }
-        if (fnName === 'sin⁻¹') {
-          const res = trigAsin(numVal, angleMode);
-          if (isNaN(res)) throw new Error('Math ERROR');
-          return { type: 'decimal', value: res };
-        }
-        if (fnName === 'cos⁻¹') {
-          const res = trigAcos(numVal, angleMode);
-          if (isNaN(res)) throw new Error('Math ERROR');
-          return { type: 'decimal', value: res };
-        }
-        if (fnName === 'tan⁻¹') {
-          return { type: 'decimal', value: trigAtan(numVal, angleMode) };
-        }
-        if (fnName === 'sinh') return { type: 'decimal', value: Math.sinh(numVal) };
-        if (fnName === 'cosh') return { type: 'decimal', value: Math.cosh(numVal) };
-        if (fnName === 'tanh') return { type: 'decimal', value: Math.tanh(numVal) };
-        if (fnName === 'ln') {
-          if (numVal <= 0) throw new Error('Math ERROR');
-          if (Math.abs(numVal - Math.E) < 1e-12) return makeRational(1n, 1n);
-          return { type: 'decimal', value: Math.log(numVal) };
-        }
-        if (fnName === 'log') {
-          if (numVal <= 0) throw new Error('Math ERROR');
-          const p = Math.log10(numVal);
-          if (Math.abs(p - Math.round(p)) < 1e-11) {
-            return makeRational(BigInt(Math.round(p)), 1n);
-          }
-          return { type: 'decimal', value: p };
-        }
-      }
-
-      // Syntax ERROR on unexpected token
-      throw { message: 'Syntax ERROR', offset: tok.offset };
-    }
-
-    const val = parseExpr();
-
-    if (peek().type !== 'EOF') {
-      throw { message: 'Syntax ERROR', offset: peek().offset };
-    }
+    const val = evaluateTokens(tokens, angleMode, variables, ans);
 
     const num = valToNumber(val);
-    if (isNaN(num)) return { success: false, error: 'Math ERROR' };
+    if (isNaN(num) || !isFinite(num)) return { success: false, error: 'Math ERROR' };
 
     const exactStr = formatExact(val);
 
@@ -1671,6 +2289,9 @@ export function evaluateMathExpression(
   } catch (err: any) {
     if (err && err.message === 'Math ERROR') {
       return { success: false, error: 'Math ERROR' };
+    }
+    if (err && err.message === "Can't Solve") {
+      return { success: false, error: "Can't Solve" };
     }
     const offset = typeof err?.offset === 'number' ? err.offset : 0;
     return { success: false, error: 'Syntax ERROR', errorIndex: offset };
