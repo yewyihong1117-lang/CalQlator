@@ -14,6 +14,7 @@ import { AngleMode, DisplayFormat } from '../calcEngine';
 
 export type CalculatorMode = 'EXAM' | 'STUDY';
 export type CalculatorTheme = 'default' | 'qiqi';
+export type EditorMode = 'CLASSIC' | 'PHONE';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,6 +23,8 @@ interface SettingsModalProps {
   onSetCalcMode: (mode: CalculatorMode) => void;
   theme?: CalculatorTheme;
   onSetTheme?: (theme: CalculatorTheme) => void;
+  editorMode?: EditorMode;
+  onSetEditorMode?: (mode: EditorMode) => void;
   onOpenCalibration: () => void;
   onOpenTestHarness: () => void;
   soundOn: boolean;
@@ -43,6 +46,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSetCalcMode,
   theme = 'default',
   onSetTheme,
+  editorMode = 'CLASSIC',
+  onSetEditorMode,
   onOpenCalibration,
   onOpenTestHarness,
   soundOn,
@@ -204,6 +209,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
                   >
                     Qiqi
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Row 3: Editor Behavior (Classic Casio vs Phone Edit) */}
+            {onSetEditorMode && (
+              <div className="min-h-[56px] flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-white/5">
+                <div className="flex items-center gap-3">
+                  <div 
+                    style={{ backgroundColor: 'var(--m3-surface-container-high, #262632)' }}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                  >
+                    <Smartphone className="w-5 h-5" style={{ color: 'var(--ui-accent, #E5A93C)' }} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium leading-tight">Editor behavior</span>
+                    <span 
+                      style={{ color: 'var(--m3-on-surface-variant, #94A3B8)' }}
+                      className="text-xs leading-normal"
+                    >
+                      {editorMode === 'PHONE' ? 'Phone edit: tap to edit, live preview' : 'Classic Casio: clears on key after result'}
+                    </span>
+                  </div>
+                </div>
+
+                <div 
+                  style={{ backgroundColor: 'var(--m3-surface-container-high, #262632)' }}
+                  className="p-1 rounded-full flex items-center self-start sm:self-auto shrink-0"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSetEditorMode('CLASSIC')}
+                    style={{
+                      backgroundColor: editorMode === 'CLASSIC' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
+                      color: editorMode === 'CLASSIC' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
+                    }}
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                  >
+                    Classic
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSetEditorMode('PHONE')}
+                    style={{
+                      backgroundColor: editorMode === 'PHONE' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
+                      color: editorMode === 'PHONE' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
+                    }}
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                  >
+                    Phone
                   </button>
                 </div>
               </div>

@@ -12,7 +12,7 @@
  * DISTINCT TOKENS: OP_NPR, OP_NCR, and VAR_C never share an internal representation.
  */
 
-import { simulateKeystrokes, astToStructureDescription, astToExpression } from './mathAst';
+import { simulateKeystrokes, astToStructureDescription, astToExpression, MathNode } from './mathAst';
 
 export type AngleMode = 'DEG' | 'RAD' | 'GRA';
 export type DisplayFormat = 'NORM1' | 'NORM2' | 'FIX' | 'SCI';
@@ -24,6 +24,7 @@ export interface HistoryItem {
   exactResult?: string;
   numericVal: number;
   timestamp: number;
+  astRoot?: MathNode[];
 }
 
 export interface StatData {

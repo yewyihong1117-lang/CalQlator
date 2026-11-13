@@ -36,7 +36,7 @@ import {
 } from './mathAst';
 import { NaturalDisplay } from './components/NaturalDisplay';
 import { ClassWizQrModal } from './components/ClassWizQrModal';
-import { SettingsModal, CalculatorMode, CalculatorTheme } from './components/SettingsModal';
+import { SettingsModal, CalculatorMode, CalculatorTheme, EditorMode } from './components/SettingsModal';
 import { CalibrationModal } from './components/CalibrationModal';
 import { TestHarnessModal } from './components/TestHarnessModal';
 
@@ -48,6 +48,7 @@ export interface DisplayEntry {
   result: string;
   exactResult?: string;
   numericVal?: number;
+  astRoot?: MathNode[];
 }
 
 export const DISPLAY_SLOT_CONFIG = {
@@ -116,9 +117,14 @@ interface DisplaySlotEntryItemProps {
   setAstState: React.Dispatch<React.SetStateAction<MathAstState>>;
   errorMessage: string | null;
   result: string;
-  onInsertExpr: (expr: string) => void;
+  onInsertExpr: (expr: string, astRoot?: MathNode[]) => void;
   onInsertResult: (res: string) => void;
   onRemoveSlot3: (id: string) => void;
+  editorMode: EditorMode;
+  justCommitted: boolean;
+  livePreviewResult: string;
+  lastValidPreviewResult: string;
+  onCursorTouched?: () => void;
 }
 
 const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
@@ -131,6 +137,11 @@ const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
   onInsertExpr,
   onInsertResult,
   onRemoveSlot3,
+  editorMode,
+  justCommitted,
+  livePreviewResult,
+  lastValidPreviewResult,
+  onCursorTouched,
 }) => {
   const cfg = DISPLAY_SLOT_CONFIG[entry.slot] || DISPLAY_SLOT_CONFIG[0];
   const exprContainerRef = useRef<HTMLDivElement>(null);
@@ -139,7 +150,10 @@ const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
   const resContentRef = useRef<HTMLDivElement>(null);
 
   const exprText = isSlot0 ? astToDisplayText(astState.root) : entry.expressionText;
-  const resText = isSlot0 ? (errorMessage ? `[${errorMessage}]` : result) : (entry.result ? `= ${entry.result}` : '');
+  const livePreviewText = (livePreviewResult || lastValidPreviewResult) ? `= ${livePreviewResult || lastValidPreviewResult}` : '';
+  const resText = isSlot0 
+    ? (errorMessage ? `[${errorMessage}]` : (editorMode === 'PHONE' && !justCommitted ? livePreviewText : result))
+    : (entry.result ? `= ${entry.result}` : '');
 
   const exprFitScale = useLineFitScale(exprContainerRef, exprContentRef, exprText, 16);
   const resFitScale = useLineFitScale(resContainerRef, resContentRef, resText, 16);
@@ -174,17 +188,25 @@ const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
       <div ref={exprContainerRef} className="display-slot-line-expr">
         <div
           ref={exprContentRef}
-          onClick={!isSlot0 && entry.expressionText ? (e) => {
-            e.stopPropagation();
-            onInsertExpr(entry.expressionText);
-          } : undefined}
+          onClick={
+            isSlot0
+              ? () => {
+                  if (onCursorTouched) onCursorTouched();
+                }
+              : entry.expressionText
+              ? (e) => {
+                  e.stopPropagation();
+                  onInsertExpr(entry.expressionText, entry.astRoot);
+                }
+              : undefined
+          }
           className={`display-slot-expr-content ${!isSlot0 && entry.expressionText ? 'cursor-pointer hover:opacity-90' : ''}`}
           style={{
             '--final-scale': `${(exprFitScale * cfg.scale).toFixed(4)}`,
             '--scale': `${cfg.scale}`,
             '--mix': `${cfg.mix}%`,
           } as React.CSSProperties}
-          title={!isSlot0 && entry.expressionText ? 'Tap to insert expression' : undefined}
+          title={!isSlot0 && entry.expressionText ? 'Tap to edit in editor' : undefined}
         >
           {isSlot0 ? (
             <NaturalDisplay
@@ -192,6 +214,7 @@ const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
               cursor={astState.cursor}
               pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
               onSetCursor={(slotId, offset) => {
+                if (onCursorTouched) onCursorTouched();
                 setAstState((prev) => ({
                   ...prev,
                   cursor: { slotId, offset },
@@ -225,6 +248,12 @@ const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
               <span className="text-rose-400 font-bold text-sm tracking-wider animate-pulse">
                 [{errorMessage}]
               </span>
+            ) : editorMode === 'PHONE' && !justCommitted ? (
+              (livePreviewResult || lastValidPreviewResult) ? (
+                <span className="opacity-60 text-[var(--display-text)] font-semibold transition-opacity duration-150">
+                  = {livePreviewResult || lastValidPreviewResult}
+                </span>
+              ) : null
             ) : result ? (
               <span>{result}</span>
             ) : null
@@ -525,6 +554,19 @@ export default function App() {
     displayFormat,
   };
 
+  // Editor Mode: CLASSIC or PHONE
+  const [editorMode, setEditorMode] = useState<EditorMode>(() => {
+    try {
+      const saved = localStorage.getItem('casio_editor_mode');
+      if (saved === 'PHONE' || saved === 'CLASSIC') return saved;
+    } catch {}
+    return 'CLASSIC';
+  });
+
+  const [justCommitted, setJustCommitted] = useState<boolean>(false);
+  const [livePreviewResult, setLivePreviewResult] = useState<string>('');
+  const [lastValidPreviewResult, setLastValidPreviewResult] = useState<string>('');
+
   // Calculation History Log (persisted in localStorage for full history view)
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
@@ -559,6 +601,7 @@ export default function App() {
         result: hist[0].result,
         exactResult: hist[0].exactResult,
         numericVal: hist[0].numericVal,
+        astRoot: hist[0].astRoot,
       });
     }
 
@@ -570,6 +613,7 @@ export default function App() {
         result: hist[1].result,
         exactResult: hist[1].exactResult,
         numericVal: hist[1].numericVal,
+        astRoot: hist[1].astRoot,
       });
     }
 
@@ -582,23 +626,78 @@ export default function App() {
     } catch {}
   }, [history]);
 
-  // Insert history expression or result into active workspace
-  const handleInsertHistoryExpression = useCallback((exprStr: string) => {
+  // Insert history expression or load into active workspace for editing
+  const handleInsertHistoryExpression = useCallback((exprStr: string, astRoot?: MathNode[]) => {
     playKeyClick('num');
     triggerHaptic('num');
-    const parsed = parseStringToAst(exprStr);
-    if (astState.root.length === 0 || isCalculated) {
-      setAstState(parsed);
-      setIsCalculated(false);
+    if (editorMode === 'PHONE') {
+      let nextRoot: MathNode[];
+      if (astRoot && astRoot.length > 0) {
+        nextRoot = JSON.parse(JSON.stringify(astRoot));
+      } else {
+        nextRoot = parseStringToAst(exprStr).root;
+      }
+      setAstState({
+        root: nextRoot,
+        cursor: { slotId: 'root', offset: nextRoot.length },
+        pendingDeleteTemplateId: null,
+      });
+      setJustCommitted(false);
       setErrorMessage(null);
+      setIsCalculated(false);
     } else {
-      setAstState((prev) => ({
-        ...prev,
-        root: [...prev.root, ...parsed.root],
-        cursor: { slotId: 'root', offset: prev.root.length + parsed.root.length },
-      }));
+      const parsed = astRoot && astRoot.length > 0
+        ? { root: JSON.parse(JSON.stringify(astRoot)), cursor: { slotId: 'root', offset: astRoot.length }, pendingDeleteTemplateId: null }
+        : parseStringToAst(exprStr);
+      if (astState.root.length === 0 || isCalculated) {
+        setAstState(parsed);
+        setIsCalculated(false);
+        setErrorMessage(null);
+      } else {
+        setAstState((prev) => ({
+          ...prev,
+          root: [...prev.root, ...parsed.root],
+          cursor: { slotId: 'root', offset: prev.root.length + parsed.root.length },
+        }));
+      }
     }
-  }, [astState.root.length, isCalculated]);
+  }, [editorMode, isCalculated, astState.root.length]);
+
+  // Live preview calculation for Phone Edit mode
+  useEffect(() => {
+    if (editorMode !== 'PHONE') return;
+    if (justCommitted) return;
+
+    if (astState.root.length === 0) {
+      setLivePreviewResult('');
+      setLastValidPreviewResult('');
+      return;
+    }
+
+    const expr = astToExpression(astState.root);
+    if (!expr || expr === '0') {
+      setLivePreviewResult('0');
+      setLastValidPreviewResult('0');
+      return;
+    }
+
+    try {
+      const evalResult = evaluateMathExpression(expr, angleMode, variables, lastAns);
+      if (evalResult.success && evalResult.result !== undefined) {
+        let formatted: string;
+        if (evalResult.exactResult !== undefined && displayFormat.startsWith('NORM')) {
+          formatted = evalResult.exactResult;
+        } else {
+          formatted = formatResult(evalResult.result, displayFormat, fixDigits, sciDigits, 0);
+        }
+        setLivePreviewResult(formatted);
+        setLastValidPreviewResult(formatted);
+      }
+      // If expression is incomplete or invalid, keep lastValidPreviewResult and show no error
+    } catch {
+      // Keep lastValidPreviewResult
+    }
+  }, [astState.root, editorMode, justCommitted, angleMode, variables, lastAns, displayFormat, fixDigits, sciDigits]);
 
   const handleInsertHistoryResult = useCallback((valStr: string) => {
     playKeyClick('num');
@@ -849,6 +948,9 @@ export default function App() {
     setAstState(createInitialAstState());
     setResult('0');
     setIsCalculated(false);
+    setJustCommitted(false);
+    setLivePreviewResult('');
+    setLastValidPreviewResult('');
     setShiftActive(false);
     setAlphaActive(false);
     setIsStoreMode(false);
@@ -1084,7 +1186,27 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
-    if (isCalculated) {
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        // Binary and postfix operators start new expression with "Ans"
+        // (+ - × ÷ x² x⁻¹ x^□ nPr nCr etc.)
+        const isBinaryOrPostfix = [
+          '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
+          'P', 'C', 'nPr', 'nCr'
+        ].includes(tokenVal) || tokenType === 'OP_NPR' || tokenType === 'OP_NCR';
+
+        if (isBinaryOrPostfix) {
+          currentState = parseStringToAst('Ans');
+        } else {
+          // Digits, '(', functions, etc. start a fresh input
+          currentState = createInitialAstState();
+        }
+        setJustCommitted(false);
+        setIsCalculated(false);
+        setSdCycleState(0);
+        setEngStep(0);
+      }
+    } else if (isCalculated) {
       commitPendingHistory();
       // Binary and postfix operators start new expression with "Ans"
       // (+ - × ÷ x² x⁻¹ x^□ nPr nCr etc.)
@@ -1124,7 +1246,13 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
-    if (isCalculated) {
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = createInitialAstState();
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
       commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
@@ -1144,7 +1272,13 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
-    if (isCalculated) {
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = createInitialAstState();
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
       commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
@@ -1170,7 +1304,13 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
-    if (isCalculated) {
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = createInitialAstState();
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
       commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
@@ -1196,7 +1336,13 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
-    if (isCalculated) {
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = parseStringToAst('Ans');
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
       commitPendingHistory();
       currentState = parseStringToAst('Ans');
       setIsCalculated(false);
@@ -1222,7 +1368,13 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
-    if (isCalculated) {
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = parseStringToAst('Ans');
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
       commitPendingHistory();
       currentState = parseStringToAst('Ans');
       setIsCalculated(false);
@@ -1242,7 +1394,13 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
-    if (isCalculated) {
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = createInitialAstState();
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
       commitPendingHistory();
       currentState = createInitialAstState();
       setIsCalculated(false);
@@ -1258,6 +1416,10 @@ export default function App() {
     if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('action');
     setKeystrokes((k) => k + 1);
+
+    if (editorMode === 'PHONE') {
+      setJustCommitted(false);
+    }
 
     if (modeState.mode !== 'CALC') {
       const handled = currentModeModule.handleKey('DEL', modeContext);
@@ -1355,13 +1517,22 @@ export default function App() {
       if (handled) return;
     }
 
-    // Normal calculation: History recall or AST cursor traversal
+    if (editorMode === 'PHONE') {
+      setJustCommitted(false);
+    }
+
+    // Normal calculation: Check AST template navigation first, then history recall
     if (direction === 'UP') {
+      const navUp = navigateAst(astState, 'up');
+      if (navUp !== astState && (navUp.cursor.slotId !== astState.cursor.slotId || navUp.cursor.offset !== astState.cursor.offset)) {
+        setAstState(navUp);
+        return;
+      }
       if (history.length > 0) {
         const nextIdx = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
         setHistoryIndex(nextIdx);
         const item = history[nextIdx];
-        setAstState(parseStringToAst(item.expression));
+        setAstState(item.astRoot ? { root: JSON.parse(JSON.stringify(item.astRoot)), cursor: { slotId: 'root', offset: item.astRoot.length }, pendingDeleteTemplateId: null } : parseStringToAst(item.expression));
         setResult(item.result);
         setRawNumericVal(item.numericVal);
         setIsCalculated(true);
@@ -1370,6 +1541,11 @@ export default function App() {
     }
 
     if (direction === 'DOWN') {
+      const navDown = navigateAst(astState, 'down');
+      if (navDown !== astState && (navDown.cursor.slotId !== astState.cursor.slotId || navDown.cursor.offset !== astState.cursor.offset)) {
+        setAstState(navDown);
+        return;
+      }
       if (historyIndex !== -1) {
         const nextIdx = historyIndex + 1;
         if (nextIdx >= history.length) {
@@ -1380,7 +1556,7 @@ export default function App() {
         } else {
           setHistoryIndex(nextIdx);
           const item = history[nextIdx];
-          setAstState(parseStringToAst(item.expression));
+          setAstState(item.astRoot ? { root: JSON.parse(JSON.stringify(item.astRoot)), cursor: { slotId: 'root', offset: item.astRoot.length }, pendingDeleteTemplateId: null } : parseStringToAst(item.expression));
           setResult(item.result);
           setRawNumericVal(item.numericVal);
           setIsCalculated(true);
@@ -1489,62 +1665,136 @@ export default function App() {
 
       const completedExpr = astToDisplayText(astState.root);
       const completedResult = formattedOutput;
+      const completedAstRoot = JSON.parse(JSON.stringify(astState.root));
 
-      // Continuity Motion: existing slot 0 moves to slot 1, slot 1 to 2, slot 2 to 3, new slot 0 enters
-      setDisplayEntries((prev) => {
-        const next: DisplayEntry[] = [];
-        const newSlot0: DisplayEntry = {
-          id: 'entry_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-          slot: 0,
-          expressionText: '',
-          result: '',
-        };
-        next.push(newSlot0);
+      if (editorMode === 'PHONE') {
+        // PHONE MODE:
+        // Expression stays in editor (slot 0), committed result is displayed
+        setJustCommitted(true);
+        setLivePreviewResult(formattedOutput);
+        setLastValidPreviewResult(formattedOutput);
 
-        for (const item of prev) {
-          if (item.slot === 0) {
-            next.push({
-              ...item,
-              slot: 1,
-              expressionText: completedExpr,
-              result: completedResult,
-              exactResult: evalResult.exactResult,
-              numericVal: numVal,
-            });
-          } else if (item.slot === 1) {
-            next.push({
-              ...item,
-              slot: 2,
-            });
-          } else if (item.slot === 2) {
-            next.push({
-              ...item,
-              slot: 3,
-            });
+        setDisplayEntries((prev) => {
+          const next: DisplayEntry[] = [];
+          const currentSlot0 = prev.find((it) => it.slot === 0);
+          next.push({
+            id: currentSlot0 ? currentSlot0.id : 'entry_cur_' + Date.now(),
+            slot: 0,
+            expressionText: completedExpr,
+            result: completedResult,
+            exactResult: evalResult.exactResult,
+            numericVal: numVal,
+            astRoot: completedAstRoot,
+          });
+
+          // Insert new history entry in slot 1
+          const newSlot1: DisplayEntry = {
+            id: 'entry_h_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            slot: 1,
+            expressionText: completedExpr,
+            result: completedResult,
+            exactResult: evalResult.exactResult,
+            numericVal: numVal,
+            astRoot: completedAstRoot,
+          };
+          next.push(newSlot1);
+
+          for (const item of prev) {
+            if (item.slot === 1) {
+              next.push({
+                ...item,
+                slot: 2,
+              });
+            } else if (item.slot === 2) {
+              next.push({
+                ...item,
+                slot: 3,
+              });
+            }
           }
-        }
-        return next;
-      });
+          return next;
+        });
 
-      const newHistoryItem: HistoryItem = {
-        id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
-        expression: completedExpr,
-        result: formattedOutput,
-        exactResult: evalResult.exactResult,
-        numericVal: numVal,
-        timestamp: Date.now(),
-      };
-      setHistory((prev) => {
-        const updated = [newHistoryItem, ...prev.slice(0, 49)];
-        try {
-          localStorage.setItem('casio_history', JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
-      setHistoryIndex(-1);
+        const newHistoryItem: HistoryItem = {
+          id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+          expression: completedExpr,
+          result: formattedOutput,
+          exactResult: evalResult.exactResult,
+          numericVal: numVal,
+          timestamp: Date.now(),
+          astRoot: completedAstRoot,
+        };
+        setHistory((prev) => {
+          const updated = [newHistoryItem, ...prev.slice(0, 49)];
+          try {
+            localStorage.setItem('casio_history', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+        setHistoryIndex(-1);
+      } else {
+        // CLASSIC MODE:
+        // Continuity Motion: existing slot 0 moves to slot 1, slot 1 to 2, slot 2 to 3, new slot 0 enters
+        setDisplayEntries((prev) => {
+          const next: DisplayEntry[] = [];
+          const newSlot0: DisplayEntry = {
+            id: 'entry_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            slot: 0,
+            expressionText: '',
+            result: '',
+          };
+          next.push(newSlot0);
+
+          for (const item of prev) {
+            if (item.slot === 0) {
+              next.push({
+                ...item,
+                slot: 1,
+                expressionText: completedExpr,
+                result: completedResult,
+                exactResult: evalResult.exactResult,
+                numericVal: numVal,
+                astRoot: completedAstRoot,
+              });
+            } else if (item.slot === 1) {
+              next.push({
+                ...item,
+                slot: 2,
+              });
+            } else if (item.slot === 2) {
+              next.push({
+                ...item,
+                slot: 3,
+              });
+            }
+          }
+          return next;
+        });
+
+        const newHistoryItem: HistoryItem = {
+          id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+          expression: completedExpr,
+          result: formattedOutput,
+          exactResult: evalResult.exactResult,
+          numericVal: numVal,
+          timestamp: Date.now(),
+          astRoot: completedAstRoot,
+        };
+        setHistory((prev) => {
+          const updated = [newHistoryItem, ...prev.slice(0, 49)];
+          try {
+            localStorage.setItem('casio_history', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+        setHistoryIndex(-1);
+      }
     } else {
       setErrorMessage(evalResult.error || 'Syntax ERROR');
       setResult('');
+      if (editorMode === 'PHONE') {
+        setJustCommitted(false);
+      }
     }
   };
 
