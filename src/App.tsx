@@ -35,91 +35,82 @@ import {
   astToExpression, astToDisplayText, parseStringToAst, TokenType
 } from './mathAst';
 import { NaturalDisplay } from './components/NaturalDisplay';
+import { HistorySheet } from './components/HistorySheet';
 import { ClassWizQrModal } from './components/ClassWizQrModal';
 import { SettingsModal, CalculatorMode, CalculatorTheme, EditorMode } from './components/SettingsModal';
 import { CalibrationModal } from './components/CalibrationModal';
 import { TestHarnessModal } from './components/TestHarnessModal';
 
-// Persistent Display Slot Engine Models
-export interface DisplayEntry {
-  id: string;
-  slot: 0 | 1 | 2 | 3;
-  expressionText: string;
-  result: string;
-  exactResult?: string;
-  numericVal?: number;
-  astRoot?: MathNode[];
-}
-
-export const DISPLAY_SLOT_CONFIG = {
-  0: { scale: 1, y: '0cqh', mix: 100, mixRes: 100, opacity: 1 },
-  1: { scale: 0.6, y: '-38cqh', mix: 70, mixRes: 100, opacity: 1 },
-  2: { scale: 0.45, y: '-65cqh', mix: 50, mixRes: 70, opacity: 1 },
-  3: { scale: 0.4, y: '-88cqh', mix: 35, mixRes: 50, opacity: 0 },
-};
-
-function useLineFitScale(
+function useShrinkFirstFontSize(
   containerRef: React.RefObject<HTMLDivElement | null>,
-  contentRef: React.RefObject<HTMLDivElement | null>,
-  dependency: any,
-  minFontSizePx = 16
+  contentWrapperRef: React.RefObject<HTMLDivElement | null>,
+  dependency: unknown,
+  minFontSizePx: number
 ) {
-  const [fitScale, setFitScale] = useState(1);
+  const [fontSizePx, setFontSizePx] = useState<number | undefined>(undefined);
+  const currentPxRef = useRef<number | undefined>(undefined);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
-    const content = contentRef.current;
-    if (!container || !content) return;
+    const wrapper = contentWrapperRef.current;
+    if (!container || !wrapper) return;
 
     const measure = () => {
-      const containerWidth = container.clientWidth;
-      const contentWidth = content.scrollWidth;
-      if (containerWidth <= 0 || contentWidth <= 0) return;
+      const availableWidth = container.clientWidth;
+      if (availableWidth <= 0) return;
 
-      const computedFontSize = parseFloat(window.getComputedStyle(container).fontSize) || 20;
-      const minScale = Math.max(0.1, minFontSizePx / computedFontSize);
+      const basePx = parseFloat(window.getComputedStyle(container).fontSize) || 20;
+      const activePx = currentPxRef.current ?? basePx;
 
-      let targetScale = 1;
-      if (contentWidth > containerWidth) {
-        const rawScale = containerWidth / contentWidth;
-        targetScale = Math.max(minScale, Math.min(1, rawScale));
+      // Measure actual inline content width (first child inline span for NaturalDisplay, or inner span)
+      const targetEl = (wrapper.firstElementChild?.firstElementChild as HTMLElement | null) ||
+        (wrapper.firstElementChild as HTMLElement | null) ||
+        wrapper;
+      const contentWidth = targetEl.getBoundingClientRect().width;
+      if (contentWidth <= 0) {
+        currentPxRef.current = basePx;
+        setFontSizePx(basePx);
+        return;
       }
 
-      setFitScale((prev) => {
-        if (Math.abs(prev - targetScale) < 0.008) return prev;
-        return targetScale;
-      });
+      const estimatedBaseWidth = contentWidth * (basePx / activePx);
+      let nextPx = basePx;
+      if (estimatedBaseWidth > availableWidth - 2) {
+        nextPx = Math.max(minFontSizePx, basePx * ((availableWidth - 2) / estimatedBaseWidth));
+      }
+      nextPx = Math.round(nextPx * 10) / 10;
+
+      if (currentPxRef.current === undefined || Math.abs(currentPxRef.current - nextPx) >= 0.4) {
+        currentPxRef.current = nextPx;
+        setFontSizePx(nextPx);
+      }
     };
 
     measure();
 
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => {
-        measure();
-      });
+      ro = new ResizeObserver(() => measure());
       ro.observe(container);
-      ro.observe(content);
+      ro.observe(wrapper);
     }
 
     return () => {
       ro?.disconnect();
     };
-  }, [containerRef, contentRef, dependency, minFontSizePx]);
+  }, [containerRef, contentWrapperRef, dependency, minFontSizePx]);
 
-  return fitScale;
+  return fontSizePx;
 }
 
-interface DisplaySlotEntryItemProps {
-  entry: DisplayEntry;
-  isSlot0: boolean;
+interface DisplayWorkspaceProps {
+  inlineHistory: HistoryItem[];
   astState: MathAstState;
   setAstState: React.Dispatch<React.SetStateAction<MathAstState>>;
   errorMessage: string | null;
   result: string;
   onInsertExpr: (expr: string, astRoot?: MathNode[]) => void;
   onInsertResult: (res: string) => void;
-  onRemoveSlot3: (id: string) => void;
   editorMode: EditorMode;
   justCommitted: boolean;
   livePreviewResult: string;
@@ -127,139 +118,182 @@ interface DisplaySlotEntryItemProps {
   onCursorTouched?: () => void;
 }
 
-const DisplaySlotEntryItem: React.FC<DisplaySlotEntryItemProps> = React.memo(({
-  entry,
-  isSlot0,
+const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
+  inlineHistory,
   astState,
   setAstState,
   errorMessage,
   result,
   onInsertExpr,
   onInsertResult,
-  onRemoveSlot3,
   editorMode,
   justCommitted,
   livePreviewResult,
   lastValidPreviewResult,
   onCursorTouched,
 }) => {
-  const cfg = DISPLAY_SLOT_CONFIG[entry.slot] || DISPLAY_SLOT_CONFIG[0];
-  const exprContainerRef = useRef<HTMLDivElement>(null);
-  const exprContentRef = useRef<HTMLDivElement>(null);
-  const resContainerRef = useRef<HTMLDivElement>(null);
-  const resContentRef = useRef<HTMLDivElement>(null);
+  const historyScrollRef = useRef<HTMLDivElement>(null);
+  const [hasTopFade, setHasTopFade] = useState(false);
 
-  const exprText = isSlot0 ? astToDisplayText(astState.root) : entry.expressionText;
-  const livePreviewText = (livePreviewResult || lastValidPreviewResult) ? `= ${livePreviewResult || lastValidPreviewResult}` : '';
-  const resText = isSlot0 
-    ? (errorMessage ? `[${errorMessage}]` : (editorMode === 'PHONE' && !justCommitted ? livePreviewText : result))
-    : (entry.result ? `= ${entry.result}` : '');
+  const activeInputContainerRef = useRef<HTMLDivElement>(null);
+  const activeInputWrapperRef = useRef<HTMLDivElement>(null);
+  const activeResContainerRef = useRef<HTMLDivElement>(null);
+  const activeResContentRef = useRef<HTMLDivElement>(null);
 
-  const exprFitScale = useLineFitScale(exprContainerRef, exprContentRef, exprText, 16);
-  const resFitScale = useLineFitScale(resContainerRef, resContentRef, resText, 16);
+  const exprKey = astToDisplayText(astState.root);
+  const activeExprFontSize = useShrinkFirstFontSize(
+    activeInputContainerRef,
+    activeInputWrapperRef,
+    exprKey,
+    13.5
+  );
+
+  const previewText = livePreviewResult || lastValidPreviewResult;
+  const activeResultText = errorMessage
+    ? `[${errorMessage}]`
+    : editorMode === 'PHONE' && !justCommitted
+    ? previewText
+      ? `= ${previewText}`
+      : ''
+    : result;
+
+  const activeResFontSize = useShrinkFirstFontSize(
+    activeResContainerRef,
+    activeResContentRef,
+    activeResultText,
+    16
+  );
+
+  // Keep inline history anchored to the bottom (newest just above active input) and update top fade state
+  useLayoutEffect(() => {
+    const el = historyScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    setHasTopFade(el.scrollHeight > el.clientHeight + 2);
+  }, [inlineHistory.length]);
 
   useEffect(() => {
-    if (entry.slot === 3) {
-      const timer = setTimeout(() => {
-        onRemoveSlot3(entry.id);
-      }, 260);
-      return () => clearTimeout(timer);
+    const el = historyScrollRef.current;
+    if (!el) return;
+    const updateFade = () => {
+      setHasTopFade(el.scrollHeight > el.clientHeight + 2 || el.scrollTop > 2);
+    };
+    updateFade();
+    el.addEventListener('scroll', updateFade, { passive: true });
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(updateFade);
+      ro.observe(el);
     }
-  }, [entry.slot, entry.id, onRemoveSlot3]);
+    return () => {
+      el.removeEventListener('scroll', updateFade);
+      ro?.disconnect();
+    };
+  }, []);
 
   return (
-    <div
-      data-testid={`display-slot-${entry.slot}`}
-      onTransitionEnd={(e) => {
-        if (e.target === e.currentTarget && entry.slot === 3) {
-          onRemoveSlot3(entry.id);
-        }
-      }}
-      className="display-slot-entry"
-      style={{
-        '--y': cfg.y,
-        '--entry-opacity': cfg.opacity,
-        '--scale': cfg.scale,
-        '--mix': `${cfg.mix}%`,
-        '--mix-res': `${cfg.mixRes}%`,
-      } as React.CSSProperties}
-    >
-      {/* Expression Line (Left Aligned) */}
-      <div ref={exprContainerRef} className="display-slot-line-expr">
+    <div data-testid="display-workspace" className="display-workspace select-none">
+      {/* Scrollable Inline History Zone: grows upward from active input with top-edge fade */}
+      <div
+        ref={historyScrollRef}
+        data-testid="inline-history-scroll"
+        className={`calc-history-scroll no-scrollbar ${hasTopFade ? 'has-top-fade' : ''}`}
+      >
+        <div className="calc-history-list">
+          {inlineHistory.map((item, idx) => {
+            const distFromBottom = inlineHistory.length - 1 - idx;
+            const entryOpacity = Math.max(0.28, 0.84 - distFromBottom * 0.18);
+            const itemNodes =
+              item.astRoot && item.astRoot.length > 0
+                ? item.astRoot
+                : parseStringToAst(item.expression).root;
+
+            return (
+              <div
+                key={item.id}
+                data-testid={`inline-history-entry-${idx}`}
+                className="calc-history-entry"
+                style={{ opacity: entryOpacity }}
+              >
+                <div
+                  onClick={() => onInsertExpr(item.expression, item.astRoot)}
+                  title="Tap to edit in editor"
+                  className="calc-history-expr no-scrollbar cursor-pointer hover:opacity-100"
+                >
+                  <NaturalDisplay
+                    nodes={itemNodes}
+                    readOnly
+                    inheritColor
+                  />
+                </div>
+                <div
+                  onClick={() => onInsertResult(item.exactResult || item.result)}
+                  title="Tap to insert result"
+                  className="calc-history-res no-scrollbar cursor-pointer hover:opacity-100"
+                >
+                  = {item.result}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Anchored Active Input + Fixed-Height Result Zone */}
+      <div data-testid="calc-active-area" className="calc-active-area">
         <div
-          ref={exprContentRef}
-          onClick={
-            isSlot0
-              ? () => {
-                  if (onCursorTouched) onCursorTouched();
-                }
-              : entry.expressionText
-              ? (e) => {
-                  e.stopPropagation();
-                  onInsertExpr(entry.expressionText, entry.astRoot);
-                }
-              : undefined
-          }
-          className={`display-slot-expr-content ${!isSlot0 && entry.expressionText ? 'cursor-pointer hover:opacity-90' : ''}`}
-          style={{
-            '--final-scale': `${(exprFitScale * cfg.scale).toFixed(4)}`,
-            '--scale': `${cfg.scale}`,
-            '--mix': `${cfg.mix}%`,
-          } as React.CSSProperties}
-          title={!isSlot0 && entry.expressionText ? 'Tap to edit in editor' : undefined}
+          ref={activeInputContainerRef}
+          data-testid="active-input-line"
+          onClick={() => onCursorTouched?.()}
+          className="calc-active-input-line"
         >
-          {isSlot0 ? (
+          <div ref={activeInputWrapperRef} className="w-full min-w-0">
             <NaturalDisplay
               nodes={astState.root}
               cursor={astState.cursor}
               pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
+              fontSize={activeExprFontSize}
               onSetCursor={(slotId, offset) => {
-                if (onCursorTouched) onCursorTouched();
+                onCursorTouched?.();
                 setAstState((prev) => ({
                   ...prev,
                   cursor: { slotId, offset },
                 }));
               }}
             />
-          ) : (
-            <span>{entry.expressionText}</span>
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* Result Line (Right Aligned) */}
-      <div ref={resContainerRef} className="display-slot-line-res">
         <div
-          ref={resContentRef}
-          onClick={isSlot0 ? (result && !errorMessage ? () => onInsertResult(result) : undefined) : (entry.result ? (e) => {
-            e.stopPropagation();
-            onInsertResult(entry.exactResult || entry.result);
-          } : undefined)}
-          className={`display-slot-res-content ${((isSlot0 && result && !errorMessage) || (!isSlot0 && entry.result)) ? 'cursor-pointer hover:opacity-90 select-text' : ''}`}
-          style={{
-            '--final-scale': `${(resFitScale * cfg.scale).toFixed(4)}`,
-            '--scale': `${cfg.scale}`,
-            '--mix-res': `${cfg.mixRes}%`,
-          } as React.CSSProperties}
-          title={isSlot0 ? (result ? 'Tap to insert result' : undefined) : (entry.result ? 'Tap to insert result' : undefined)}
+          ref={activeResContainerRef}
+          data-testid="active-result-line"
+          className="calc-active-result-line no-scrollbar"
         >
-          {isSlot0 ? (
-            errorMessage ? (
-              <span className="text-rose-400 font-bold text-sm tracking-wider animate-pulse">
+          <div ref={activeResContentRef} className="inline-flex items-center justify-end whitespace-nowrap">
+            {errorMessage ? (
+              <span className="text-[var(--ui-danger)] font-bold text-sm tracking-wider">
                 [{errorMessage}]
               </span>
             ) : editorMode === 'PHONE' && !justCommitted ? (
-              (livePreviewResult || lastValidPreviewResult) ? (
-                <span className="opacity-60 text-[var(--display-text)] font-semibold transition-opacity duration-150">
-                  = {livePreviewResult || lastValidPreviewResult}
+              previewText ? (
+                <span
+                  style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
+                  className="opacity-55 text-[var(--display-text)] font-semibold transition-opacity duration-150"
+                >
+                  = {previewText}
                 </span>
               ) : null
             ) : result ? (
-              <span>{result}</span>
-            ) : null
-          ) : (
-            entry.result ? <span>= {entry.result}</span> : null
-          )}
+              <span
+                onClick={() => onInsertResult(result)}
+                title="Tap to insert result"
+                style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
+                className="text-[var(--display-text)] cursor-pointer select-text"
+              >
+                {result}
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -491,6 +525,7 @@ export default function App() {
     setAstState(createInitialAstState());
     setResult('0');
     setIsCalculated(false);
+    setActiveHistoryId(null);
     setDisplayMenu('NONE');
     setShiftActive(false);
     setAlphaActive(false);
@@ -583,49 +618,10 @@ export default function App() {
     return [];
   });
 
-  // Persistent Display Slot Engine Entries: 0 = current, 1 = newest history, 2 = older history, 3 = exiting
-  const [displayEntries, setDisplayEntries] = useState<DisplayEntry[]>(() => {
-    let hist: HistoryItem[] = [];
-    try {
-      const saved = localStorage.getItem('casio_history');
-      if (saved) hist = JSON.parse(saved);
-    } catch {}
-
-    const entries: DisplayEntry[] = [
-      {
-        id: 'entry_cur_' + Date.now(),
-        slot: 0,
-        expressionText: '',
-        result: '',
-      },
-    ];
-
-    if (hist.length > 0) {
-      entries.push({
-        id: 'entry_h1_' + (hist[0].id || '1'),
-        slot: 1,
-        expressionText: hist[0].expression,
-        result: hist[0].result,
-        exactResult: hist[0].exactResult,
-        numericVal: hist[0].numericVal,
-        astRoot: hist[0].astRoot,
-      });
-    }
-
-    if (hist.length > 1) {
-      entries.push({
-        id: 'entry_h2_' + (hist[1].id || '2'),
-        slot: 2,
-        expressionText: hist[1].expression,
-        result: hist[1].result,
-        exactResult: hist[1].exactResult,
-        numericVal: hist[1].numericVal,
-        astRoot: hist[1].astRoot,
-      });
-    }
-
-    return entries;
-  });
+  // Active committed history id (excluded from inline history while still shown as active result)
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [isHistorySheetOpen, setIsHistorySheetOpen] = useState<boolean>(false);
+  const grabSwipeStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -633,10 +629,44 @@ export default function App() {
     } catch {}
   }, [history]);
 
+  const handleLoadHistoryCard = useCallback((item: HistoryItem) => {
+    playKeyClick('num');
+    triggerHaptic('num');
+    const nextRoot: MathNode[] =
+      item.astRoot && item.astRoot.length > 0
+        ? JSON.parse(JSON.stringify(item.astRoot))
+        : parseStringToAst(item.expression).root;
+    setAstState({
+      root: nextRoot,
+      cursor: { slotId: 'root', offset: nextRoot.length },
+      pendingDeleteTemplateId: null,
+    });
+    setJustCommitted(false);
+    setIsCalculated(false);
+    setErrorMessage(null);
+    setActiveHistoryId(null);
+    setIsHistorySheetOpen(false);
+  }, []);
+
+  const handleTogglePinHistory = useCallback((id: string) => {
+    setHistory((prev) => prev.map((it) => (it.id === id ? { ...it, pinned: !it.pinned } : it)));
+  }, []);
+
+  const handleDeleteHistoryItem = useCallback((id: string) => {
+    setHistory((prev) => prev.filter((it) => it.id !== id));
+    setActiveHistoryId((prev) => (prev === id ? null : prev));
+  }, []);
+
+  const handleClearHistory = useCallback(() => {
+    setHistory([]);
+    setActiveHistoryId(null);
+  }, []);
+
   // Insert history expression or load into active workspace for editing
   const handleInsertHistoryExpression = useCallback((exprStr: string, astRoot?: MathNode[]) => {
     playKeyClick('num');
     triggerHaptic('num');
+    setActiveHistoryId(null);
     if (editorMode === 'PHONE') {
       let nextRoot: MathNode[];
       if (astRoot && astRoot.length > 0) {
@@ -702,6 +732,7 @@ export default function App() {
   const handleInsertHistoryResult = useCallback((valStr: string) => {
     playKeyClick('num');
     triggerHaptic('num');
+    setActiveHistoryId(null);
     const cleanStr = valStr.replace(/^=\s*/, '');
     const parsed = parseStringToAst(cleanStr);
     if (astState.root.length === 0 || isCalculated) {
@@ -949,6 +980,7 @@ export default function App() {
     setResult('0');
     setIsCalculated(false);
     setJustCommitted(false);
+    setActiveHistoryId(null);
     setLivePreviewResult('');
     setLastValidPreviewResult('');
     setShiftActive(false);
@@ -1182,6 +1214,7 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
 
     pushUndoState(astState);
 
@@ -1243,6 +1276,7 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1269,6 +1303,7 @@ export default function App() {
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1295,6 +1330,7 @@ export default function App() {
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1327,6 +1363,7 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1359,6 +1396,7 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1391,6 +1429,7 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1417,6 +1456,7 @@ export default function App() {
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1452,6 +1492,7 @@ export default function App() {
       if (handled) return;
     }
 
+    setActiveHistoryId(null);
     pushUndoState(astState);
     setAstState(deleteAst(astState));
     setErrorMessage(null);
@@ -1474,11 +1515,9 @@ export default function App() {
         setSdCycleState(1);
         const nextRes = formatResult(rawNumericVal, displayFormat, fixDigits, sciDigits, engStep);
         setResult(nextRes);
-        setDisplayEntries((prev) => prev.map((e) => (e.slot === 1 ? { ...e, result: nextRes } : e)));
       } else {
         setSdCycleState(0);
         setResult(lastExactResult);
-        setDisplayEntries((prev) => prev.map((e) => (e.slot === 1 ? { ...e, result: lastExactResult } : e)));
       }
     } else {
       setSdCycleState((prev) => (prev === 0 ? 1 : 0));
@@ -1495,7 +1534,6 @@ export default function App() {
     setEngStep(nextStep);
     const nextRes = toEngineering(rawNumericVal, nextStep);
     setResult(nextRes);
-    setDisplayEntries((prev) => prev.map((e) => (e.slot === 1 ? { ...e, result: nextRes } : e)));
   };
 
   // D-Pad Arrow Navigation (Left, Right, Up, Down)
@@ -1552,16 +1590,18 @@ export default function App() {
       const navUp = navigateAst(astState, 'up');
       if (navUp !== astState && (navUp.cursor.slotId !== astState.cursor.slotId || navUp.cursor.offset !== astState.cursor.offset)) {
         setAstState(navUp);
+        setActiveHistoryId(null);
         return;
       }
       if (history.length > 0) {
-        const nextIdx = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
+        const nextIdx = historyIndex === -1 ? 0 : Math.min(history.length - 1, historyIndex + 1);
         setHistoryIndex(nextIdx);
         const item = history[nextIdx];
         setAstState(item.astRoot ? { root: JSON.parse(JSON.stringify(item.astRoot)), cursor: { slotId: 'root', offset: item.astRoot.length }, pendingDeleteTemplateId: null } : parseStringToAst(item.expression));
         setResult(item.result);
         setRawNumericVal(item.numericVal);
         setIsCalculated(true);
+        setActiveHistoryId(item.id);
       }
       return;
     }
@@ -1570,15 +1610,17 @@ export default function App() {
       const navDown = navigateAst(astState, 'down');
       if (navDown !== astState && (navDown.cursor.slotId !== astState.cursor.slotId || navDown.cursor.offset !== astState.cursor.offset)) {
         setAstState(navDown);
+        setActiveHistoryId(null);
         return;
       }
       if (historyIndex !== -1) {
-        const nextIdx = historyIndex + 1;
-        if (nextIdx >= history.length) {
+        const nextIdx = historyIndex - 1;
+        if (nextIdx < 0) {
           setHistoryIndex(-1);
           setAstState(createInitialAstState());
           setResult('0');
           setIsCalculated(false);
+          setActiveHistoryId(null);
         } else {
           setHistoryIndex(nextIdx);
           const item = history[nextIdx];
@@ -1586,11 +1628,13 @@ export default function App() {
           setResult(item.result);
           setRawNumericVal(item.numericVal);
           setIsCalculated(true);
+          setActiveHistoryId(item.id);
         }
       }
       return;
     }
 
+    setActiveHistoryId(null);
     const dirMap = {
       LEFT: 'left' as const,
       RIGHT: 'right' as const,
@@ -1637,14 +1681,7 @@ export default function App() {
       handleSelectMode('CALC');
       setAstState(createInitialAstState());
       setResult('0');
-      setDisplayEntries([
-        {
-          id: 'entry_reset_' + Date.now(),
-          slot: 0,
-          expressionText: '',
-          result: '',
-        },
-      ]);
+      setActiveHistoryId(null);
       setHistory([]);
       setDisplayMenu('NONE');
       return;
@@ -1689,134 +1726,37 @@ export default function App() {
       setResult(formattedOutput);
 
       const completedExpr = astToDisplayText(astState.root);
-      const completedResult = formattedOutput;
       const completedAstRoot = JSON.parse(JSON.stringify(astState.root));
 
+      const newHistoryItem: HistoryItem = {
+        id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+        expression: completedExpr,
+        result: formattedOutput,
+        exactResult: evalResult.exactResult,
+        numericVal: numVal,
+        timestamp: Date.now(),
+        astRoot: completedAstRoot,
+      };
+
       if (editorMode === 'PHONE') {
-        // PHONE MODE:
-        // Expression stays in editor (slot 0), committed result is displayed
         setJustCommitted(true);
         setLivePreviewResult(formattedOutput);
         setLastValidPreviewResult(formattedOutput);
-
-        setDisplayEntries((prev) => {
-          const next: DisplayEntry[] = [];
-          const currentSlot0 = prev.find((it) => it.slot === 0);
-          next.push({
-            id: currentSlot0 ? currentSlot0.id : 'entry_cur_' + Date.now(),
-            slot: 0,
-            expressionText: completedExpr,
-            result: completedResult,
-            exactResult: evalResult.exactResult,
-            numericVal: numVal,
-            astRoot: completedAstRoot,
-          });
-
-          // Insert new history entry in slot 1
-          const newSlot1: DisplayEntry = {
-            id: 'entry_h_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            slot: 1,
-            expressionText: completedExpr,
-            result: completedResult,
-            exactResult: evalResult.exactResult,
-            numericVal: numVal,
-            astRoot: completedAstRoot,
-          };
-          next.push(newSlot1);
-
-          for (const item of prev) {
-            if (item.slot === 1) {
-              next.push({
-                ...item,
-                slot: 2,
-              });
-            } else if (item.slot === 2) {
-              next.push({
-                ...item,
-                slot: 3,
-              });
-            }
-          }
-          return next;
-        });
-
-        const newHistoryItem: HistoryItem = {
-          id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
-          expression: completedExpr,
-          result: formattedOutput,
-          exactResult: evalResult.exactResult,
-          numericVal: numVal,
-          timestamp: Date.now(),
-          astRoot: completedAstRoot,
-        };
-        setHistory((prev) => {
-          const updated = [newHistoryItem, ...prev.slice(0, 49)];
-          try {
-            localStorage.setItem('casio_history', JSON.stringify(updated));
-          } catch {}
-          return updated;
-        });
-        setHistoryIndex(-1);
-      } else {
-        // CLASSIC MODE:
-        // Continuity Motion: existing slot 0 moves to slot 1, slot 1 to 2, slot 2 to 3, new slot 0 enters
-        setDisplayEntries((prev) => {
-          const next: DisplayEntry[] = [];
-          const newSlot0: DisplayEntry = {
-            id: 'entry_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            slot: 0,
-            expressionText: '',
-            result: '',
-          };
-          next.push(newSlot0);
-
-          for (const item of prev) {
-            if (item.slot === 0) {
-              next.push({
-                ...item,
-                slot: 1,
-                expressionText: completedExpr,
-                result: completedResult,
-                exactResult: evalResult.exactResult,
-                numericVal: numVal,
-                astRoot: completedAstRoot,
-              });
-            } else if (item.slot === 1) {
-              next.push({
-                ...item,
-                slot: 2,
-              });
-            } else if (item.slot === 2) {
-              next.push({
-                ...item,
-                slot: 3,
-              });
-            }
-          }
-          return next;
-        });
-
-        const newHistoryItem: HistoryItem = {
-          id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
-          expression: completedExpr,
-          result: formattedOutput,
-          exactResult: evalResult.exactResult,
-          numericVal: numVal,
-          timestamp: Date.now(),
-          astRoot: completedAstRoot,
-        };
-        setHistory((prev) => {
-          const updated = [newHistoryItem, ...prev.slice(0, 49)];
-          try {
-            localStorage.setItem('casio_history', JSON.stringify(updated));
-          } catch {}
-          return updated;
-        });
-        setHistoryIndex(-1);
       }
+
+      setActiveHistoryId(newHistoryItem.id);
+      setHistory((prev) => {
+        const updated = [newHistoryItem, ...prev.slice(0, 49)];
+        try {
+          localStorage.setItem('casio_history', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setHistoryIndex(-1);
     } else {
       setErrorMessage(evalResult.error || 'Syntax ERROR');
       setResult('');
+      setActiveHistoryId(null);
       if (editorMode === 'PHONE') {
         setJustCommitted(false);
       }
@@ -1913,14 +1853,10 @@ export default function App() {
   const menuPage = Math.floor(menuHighlightIndex / 6);
   const currentMenuGrid = MENU_PAGES[menuPage] || MENU_PAGES[0];
 
-  // Dynamically calculate input font size (smoothly shrinks from 26px down to 16px)
-  const exprDisplayText = astToDisplayText(astState.root);
-  const exprCharLength = exprDisplayText.length;
-  const inputFontSize = Math.max(16, Math.min(26, 26 - Math.max(0, exprCharLength - 12) * 0.75));
-
-  // Display history: ordered chronologically (oldest at top, newest at bottom right above input)
-  const displayedHistory = [...history].reverse();
-  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Inline history: exclude active calculation while it is the active one, ordered oldest->newest so newest sits right above active input
+  const inlineHistory = [...history]
+    .filter((it) => it.id !== activeHistoryId)
+    .reverse();
 
   return (
     <div
@@ -1964,92 +1900,128 @@ export default function App() {
       >
         {/* Key-Path Trainer Floating Pill (Study Mode) */}
         {calcMode === 'STUDY' && trainerRoute && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-sans font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
-            <Sparkles className="w-3 h-3 text-slate-950" />
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-[var(--ui-accent)] text-[var(--ui-accent-text)] font-sans font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+            <Sparkles className="w-3 h-3" />
             <span>Path: {trainerRoute}</span>
           </div>
         )}
 
         {/* 2. MINIMALIST HIGH-CONTRAST LCD DISPLAY SCREEN */}
-        {/* RULE: Takes ALL remaining height above key block (flex-1); all menus render inside this container */}
+        {/* Shared 16px (8px-grid) left/right margin matching keypad below */}
         <div 
           ref={displayRef}
           data-testid="display-screen"
-          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none pt-[env(safe-area-inset-top,8px)] px-3 pb-2 transition-colors duration-300 ${
-            isPoweredOff ? 'bg-[#06080A]' : 'lcd-screen-bg'
+          style={{
+            paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
+            paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
+            paddingTop: 'max(8px, env(safe-area-inset-top, 8px))',
+            paddingBottom: '8px',
+          }}
+          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none transition-colors duration-300 ${
+            isPoweredOff ? 'bg-[var(--display-bg)] opacity-75' : 'lcd-screen-bg'
           }`}
         >
           {isPoweredOff ? (
             /* Power-Off Standby Display */
-            <div className="h-full flex flex-col items-center justify-center text-slate-800 font-sans select-none">
-              <Power className="w-5 h-5 mb-1 opacity-20" />
-              <span className="text-[10px] tracking-widest opacity-25">CASIO CLASSWIZ [STANDBY]</span>
-              <span className="text-[9px] text-slate-700 opacity-20 mt-0.5">Press ON to power up</span>
+            <div className="h-full flex flex-col items-center justify-center text-[var(--display-text)]/40 font-sans select-none">
+              <Power className="w-5 h-5 mb-1 opacity-40" />
+              <span className="text-[10px] tracking-widest opacity-45">CASIO CLASSWIZ [STANDBY]</span>
+              <span className="text-[9px] opacity-35 mt-0.5">Press ON to power up</span>
             </div>
           ) : (
             <>
-              {/* TOP THIN STATUS INDICATOR STRIP: S, A, D/R/G, Norm1, Math, arrows, and settings gear */}
-              <div className="flex items-center justify-between text-[11px] font-sans tabular-nums tracking-wider pb-1 select-none text-[var(--display-text)]/70 w-full shrink-0">
-                <div className="flex items-center gap-1.5">
-                  {/* [S] Indicator: Shown ONLY when active */}
-                  {shiftActive && (
-                    <span className="px-1 rounded text-[9px] font-bold bg-[#E5A93C] text-slate-950">
-                      S
-                    </span>
-                  )}
-                  {/* [A] Indicator: Shown ONLY when active */}
-                  {alphaActive && (
-                    <span className="px-1 rounded text-[9px] font-bold bg-[#E6007E] text-white">
-                      A
-                    </span>
-                  )}
-                  {/* Angle Unit Indicator (D, R, G) */}
-                  <span className="font-bold text-[var(--display-text)] text-[10.5px]">
-                    {angleMode === 'DEG' ? 'D' : angleMode === 'RAD' ? 'R' : 'G'}
-                  </span>
-                  {/* Precision Format Mode */}
-                  <span className="text-[9.5px] text-[var(--display-text)]/75">
-                    {displayFormat === 'NORM1' ? 'Norm1' : displayFormat === 'NORM2' ? 'Norm2' : displayFormat === 'FIX' ? `Fix${fixDigits}` : `Sci${sciDigits}`}
-                  </span>
-                  {/* Mode Indicator: dynamic based on active mode (e.g. i, DEC, MAT, VCT, STAT, TABLE, EQN) */}
-                  {modeIndicator && (
-                    <span className="px-1 rounded text-[8.5px] font-bold border border-[var(--display-text)]/30 text-[var(--display-text)]">
-                      {modeIndicator}
-                    </span>
-                  )}
-                  {/* [STO] Indicator */}
-                  {isStoreMode && (
-                    <span className="px-1 rounded text-[8.5px] font-bold bg-cyan-400 text-slate-950">
-                      STO
-                    </span>
-                  )}
-                  {/* [M] Indicator */}
-                  {memoryM !== 0 && (
-                    <span className="px-1 rounded text-[8.5px] font-bold bg-[var(--display-text)] text-slate-950">
-                      M
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                  {/* Natural Textbook Display indicator */}
-                  <span className="text-[var(--display-text)]/85 text-[10px] font-serif italic">Math</span>
-                  {/* In-Display Page Scroll Arrows */}
-                  <span className="text-[9px] text-[var(--display-text)]/75 font-bold tracking-tighter">
-                    ▲▼
-                  </span>
-                  {/* Settings Gear inside the indicator strip */}
+              {/* TOP NOTIFICATION-CENTER GRAB HANDLE + SLIM STATUS INDICATOR HEADER */}
+              <div
+                onPointerDown={(e) => {
+                  grabSwipeStartYRef.current = e.clientY;
+                }}
+                onPointerUp={(e) => {
+                  if (grabSwipeStartYRef.current !== null) {
+                    const dy = e.clientY - grabSwipeStartYRef.current;
+                    grabSwipeStartYRef.current = null;
+                    if (dy > 24 && modeState.mode === 'CALC' && displayMenu === 'NONE') {
+                      playKeyClick('action');
+                      setIsHistorySheetOpen(true);
+                    }
+                  }
+                }}
+                className="w-full shrink-0 flex flex-col items-center pb-1"
+              >
+                {modeState.mode === 'CALC' && displayMenu === 'NONE' && (
                   <button
+                    type="button"
+                    data-testid="history-grab-handle"
+                    aria-label="Open calculation history sheet"
+                    title="Swipe down or tap for History"
                     onClick={() => {
                       playKeyClick('action');
-                      setIsSettingsModalOpen(true);
+                      setIsHistorySheetOpen(true);
                     }}
-                    aria-label="Settings and Modes"
-                    title="Settings & Modes"
-                    className="p-1 -mr-1 rounded hover:text-[var(--display-text)] transition-opacity opacity-75 hover:opacity-100 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
+                    className="w-24 h-4 -mt-1 flex items-center justify-center cursor-pointer touch-none group"
                   >
-                    <Settings className="w-3.5 h-3.5" />
+                    <span className="w-9 h-1 rounded-full bg-[var(--display-text)]/30 group-hover:bg-[var(--display-text)]/60 transition-colors" />
                   </button>
+                )}
+
+                <div className="flex items-center justify-between text-[11px] font-sans tabular-nums tracking-wider select-none text-[var(--display-text)]/70 w-full">
+                  <div className="flex items-center gap-1.5">
+                    {/* [S] Indicator: Shown ONLY when active */}
+                    {shiftActive && (
+                      <span className="px-1 rounded text-[9px] font-bold bg-[var(--label-shift)] text-[var(--ui-accent-text)]">
+                        S
+                      </span>
+                    )}
+                    {/* [A] Indicator: Shown ONLY when active */}
+                    {alphaActive && (
+                      <span className="px-1 rounded text-[9px] font-bold bg-[var(--label-alpha)] text-[var(--key-accent-text)]">
+                        A
+                      </span>
+                    )}
+                    {/* Angle Unit Indicator (D, R, G) */}
+                    <span className="font-bold text-[var(--display-text)] text-[10.5px]">
+                      {angleMode === 'DEG' ? 'D' : angleMode === 'RAD' ? 'R' : 'G'}
+                    </span>
+                    {/* Precision Format Mode */}
+                    <span className="text-[9.5px] text-[var(--display-text)]/75">
+                      {displayFormat === 'NORM1' ? 'Norm1' : displayFormat === 'NORM2' ? 'Norm2' : displayFormat === 'FIX' ? `Fix${fixDigits}` : `Sci${sciDigits}`}
+                    </span>
+                    {/* Mode Indicator: dynamic based on active mode */}
+                    {modeIndicator && (
+                      <span className="px-1 rounded text-[8.5px] font-bold border border-[var(--display-text)]/30 text-[var(--display-text)]">
+                        {modeIndicator}
+                      </span>
+                    )}
+                    {/* [STO] Indicator */}
+                    {isStoreMode && (
+                      <span className="px-1 rounded text-[8.5px] font-bold bg-[var(--label-base)] text-[var(--ui-accent-text)]">
+                        STO
+                      </span>
+                    )}
+                    {/* [M] Indicator */}
+                    {memoryM !== 0 && (
+                      <span className="px-1 rounded text-[8.5px] font-bold bg-[var(--display-text)] text-[var(--display-bg)]">
+                        M
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[var(--display-text)]/85 text-[10px] italic">Math</span>
+                    <span className="text-[9px] text-[var(--display-text)]/75 font-bold tracking-tighter">
+                      ▲▼
+                    </span>
+                    <button
+                      onClick={() => {
+                        playKeyClick('action');
+                        setIsSettingsModalOpen(true);
+                      }}
+                      aria-label="Settings and Modes"
+                      title="Settings & Modes"
+                      className="p-1 -mr-1 rounded hover:text-[var(--display-text)] transition-opacity opacity-75 hover:opacity-100 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2061,33 +2033,23 @@ export default function App() {
                     {currentModeModule.renderDisplay(modeContext)}
                   </div>
                 ) : (
-                  /* Slot-Based Persistent Continuity Display: Slot 0 = current, Slot 1 = newest history, Slot 2 = older history */
-                  <div 
-                    data-testid="display-workspace"
-                    className="display-workspace flex-1 w-full min-h-0 select-none"
-                  >
-                    {displayEntries.map((entry) => (
-                      <DisplaySlotEntryItem
-                        key={entry.id}
-                        entry={entry}
-                        isSlot0={entry.slot === 0}
-                        astState={astState}
-                        setAstState={setAstState}
-                        errorMessage={errorMessage}
-                        result={result}
-                        onInsertExpr={handleInsertHistoryExpression}
-                        onInsertResult={handleInsertHistoryResult}
-                        onRemoveSlot3={(id) => {
-                          setDisplayEntries((prev) => prev.filter((it) => it.id !== id));
-                        }}
-                        editorMode={editorMode}
-                        justCommitted={justCommitted}
-                        livePreviewResult={livePreviewResult}
-                        lastValidPreviewResult={lastValidPreviewResult}
-                        onCursorTouched={() => setJustCommitted(false)}
-                      />
-                    ))}
-                  </div>
+                  <DisplayWorkspace
+                    inlineHistory={inlineHistory}
+                    astState={astState}
+                    setAstState={setAstState}
+                    errorMessage={errorMessage}
+                    result={result}
+                    onInsertExpr={handleInsertHistoryExpression}
+                    onInsertResult={handleInsertHistoryResult}
+                    editorMode={editorMode}
+                    justCommitted={justCommitted}
+                    livePreviewResult={livePreviewResult}
+                    lastValidPreviewResult={lastValidPreviewResult}
+                    onCursorTouched={() => {
+                      setJustCommitted(false);
+                      setActiveHistoryId(null);
+                    }}
+                  />
                 )
               ) : displayMenu === 'MENU' ? (
                 /* 1. IN-DISPLAY MENU GRID: 2 rows × 3 columns per page, authentic ClassWiz LCD */
@@ -2365,7 +2327,7 @@ export default function App() {
                 /* 5. RESET MENU */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-rose-400 border-b border-[var(--display-text)]/20 pb-0.5">RESET ?</div>
+                    <div className="text-[10px] font-bold text-[var(--ui-danger)] border-b border-[var(--display-text)]/20 pb-0.5">RESET ?</div>
                     {[
                       { key: '1', name: 'Setup Data' },
                       { key: '2', name: 'Memory' },
@@ -3367,6 +3329,17 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* NOTIFICATION-CENTER HISTORY SHEET */}
+      <HistorySheet
+        isOpen={isHistorySheetOpen}
+        onClose={() => setIsHistorySheetOpen(false)}
+        history={history}
+        onLoadCard={handleLoadHistoryCard}
+        onTogglePin={handleTogglePinHistory}
+        onDeleteItem={handleDeleteHistoryItem}
+        onClearHistory={handleClearHistory}
+      />
 
       {/* CLASSWIZ QR CODE SHEET MODAL (SHIFT + OPTN) */}
       <ClassWizQrModal

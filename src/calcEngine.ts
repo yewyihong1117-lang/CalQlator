@@ -25,6 +25,7 @@ export interface HistoryItem {
   numericVal: number;
   timestamp: number;
   astRoot?: MathNode[];
+  pinned?: boolean;
 }
 
 export interface StatData {
