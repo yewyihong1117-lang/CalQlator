@@ -1452,8 +1452,8 @@ function tokenizeExpression(expr: string): Token[] {
       continue;
     }
 
-    // Constant e
-    if (ch === 'e' && (i + 1 >= n || /[^a-zA-Z0-9]/.test(expr[i + 1]))) {
+    // Constant e (Euler's number, never a variable)
+    if (ch === 'e') {
       tokens.push({ type: 'CONST_E', offset });
       i++;
       continue;
@@ -1601,6 +1601,8 @@ function evaluateTokens(
         (next.type === 'NUMBER' &&
           cur > 0 &&
           (tokens[cur - 1].type === 'VAR' ||
+            tokens[cur - 1].type === 'CONST_E' ||
+            tokens[cur - 1].type === 'CONST_PI' ||
             tokens[cur - 1].type === 'RPAREN' ||
             tokens[cur - 1].type === 'VALUE' ||
             tokens[cur - 1].type.startsWith('POST_')))
@@ -1902,6 +1904,8 @@ function astNodesToTokens(
         tokens.push({ type: 'OP_NCR', offset });
       } else if (node.tokenType === 'OP_NPR') {
         tokens.push({ type: 'OP_NPR', offset });
+      } else if (val === 'e') {
+        tokens.push({ type: 'CONST_E', offset });
       } else if (node.tokenType === 'VAR' || val === 'Ans') {
         tokens.push({ type: 'VAR', name: val, offset });
       } else if (val === '×10^(') {
@@ -1909,6 +1913,17 @@ function astNodesToTokens(
         tokens.push({ type: 'NUMBER', raw: '10', isDecimal: false, offset });
         tokens.push({ type: 'POWER', offset });
         tokens.push({ type: 'LPAREN', offset });
+      } else if (val === 'e^(') {
+        tokens.push({ type: 'CONST_E', offset });
+        tokens.push({ type: 'POWER', offset });
+        tokens.push({ type: 'LPAREN', offset });
+      } else if (val === '10^(') {
+        tokens.push({ type: 'NUMBER', raw: '10', isDecimal: false, offset });
+        tokens.push({ type: 'POWER', offset });
+        tokens.push({ type: 'LPAREN', offset });
+      } else if (val === '(-') {
+        tokens.push({ type: 'LPAREN', offset });
+        tokens.push({ type: 'MINUS', offset });
       } else if (val === '+') {
         tokens.push({ type: 'PLUS', offset });
       } else if (val === '-') {
@@ -1927,8 +1942,6 @@ function astNodesToTokens(
         tokens.push({ type: 'COMMA', offset });
       } else if (val === 'π') {
         tokens.push({ type: 'CONST_PI', offset });
-      } else if (val === 'e') {
-        tokens.push({ type: 'CONST_E', offset });
       } else if (val === '²') {
         tokens.push({ type: 'POST_SQR', offset });
       } else if (val === '³') {
@@ -1988,8 +2001,11 @@ function astNodesToTokens(
       const radVal = node.content.length > 0 ? evaluateMathAstCalcValue(node.content, angleMode, variables, ans) : makeRational(0n, 1n);
       tokens.push({ type: 'VALUE', value: calcSqrt(radVal), offset });
     } else if (node.type === 'power') {
-      const baseVal = node.base.length > 0 ? evaluateMathAstCalcValue(node.base, angleMode, variables, ans) : makeRational(0n, 1n);
-      const expVal = node.exp.length > 0 ? evaluateMathAstCalcValue(node.exp, angleMode, variables, ans) : makeRational(1n, 1n);
+      if (node.base.length === 0 || node.exp.length === 0) {
+        throw { message: 'Syntax ERROR', offset };
+      }
+      const baseVal = evaluateMathAstCalcValue(node.base, angleMode, variables, ans);
+      const expVal = evaluateMathAstCalcValue(node.exp, angleMode, variables, ans);
       tokens.push({ type: 'VALUE', value: calcPower(baseVal, expVal), offset });
     } else if (node.type === 'logBase') {
       const baseVal = node.base.length > 0 ? evaluateMathAstCalcValue(node.base, angleMode, variables, ans) : makeRational(10n, 1n);

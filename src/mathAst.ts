@@ -386,6 +386,39 @@ export function insertPower(state: MathAstState): MathAstState {
 }
 
 /**
+ * Insert a structured constant-base exponent template (e.g. e^□ or 10^□) at the cursor
+ * without wrapping the preceding operand, so 2 e^□ 3 produces implicit multiplication 2×e^3.
+ */
+export function insertConstantPower(state: MathAstState, baseTokenVals: string[]): MathAstState {
+  const newRoot = cloneAst(state.root);
+  const slotNodes = getSlotNodes(newRoot, state.cursor.slotId);
+  if (!slotNodes) return state;
+
+  const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
+  const powerId = generateUniqueId('power');
+  const baseNodes: MathNode[] = baseTokenVals.map((val) => ({
+    type: 'token',
+    id: generateUniqueId('tok'),
+    val,
+  }));
+
+  const powerNode: MathNode = {
+    type: 'power',
+    id: powerId,
+    base: baseNodes,
+    exp: [],
+  };
+
+  slotNodes.splice(offset, 0, powerNode);
+
+  return {
+    root: newRoot,
+    cursor: { slotId: `${powerId}_exp`, offset: 0 },
+    pendingDeleteTemplateId: null,
+  };
+}
+
+/**
  * Rule 3: FRACTION KEY OPERAND: on ÷ (and the a b/c key), take the previous operand:
  * a. Walk back over all postfix wrappers (x², x³, x⁻¹, x!, °, %, and completed power nodes).
  * b. Take the primary beneath them: a number (whole, including decimal), a bracket group,
@@ -807,7 +840,9 @@ export function navigateAst(state: MathAstState, direction: 'left' | 'right' | '
     }
     if (slotId.endsWith('_base')) {
       const baseId = slotId.replace(/_base$/, '');
-      return { ...state, cursor: { slotId: `${baseId}_arg`, offset: 0 }, pendingDeleteTemplateId: null };
+      const parentInfo = findSlotParentInfo(root, slotId);
+      const targetSuffix = parentInfo?.parentNode?.type === 'power' ? 'exp' : 'arg';
+      return { ...state, cursor: { slotId: `${baseId}_${targetSuffix}`, offset: 0 }, pendingDeleteTemplateId: null };
     }
 
     return state;
@@ -1135,6 +1170,10 @@ export function simulateKeystrokes(keys: string[]): MathAstState {
       state = insertFraction(state);
     } else if (k === 'x□' || k === '^') {
       state = insertPower(state);
+    } else if (k === 'e^□') {
+      state = insertConstantPower(state, ['e']);
+    } else if (k === '10^□') {
+      state = insertConstantPower(state, ['1', '0']);
     } else if (k === 'x²' || k === '²') {
       state = insertPostfix(state, '²');
     } else if (k === 'x³' || k === '³') {
