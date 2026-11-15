@@ -58,7 +58,6 @@ import {
   hasActiveSpring,
   prefersReducedMotion,
 } from './motion/spring';
-import { useHistorySheetMotion } from './motion/useHistorySheetMotion';
 
 function useShrinkFirstFontSize(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -81,15 +80,11 @@ function useShrinkFirstFontSize(
       const basePx = parseFloat(window.getComputedStyle(container).fontSize) || 20;
       const activePx = currentPxRef.current ?? basePx;
 
-      const rectW = container.getBoundingClientRect().width;
-      const scale = availableWidth > 0 && rectW > 0 ? rectW / availableWidth : 1;
-
       // Measure actual inline content width (first child inline span for NaturalDisplay, or inner span)
       const targetEl = (wrapper.firstElementChild?.firstElementChild as HTMLElement | null) ||
         (wrapper.firstElementChild as HTMLElement | null) ||
         wrapper;
-      const rawContentWidth = targetEl.getBoundingClientRect().width;
-      const contentWidth = scale > 0.05 ? rawContentWidth / scale : rawContentWidth;
+      const contentWidth = targetEl.getBoundingClientRect().width;
       if (contentWidth <= 0) {
         currentPxRef.current = basePx;
         setFontSizePx(basePx);
@@ -139,10 +134,6 @@ interface DisplayWorkspaceProps {
   livePreviewResult: string;
   lastValidPreviewResult: string;
   onCursorTouched?: () => void;
-  inlineHistoryRef: React.RefObject<HTMLDivElement | null>;
-  activeInputScaleRef: React.RefObject<HTMLDivElement | null>;
-  activeResScaleRef: React.RefObject<HTMLDivElement | null>;
-  peekBottomPx: number;
 }
 
 const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
@@ -158,24 +149,23 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
   livePreviewResult,
   lastValidPreviewResult,
   onCursorTouched,
-  inlineHistoryRef,
-  activeInputScaleRef,
-  activeResScaleRef,
-  peekBottomPx,
 }) => {
+  const historyScrollRef = useRef<HTMLDivElement>(null);
   const [hasTopFade, setHasTopFade] = useState(false);
 
+  const activeInputContainerRef = useRef<HTMLDivElement>(null);
   const activeInputWrapperRef = useRef<HTMLDivElement>(null);
+  const activeResContainerRef = useRef<HTMLDivElement>(null);
   const activeResContentRef = useRef<HTMLDivElement>(null);
   const resultPulseRef = useRef<HTMLSpanElement>(null);
   const prevDisplayedResultRef = useRef<string>('');
 
   const exprKey = astToDisplayText(astState.root);
   const activeExprFontSize = useShrinkFirstFontSize(
-    activeInputScaleRef,
+    activeInputContainerRef,
     activeInputWrapperRef,
     exprKey,
-    18
+    13.5
   );
 
   const previewText = livePreviewResult || lastValidPreviewResult;
@@ -188,10 +178,10 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
     : result;
 
   const activeResFontSize = useShrinkFirstFontSize(
-    activeResScaleRef,
+    activeResContainerRef,
     activeResContentRef,
     activeResultText,
-    21.5
+    16
   );
 
   // Short opacity-only compositor pulse when result updates
@@ -209,14 +199,14 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
 
   // Keep inline history anchored to the bottom (newest just above active input) and update top fade state
   useLayoutEffect(() => {
-    const el = inlineHistoryRef.current;
+    const el = historyScrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
     setHasTopFade(el.scrollHeight > el.clientHeight + 2);
-  }, [inlineHistory.length, inlineHistoryRef]);
+  }, [inlineHistory.length]);
 
   useEffect(() => {
-    const el = inlineHistoryRef.current;
+    const el = historyScrollRef.current;
     if (!el) return;
     const updateFade = () => {
       setHasTopFade(el.scrollHeight > el.clientHeight + 2 || el.scrollTop > 2);
@@ -232,15 +222,14 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
       el.removeEventListener('scroll', updateFade);
       ro?.disconnect();
     };
-  }, [inlineHistoryRef]);
+  }, []);
 
   return (
     <div data-testid="display-workspace" className="display-workspace select-none">
       {/* Scrollable Inline History Zone: grows upward from active input with top-edge fade */}
       <div
-        ref={inlineHistoryRef}
+        ref={historyScrollRef}
         data-testid="inline-history-scroll"
-        style={{ bottom: `${peekBottomPx}px` }}
         className={`calc-history-scroll no-scrollbar ${hasTopFade ? 'has-top-fade' : ''}`}
       >
         <div className="calc-history-list">
@@ -286,7 +275,7 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
       {/* Anchored Active Input + Fixed-Height Result Zone */}
       <div data-testid="calc-active-area" className="calc-active-area">
         <div
-          ref={activeInputScaleRef}
+          ref={activeInputContainerRef}
           data-testid="active-input-line"
           onClick={() => onCursorTouched?.()}
           className="calc-active-input-line"
@@ -309,7 +298,7 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
         </div>
 
         <div
-          ref={activeResScaleRef}
+          ref={activeResContainerRef}
           data-testid="active-result-line"
           className="calc-active-result-line no-scrollbar"
         >
@@ -317,7 +306,7 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
             {errorMessage ? (
               <span
                 ref={resultPulseRef}
-                className="text-[var(--ui-danger)] font-bold text-[19px] tracking-wider"
+                className="text-[var(--ui-danger)] font-bold text-sm tracking-wider"
               >
                 [{errorMessage}]
               </span>
@@ -674,6 +663,8 @@ export default function App() {
 
   // Active committed history id (excluded from inline history while still shown as active result)
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [isHistorySheetOpen, setIsHistorySheetOpen] = useState<boolean>(false);
+  const grabSwipeStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -700,7 +691,7 @@ export default function App() {
     setIsCalculated(false);
     setErrorMessage(null);
     setActiveHistoryId(null);
-    snapHistoryToStateRef.current(1);
+    setIsHistorySheetOpen(false);
   }, []);
 
   const handleTogglePinHistory = useCallback((id: string) => {
@@ -845,16 +836,12 @@ export default function App() {
   const keyBlockRef = useRef<HTMLDivElement>(null);
   const settingsGearRef = useRef<HTMLButtonElement>(null);
   const menuKeyRef = useRef<HTMLButtonElement>(null);
+  const historyGrabRef = useRef<HTMLButtonElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
   const modeContainerRef = useRef<HTMLDivElement>(null);
 
-  const activeInputScaleRef = useRef<HTMLDivElement>(null);
-  const activeResScaleRef = useRef<HTMLDivElement>(null);
-  const inlineHistoryRef = useRef<HTMLDivElement>(null);
-  const historySheetRef = useRef<HTMLDivElement>(null);
-  const snapHistoryToStateRef = useRef<(state: 0 | 1 | 2, immediate?: boolean) => void>(() => {});
-
   const [settingsOriginRect, setSettingsOriginRect] = useState<CachedRect | null>(null);
+  const [historyOriginRect, setHistoryOriginRect] = useState<CachedRect | null>(null);
   const menuKeyRectRef = useRef<CachedRect | null>(null);
   const menuCardRectsRef = useRef<Record<string, CachedRect>>({});
   const pendingMenuFlipOriginRef = useRef<CachedRect | null>(null);
@@ -864,31 +851,6 @@ export default function App() {
   const [isMenuClosing, setIsMenuClosing] = useState(false);
   const menuCloseTokenRef = useRef(0);
   const prevDisplayMenuRef = useRef<DisplayMenuType>('NONE');
-
-  const isCalcDisplayActive = !isPoweredOff && modeState.mode === 'CALC' && displayMenu === 'NONE';
-  const {
-    snapState: historySnapState,
-    reservedLayout: historyReservedLayout,
-    snapToState: snapHistoryToState,
-    handleDragStart: handleHistoryDragStart,
-    handleDragMove: handleHistoryDragMove,
-    handleDragEnd: handleHistoryDragEnd,
-  } = useHistorySheetMotion({
-    enabled: isCalcDisplayActive,
-    displayRef,
-    activeInputScaleRef,
-    activeResScaleRef,
-    inlineHistoryRef,
-    historySheetRef,
-  });
-  snapHistoryToStateRef.current = snapHistoryToState;
-
-  // Snap back to Peek cleanly if leaving CALC workspace (MENU, other mode, or standby)
-  useEffect(() => {
-    if (!isCalcDisplayActive && historySnapState === 2) {
-      snapHistoryToState(1, true);
-    }
-  }, [isCalcDisplayActive, historySnapState, snapHistoryToState]);
 
   const {
     handlePointerDown: handleKeyPointerDown,
@@ -902,6 +864,17 @@ export default function App() {
       if (settingsGearRef.current) {
         const next = toCachedRect(settingsGearRef.current.getBoundingClientRect());
         setSettingsOriginRect((prev) =>
+          prev &&
+          Math.abs(prev.left - next.left) < 0.5 &&
+          Math.abs(prev.top - next.top) < 0.5 &&
+          Math.abs(prev.width - next.width) < 0.5
+            ? prev
+            : next
+        );
+      }
+      if (historyGrabRef.current) {
+        const next = toCachedRect(historyGrabRef.current.getBoundingClientRect());
+        setHistoryOriginRect((prev) =>
           prev &&
           Math.abs(prev.left - next.left) < 0.5 &&
           Math.abs(prev.top - next.top) < 0.5 &&
@@ -2198,26 +2171,10 @@ export default function App() {
             paddingTop: 'max(8px, env(safe-area-inset-top, 8px))',
             paddingBottom: '8px',
           }}
-          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative overflow-hidden select-none ${
+          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none ${
             isPoweredOff ? 'bg-[var(--display-bg)]' : 'lcd-screen-bg'
           }`}
         >
-          {/* IN-DISPLAY HISTORY SHEET (fills space above compact active input & result) */}
-          <HistorySheet
-            sheetRef={historySheetRef}
-            isExpanded={historySnapState === 2}
-            compactBottomPx={historyReservedLayout.compactBottomPx}
-            onClose={() => snapHistoryToState(1)}
-            onHandlePointerDown={(e) => handleHistoryDragStart(e, 'sheet')}
-            onHandlePointerMove={handleHistoryDragMove}
-            onHandlePointerUp={handleHistoryDragEnd}
-            history={history}
-            onLoadCard={handleLoadHistoryCard}
-            onTogglePin={handleTogglePinHistory}
-            onDeleteItem={handleDeleteHistoryItem}
-            onClearHistory={handleClearHistory}
-          />
-
           {isPoweredOff ? (
             /* Power-Off Standby Display */
             <div className="h-full flex flex-col items-center justify-center text-[var(--display-text)]/40 font-sans select-none">
@@ -2229,26 +2186,33 @@ export default function App() {
             <>
               {/* TOP NOTIFICATION-CENTER GRAB HANDLE + SLIM STATUS INDICATOR HEADER */}
               <div
-                onPointerDown={(e) => handleHistoryDragStart(e, 'top')}
-                onPointerMove={handleHistoryDragMove}
-                onPointerUp={handleHistoryDragEnd}
-                onPointerCancel={handleHistoryDragEnd}
-                className="w-full shrink-0 flex flex-col items-center pb-1 touch-none"
+                onPointerDown={(e) => {
+                  grabSwipeStartYRef.current = e.clientY;
+                }}
+                onPointerUp={(e) => {
+                  if (grabSwipeStartYRef.current !== null) {
+                    const dy = e.clientY - grabSwipeStartYRef.current;
+                    grabSwipeStartYRef.current = null;
+                    if (dy > 24 && modeState.mode === 'CALC' && displayMenu === 'NONE') {
+                      playKeyClick('action');
+                      setIsHistorySheetOpen(true);
+                    }
+                  }
+                }}
+                className="w-full shrink-0 flex flex-col items-center pb-1"
               >
                 {modeState.mode === 'CALC' && displayMenu === 'NONE' && (
                   <button
+                    ref={historyGrabRef}
                     type="button"
                     data-testid="history-grab-handle"
-                    aria-label="Drag or tap to resize history"
-                    aria-expanded={historySnapState === 2}
-                    title="Drag up to collapse, down for History"
-                    onClick={(e) => {
-                      if (e.detail === 0) {
-                        playKeyClick('action');
-                        snapHistoryToState(historySnapState === 0 ? 1 : 2);
-                      }
+                    aria-label="Open calculation history sheet"
+                    title="Swipe down or tap for History"
+                    onClick={() => {
+                      playKeyClick('action');
+                      setIsHistorySheetOpen(true);
                     }}
-                    className="w-28 h-5 -mt-1 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none group"
+                    className="w-24 h-4 -mt-1 flex items-center justify-center cursor-pointer touch-none group"
                   >
                     <span className="w-9 h-1 rounded-full bg-[var(--display-text)]/35 group-hover:bg-[var(--display-text)]/70" />
                   </button>
@@ -2354,10 +2318,6 @@ export default function App() {
                             setJustCommitted(false);
                             setActiveHistoryId(null);
                           }}
-                          inlineHistoryRef={inlineHistoryRef}
-                          activeInputScaleRef={activeInputScaleRef}
-                          activeResScaleRef={activeResScaleRef}
-                          peekBottomPx={historyReservedLayout.peekBottomPx}
                         />
                       </div>
                     )
@@ -3726,6 +3686,18 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* NOTIFICATION-CENTER HISTORY SHEET */}
+      <HistorySheet
+        isOpen={isHistorySheetOpen}
+        onClose={() => setIsHistorySheetOpen(false)}
+        history={history}
+        onLoadCard={handleLoadHistoryCard}
+        onTogglePin={handleTogglePinHistory}
+        onDeleteItem={handleDeleteHistoryItem}
+        onClearHistory={handleClearHistory}
+        originRect={historyOriginRect}
+      />
 
       {/* CLASSWIZ QR CODE SHEET MODAL (SHIFT + OPTN) */}
       <ClassWizQrModal

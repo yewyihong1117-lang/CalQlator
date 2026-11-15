@@ -35,12 +35,11 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
     if (activeCursorEl) {
       const cRect = container.getBoundingClientRect();
       const kRect = activeCursorEl.getBoundingClientRect();
-      const scale = container.clientWidth > 0 && cRect.width > 0 ? cRect.width / container.clientWidth : 1;
-      const pad = 16 * scale;
+      const pad = 16;
       if (kRect.left < cRect.left + pad) {
-        container.scrollLeft -= (cRect.left + pad - kRect.left) / scale;
+        container.scrollLeft -= cRect.left + pad - kRect.left;
       } else if (kRect.right > cRect.right - pad) {
-        container.scrollLeft += (kRect.right - (cRect.right - pad)) / scale;
+        container.scrollLeft += kRect.right - (cRect.right - pad);
       }
     } else {
       container.scrollLeft = container.scrollWidth;
