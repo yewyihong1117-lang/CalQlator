@@ -5,8 +5,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { 
-  ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Power, Settings, Sparkles
+  Power, Sparkles
 } from 'lucide-react';
 import { 
   AngleMode, DisplayFormat, HistoryItem,
@@ -35,11 +34,30 @@ import {
   astToExpression, astToDisplayText, parseStringToAst, TokenType
 } from './mathAst';
 import { NaturalDisplay } from './components/NaturalDisplay';
+import {
+  IntegralSvg, SigmaSvg, HollowBoxSvg, FractionKeySvg, SqrtKeySvg,
+  CubeRootShiftSvg, NthRootShiftSvg, DoubleArrowSvg, OperatorSvg,
+  DpadArrowSvg, HeaderGearSvg, HeaderScrollArrowsSvg
+} from './components/MathGlyphs';
 import { HistorySheet } from './components/HistorySheet';
 import { ClassWizQrModal } from './components/ClassWizQrModal';
 import { SettingsModal, CalculatorMode, CalculatorTheme, EditorMode } from './components/SettingsModal';
 import { CalibrationModal } from './components/CalibrationModal';
 import { TestHarnessModal } from './components/TestHarnessModal';
+import { PerfOverlay } from './components/PerfOverlay';
+import {
+  CachedRect,
+  toCachedRect,
+  useSpringKeypad,
+  runInlineFlipExpand,
+} from './motion/useMotionEffects';
+import {
+  animateOpacityPulse,
+  animateSpringTransform,
+  computeFlipDelta,
+  hasActiveSpring,
+  prefersReducedMotion,
+} from './motion/spring';
 
 function useShrinkFirstFontSize(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -139,6 +157,8 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
   const activeInputWrapperRef = useRef<HTMLDivElement>(null);
   const activeResContainerRef = useRef<HTMLDivElement>(null);
   const activeResContentRef = useRef<HTMLDivElement>(null);
+  const resultPulseRef = useRef<HTMLSpanElement>(null);
+  const prevDisplayedResultRef = useRef<string>('');
 
   const exprKey = astToDisplayText(astState.root);
   const activeExprFontSize = useShrinkFirstFontSize(
@@ -163,6 +183,19 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
     activeResultText,
     16
   );
+
+  // Short opacity-only compositor pulse when result updates
+  useEffect(() => {
+    const el = resultPulseRef.current;
+    if (!activeResultText) {
+      prevDisplayedResultRef.current = '';
+      return;
+    }
+    if (el && prevDisplayedResultRef.current !== '' && activeResultText !== prevDisplayedResultRef.current) {
+      animateOpacityPulse(el, 0.36, 1);
+    }
+    prevDisplayedResultRef.current = activeResultText;
+  }, [activeResultText]);
 
   // Keep inline history anchored to the bottom (newest just above active input) and update top fade state
   useLayoutEffect(() => {
@@ -271,20 +304,25 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
         >
           <div ref={activeResContentRef} className="inline-flex items-center justify-end whitespace-nowrap">
             {errorMessage ? (
-              <span className="text-[var(--ui-danger)] font-bold text-sm tracking-wider">
+              <span
+                ref={resultPulseRef}
+                className="text-[var(--ui-danger)] font-bold text-sm tracking-wider"
+              >
                 [{errorMessage}]
               </span>
             ) : editorMode === 'PHONE' && !justCommitted ? (
               previewText ? (
                 <span
+                  ref={resultPulseRef}
                   style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
-                  className="opacity-55 text-[var(--display-text)] font-semibold transition-opacity duration-150"
+                  className="opacity-55 text-[var(--display-text)] font-semibold"
                 >
                   = {previewText}
                 </span>
               ) : null
             ) : result ? (
               <span
+                ref={resultPulseRef}
                 onClick={() => onInsertResult(result)}
                 title="Tap to insert result"
                 style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
@@ -521,6 +559,11 @@ export default function App() {
   const handleSelectMode = (code: string) => {
     const norm = normalizeModeId(code);
     const mod = getModeModule(norm);
+    const cardOrigin = menuCardRectsRef.current[code] || menuKeyRectRef.current;
+    pendingModeFlipOriginRef.current = cardOrigin;
+    lastModeOriginRectRef.current = cardOrigin;
+    setIsMenuClosing(false);
+    menuCloseTokenRef.current++;
     setModeState(mod.getInitialState());
     setAstState(createInitialAstState());
     setResult('0');
@@ -624,9 +667,12 @@ export default function App() {
   const grabSwipeStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('casio_history', JSON.stringify(history));
-    } catch {}
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem('casio_history', JSON.stringify(history));
+      } catch {}
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [history]);
 
   const handleLoadHistoryCard = useCallback((item: HistoryItem) => {
@@ -759,9 +805,10 @@ export default function App() {
   const [isCalibrationModalOpen, setIsCalibrationModalOpen] = useState(false);
   const [isTestHarnessOpen, setIsTestHarnessOpen] = useState(false);
 
-  // Sound & Haptic Settings
+  // Sound, Haptic & Frame-Time Debug Overlay Settings
   const [soundOn, setSoundOn] = useState(true);
   const [hapticOn, setHapticOn] = useState(true);
+  const [perfOverlayOn, setPerfOverlayOn] = useState(false);
 
   // Performance and Geometry Metrics (?perf=1)
   const [perfMetrics, setPerfMetrics] = useState<{
@@ -783,9 +830,182 @@ export default function App() {
     isDisplayPctPass: boolean;
   } | null>(null);
 
-  // DOM Refs
+  // DOM Refs & Cached FLIP / Luminous Flow Refs
+  const appRootRef = useRef<HTMLDivElement>(null);
   const displayRef = useRef<HTMLDivElement>(null);
   const keyBlockRef = useRef<HTMLDivElement>(null);
+  const settingsGearRef = useRef<HTMLButtonElement>(null);
+  const menuKeyRef = useRef<HTMLButtonElement>(null);
+  const historyGrabRef = useRef<HTMLButtonElement>(null);
+  const menuContainerRef = useRef<HTMLDivElement>(null);
+  const modeContainerRef = useRef<HTMLDivElement>(null);
+
+  const [settingsOriginRect, setSettingsOriginRect] = useState<CachedRect | null>(null);
+  const [historyOriginRect, setHistoryOriginRect] = useState<CachedRect | null>(null);
+  const menuKeyRectRef = useRef<CachedRect | null>(null);
+  const menuCardRectsRef = useRef<Record<string, CachedRect>>({});
+  const pendingMenuFlipOriginRef = useRef<CachedRect | null>(null);
+  const pendingModeFlipOriginRef = useRef<CachedRect | null>(null);
+  const lastModeOriginRectRef = useRef<CachedRect | null>(null);
+  const lastMenuTargetRectRef = useRef<CachedRect | null>(null);
+  const [isMenuClosing, setIsMenuClosing] = useState(false);
+  const menuCloseTokenRef = useRef(0);
+  const prevDisplayMenuRef = useRef<DisplayMenuType>('NONE');
+
+  const {
+    handlePointerDown: handleKeyPointerDown,
+    handlePointerMove: handleKeyPointerMove,
+    handlePointerUp: handleKeyPointerUp,
+  } = useSpringKeypad(keyBlockRef, appRootRef);
+
+  // Precompute cached element rects for FLIP overlays (zero layout reads during pointerdown/click)
+  useLayoutEffect(() => {
+    const refreshOverlayOrigins = () => {
+      if (settingsGearRef.current) {
+        const next = toCachedRect(settingsGearRef.current.getBoundingClientRect());
+        setSettingsOriginRect((prev) =>
+          prev &&
+          Math.abs(prev.left - next.left) < 0.5 &&
+          Math.abs(prev.top - next.top) < 0.5 &&
+          Math.abs(prev.width - next.width) < 0.5
+            ? prev
+            : next
+        );
+      }
+      if (historyGrabRef.current) {
+        const next = toCachedRect(historyGrabRef.current.getBoundingClientRect());
+        setHistoryOriginRect((prev) =>
+          prev &&
+          Math.abs(prev.left - next.left) < 0.5 &&
+          Math.abs(prev.top - next.top) < 0.5 &&
+          Math.abs(prev.width - next.width) < 0.5
+            ? prev
+            : next
+        );
+      }
+      if (menuKeyRef.current) {
+        menuKeyRectRef.current = toCachedRect(menuKeyRef.current.getBoundingClientRect());
+      }
+    };
+
+    refreshOverlayOrigins();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(refreshOverlayOrigins);
+      if (displayRef.current) ro.observe(displayRef.current);
+      if (keyBlockRef.current) ro.observe(keyBlockRef.current);
+    }
+    window.addEventListener('resize', refreshOverlayOrigins, { passive: true });
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', refreshOverlayOrigins);
+    };
+  }, [isPoweredOff, calibrationScale]);
+
+  const calcContainerRef = useRef<HTMLDivElement>(null);
+  const lastModeTargetRectRef = useRef<CachedRect | null>(null);
+  const menuCardPage = Math.floor(menuHighlightIndex / 6);
+
+  // Precompute visible MENU card rects whenever MENU opens or switches page (zero layout reads on click)
+  useLayoutEffect(() => {
+    const el = menuContainerRef.current;
+    if (displayMenu !== 'MENU' || !el) return;
+    const cards = el.querySelectorAll('[data-menu-card-code]');
+    cards.forEach((card) => {
+      const code = (card as HTMLElement).dataset.menuCardCode;
+      if (code) {
+        menuCardRectsRef.current[code] = toCachedRect(card.getBoundingClientRect());
+      }
+    });
+  }, [displayMenu, menuCardPage]);
+
+  // Interruptible FLIP open / collapse lifecycle for in-display MENU
+  useLayoutEffect(() => {
+    const prev = prevDisplayMenuRef.current;
+    prevDisplayMenuRef.current = displayMenu;
+
+    const el = menuContainerRef.current;
+    if (displayMenu === 'MENU' && prev !== 'MENU') {
+      menuCloseTokenRef.current++;
+      if (isMenuClosing) setIsMenuClosing(false);
+      if (!el) return;
+      const targetBox = lastMenuTargetRectRef.current || toCachedRect(el.getBoundingClientRect());
+      lastMenuTargetRectRef.current = targetBox;
+
+      const interrupting = hasActiveSpring(el);
+      const origin = pendingMenuFlipOriginRef.current || menuKeyRectRef.current;
+      pendingMenuFlipOriginRef.current = null;
+      const reduced = prefersReducedMotion();
+      if (reduced || !origin) {
+        animateSpringTransform(
+          el,
+          { x: 0, y: 0, sx: 1, sy: 1, opacity: 1 },
+          'effects',
+          interrupting ? undefined : { x: 0, y: 0, sx: 1, sy: 1, opacity: 0 }
+        );
+      } else {
+        const delta = computeFlipDelta(origin, targetBox);
+        animateSpringTransform(
+          el,
+          { x: 0, y: 0, sx: 1, sy: 1, opacity: 1 },
+          'spatial',
+          interrupting ? undefined : { ...delta, opacity: 0.25 }
+        );
+      }
+    } else if (prev === 'MENU' && isMenuClosing && el) {
+      const token = ++menuCloseTokenRef.current;
+      const targetBox = lastMenuTargetRectRef.current || toCachedRect(el.getBoundingClientRect());
+      const origin = menuKeyRectRef.current;
+      const reduced = prefersReducedMotion();
+      const collapseTo = !reduced && origin
+        ? { ...computeFlipDelta(origin, targetBox), opacity: 0 }
+        : { x: 0, y: 0, sx: 0.94, sy: 0.94, opacity: 0 };
+
+      animateSpringTransform(
+        el,
+        collapseTo,
+        reduced ? 'effects' : 'spatial',
+        undefined,
+        () => {
+          if (menuCloseTokenRef.current === token) {
+            setIsMenuClosing(false);
+          }
+        }
+      );
+    }
+  }, [displayMenu, isMenuClosing]);
+
+  // FLIP expand from clicked MENU card into active mode screen (or Calculate workspace)
+  useLayoutEffect(() => {
+    if (displayMenu === 'NONE' && pendingModeFlipOriginRef.current) {
+      const targetEl = modeState.mode !== 'CALC' ? modeContainerRef.current : calcContainerRef.current;
+      if (!targetEl) return;
+      const origin = pendingModeFlipOriginRef.current;
+      pendingModeFlipOriginRef.current = null;
+      const target = lastModeTargetRectRef.current || toCachedRect(targetEl.getBoundingClientRect());
+      lastModeTargetRectRef.current = target;
+      runInlineFlipExpand(targetEl, origin, target);
+    }
+  }, [displayMenu, modeState.mode]);
+
+  // Fire double error haptic once whenever a non-CALC mode error appears (CALC errors fire directly in handleEqual/handleSolve)
+  const prevModeErrorRef = useRef<string | null>(null);
+  const modeErrorSignal = (modeState.data?.error as string | undefined) || (modeState.data?.simulError as string | undefined) || null;
+  useEffect(() => {
+    const errStr = modeErrorSignal ? String(modeErrorSignal) : null;
+    if (errStr && errStr !== prevModeErrorRef.current) {
+      triggerHaptic('error', { force: true });
+    }
+    prevModeErrorRef.current = errStr;
+  }, [modeErrorSignal]);
+
+  // Helper trigger to close MENU cleanly with FLIP collapse back to MENU key
+  const closeInDisplayMenu = useCallback((nextMenu: DisplayMenuType = 'NONE') => {
+    if (displayMenu === 'MENU' && nextMenu === 'NONE') {
+      setIsMenuClosing(true);
+    }
+    setDisplayMenu(nextMenu);
+  }, [displayMenu]);
 
   // Check ?perf=1 and ?test=1 in URL parameters
   useEffect(() => {
@@ -924,7 +1144,7 @@ export default function App() {
     }
     // ON button clears menu or resets input
     if (displayMenu !== 'NONE') {
-      setDisplayMenu('NONE');
+      closeInDisplayMenu('NONE');
       return;
     }
     setAstState(createInitialAstState());
@@ -963,7 +1183,7 @@ export default function App() {
         setDisplayMenu('RESET');
         return;
       }
-      setDisplayMenu('NONE');
+      closeInDisplayMenu('NONE');
       setShiftActive(false);
       setAlphaActive(false);
       return;
@@ -1647,8 +1867,8 @@ export default function App() {
   // Evaluate Expression (= Key)
   const handleEqual = () => {
     if (isPoweredOff) return;
-    playKeyClick('action');
-    triggerHaptic('action');
+    playKeyClick('equal');
+    triggerHaptic('equal');
 
     // If an in-display menu is open, = confirms the highlighted item
     if (displayMenu === 'MENU') {
@@ -1745,16 +1965,11 @@ export default function App() {
       }
 
       setActiveHistoryId(newHistoryItem.id);
-      setHistory((prev) => {
-        const updated = [newHistoryItem, ...prev.slice(0, 49)];
-        try {
-          localStorage.setItem('casio_history', JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
+      setHistory((prev) => [newHistoryItem, ...prev.slice(0, 49)]);
       setHistoryIndex(-1);
     } else {
       setErrorMessage(evalResult.error || 'Syntax ERROR');
+      triggerHaptic('error', { force: true });
       setResult('');
       setActiveHistoryId(null);
       if (editorMode === 'PHONE') {
@@ -1846,6 +2061,7 @@ export default function App() {
       setIsCalculated(true);
     } else {
       setErrorMessage(res.error || "Can't Solve");
+      triggerHaptic('error', { force: true });
     }
   };
 
@@ -1860,13 +2076,17 @@ export default function App() {
 
   return (
     <div
+      ref={appRootRef}
       data-theme={theme}
       className="w-full h-[100dvh] bg-[var(--bg)] flex items-center justify-center p-0 m-0 overflow-hidden select-none font-sans"
     >
-      
+
+      {/* Hidden Perf Debug Overlay (toggled from Settings -> Frame-time monitor) */}
+      <PerfOverlay isOpen={perfOverlayOn} onClose={() => setPerfOverlayOn(false)} />
+
       {/* Floating Performance Metrics HUD (?perf=1) */}
       {perfMetrics?.isPerf && (
-        <div className="fixed top-2 left-2 z-50 p-2.5 bg-black/95 border border-emerald-500/80 rounded-lg font-sans text-[10px] text-emerald-400 pointer-events-none shadow-2xl max-w-[320px] leading-tight select-none">
+        <div className="fixed top-2 left-2 z-50 p-2.5 bg-[var(--m3-surface)] border border-emerald-500 rounded-lg font-sans text-[10px] text-emerald-400 pointer-events-none shadow-2xl max-w-[320px] leading-tight select-none">
           <div className="font-bold text-amber-300 border-b border-emerald-800 pb-1 mb-1 flex justify-between items-center">
             <span>fx-570EX GEOMETRY & PERF</span>
             <span className="text-[9px] text-emerald-300">?perf=1</span>
@@ -1900,7 +2120,7 @@ export default function App() {
       >
         {/* Key-Path Trainer Floating Pill (Study Mode) */}
         {calcMode === 'STUDY' && trainerRoute && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-[var(--ui-accent)] text-[var(--ui-accent-text)] font-sans font-bold text-[10px] shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-[var(--ui-accent)] text-[var(--ui-accent-text)] font-sans font-bold text-[10px] shadow-lg flex items-center gap-1.5">
             <Sparkles className="w-3 h-3" />
             <span>Path: {trainerRoute}</span>
           </div>
@@ -1917,8 +2137,8 @@ export default function App() {
             paddingTop: 'max(8px, env(safe-area-inset-top, 8px))',
             paddingBottom: '8px',
           }}
-          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none transition-colors duration-300 ${
-            isPoweredOff ? 'bg-[var(--display-bg)] opacity-75' : 'lcd-screen-bg'
+          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none ${
+            isPoweredOff ? 'bg-[var(--display-bg)]' : 'lcd-screen-bg'
           }`}
         >
           {isPoweredOff ? (
@@ -1949,6 +2169,7 @@ export default function App() {
               >
                 {modeState.mode === 'CALC' && displayMenu === 'NONE' && (
                   <button
+                    ref={historyGrabRef}
                     type="button"
                     data-testid="history-grab-handle"
                     aria-label="Open calculation history sheet"
@@ -1959,7 +2180,7 @@ export default function App() {
                     }}
                     className="w-24 h-4 -mt-1 flex items-center justify-center cursor-pointer touch-none group"
                   >
-                    <span className="w-9 h-1 rounded-full bg-[var(--display-text)]/30 group-hover:bg-[var(--display-text)]/60 transition-colors" />
+                    <span className="w-9 h-1 rounded-full bg-[var(--display-text)]/35 group-hover:bg-[var(--display-text)]/70" />
                   </button>
                 )}
 
@@ -2006,99 +2227,123 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2.5">
-                    <span className="text-[var(--display-text)]/85 text-[10px] italic">Math</span>
-                    <span className="text-[9px] text-[var(--display-text)]/75 font-bold tracking-tighter">
-                      ▲▼
+                    <span className="text-[var(--display-text)]/85 text-[10.5px] font-math-serif italic">Math</span>
+                    <span className="text-[var(--display-text)]/75 inline-flex items-center">
+                      <HeaderScrollArrowsSvg className="w-[18px] h-[9px]" />
                     </span>
                     <button
+                      ref={settingsGearRef}
                       onClick={() => {
                         playKeyClick('action');
                         setIsSettingsModalOpen(true);
                       }}
                       aria-label="Settings and Modes"
                       title="Settings & Modes"
-                      className="p-1 -mr-1 rounded hover:text-[var(--display-text)] transition-opacity opacity-75 hover:opacity-100 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
+                      className="p-1 -mr-1 rounded hover:text-[var(--display-text)] opacity-75 hover:opacity-100 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
                     >
-                      <Settings className="w-3.5 h-3.5" />
+                      <HeaderGearSvg className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               </div>
 
               {/* IN-DISPLAY CONTENT ROUTER: Swaps between Natural Expression, Mode Screens, and In-Display Menus */}
-              {displayMenu === 'NONE' ? (
-                modeState.mode !== 'CALC' ? (
-                  /* In-Display Mode Renderer (BASE, CMPLX, MATRIX, VECTOR, STAT, TABLE, EQN, DIST, etc.) */
-                  <div className="flex-1 w-full flex flex-col justify-between overflow-hidden">
-                    {currentModeModule.renderDisplay(modeContext)}
-                  </div>
-                ) : (
-                  <DisplayWorkspace
-                    inlineHistory={inlineHistory}
-                    astState={astState}
-                    setAstState={setAstState}
-                    errorMessage={errorMessage}
-                    result={result}
-                    onInsertExpr={handleInsertHistoryExpression}
-                    onInsertResult={handleInsertHistoryResult}
-                    editorMode={editorMode}
-                    justCommitted={justCommitted}
-                    livePreviewResult={livePreviewResult}
-                    lastValidPreviewResult={lastValidPreviewResult}
-                    onCursorTouched={() => {
-                      setJustCommitted(false);
-                      setActiveHistoryId(null);
-                    }}
-                  />
-                )
-              ) : displayMenu === 'MENU' ? (
-                /* 1. IN-DISPLAY MENU GRID: 2 rows × 3 columns per page, authentic ClassWiz LCD */
-                <div 
-                  data-testid="in-display-menu"
-                  className="flex-1 w-full min-h-[92px] flex flex-col justify-between py-1 font-sans select-none"
-                >
-                  <div className="grid grid-cols-3 grid-rows-2 gap-1.5 flex-1 min-h-[72px] w-full items-stretch">
-                    {currentMenuGrid.map((item, idx) => {
-                      const absoluteIndex = menuPage * 6 + idx;
-                      const isSelected = absoluteIndex === menuHighlightIndex;
-                      const isLong = item.shortName.length >= 10;
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            setMenuHighlightIndex(absoluteIndex);
-                            handleSelectMode(item.code);
+              <div className="flex-1 w-full min-h-0 flex flex-col justify-between relative">
+              {displayMenu === 'NONE' || (displayMenu === 'MENU' || isMenuClosing) ? (
+                <>
+                  {displayMenu !== 'MENU' && (
+                    modeState.mode !== 'CALC' ? (
+                      /* In-Display Mode Renderer (BASE, CMPLX, MATRIX, VECTOR, STAT, TABLE, EQN, DIST, etc.) */
+                      <div
+                        ref={modeContainerRef}
+                        data-testid="mode-display-container"
+                        style={{ transformOrigin: 'center center' }}
+                        className="flex-1 w-full flex flex-col justify-between overflow-hidden"
+                      >
+                        {currentModeModule.renderDisplay(modeContext)}
+                      </div>
+                    ) : (
+                      <div
+                        ref={calcContainerRef}
+                        style={{ transformOrigin: 'center center' }}
+                        className="flex-1 w-full min-h-0 flex flex-col justify-between overflow-hidden"
+                      >
+                        <DisplayWorkspace
+                          inlineHistory={inlineHistory}
+                          astState={astState}
+                          setAstState={setAstState}
+                          errorMessage={errorMessage}
+                          result={result}
+                          onInsertExpr={handleInsertHistoryExpression}
+                          onInsertResult={handleInsertHistoryResult}
+                          editorMode={editorMode}
+                          justCommitted={justCommitted}
+                          livePreviewResult={livePreviewResult}
+                          lastValidPreviewResult={lastValidPreviewResult}
+                          onCursorTouched={() => {
+                            setJustCommitted(false);
+                            setActiveHistoryId(null);
                           }}
-                          className={`flex flex-col items-start justify-center px-2 py-1.5 rounded-lg transition-colors text-left border cursor-pointer overflow-hidden ${
-                            isSelected 
-                              ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold border-[var(--display-text)] shadow-sm'
-                              : 'bg-[var(--display-text)]/15 text-[var(--display-text)] border-[var(--display-text)]/30 hover:bg-[var(--display-text)]/25'
-                          }`}
-                        >
-                          <span className={`text-[clamp(9.5px,min(2.4cqw,1.5cqh),11px)] font-extrabold leading-none mb-0.5 ${
-                            isSelected ? 'text-[var(--display-bg)]/85' : 'text-[var(--label-shift)]'
-                          }`}>
-                            {item.key}:
-                          </span>
-                          <span className={`font-bold leading-[1.15] w-full tracking-tight break-words ${
-                            isLong 
-                              ? 'text-[clamp(10px,min(2.8cqw,1.8cqh),12px)]' 
-                              : 'text-[clamp(11.5px,min(3.5cqw,2.2cqh),14px)]'
-                          } ${
-                            isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--display-text)]'
-                          }`}>
-                            {item.shortName}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Page indicator and helper footer */}
-                  <div className="flex items-center justify-between text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20">
-                    <span>Use [▲▼◄►] to move, [=] to select</span>
-                    <span className="font-bold text-[var(--label-shift)]">Page {menuPage + 1}/2 ▲▼</span>
-                  </div>
-                </div>
+                        />
+                      </div>
+                    )
+                  )}
+
+                  {(displayMenu === 'MENU' || isMenuClosing) && (
+                    /* 1. IN-DISPLAY MENU GRID: 2 rows × 3 columns per page, FLIP expand/collapse back to MENU key */
+                    <div
+                      ref={menuContainerRef}
+                      data-testid="in-display-menu"
+                      style={{ transformOrigin: 'center center' }}
+                      className={`w-full h-full min-h-[92px] flex flex-col justify-between py-1 font-sans select-none bg-[var(--display-bg)] ${
+                        displayMenu === 'MENU' ? 'flex-1' : 'absolute inset-0 z-20 pointer-events-none'
+                      }`}
+                    >
+                      <div className="grid grid-cols-3 grid-rows-2 gap-1.5 flex-1 min-h-[72px] w-full items-stretch">
+                        {currentMenuGrid.map((item, idx) => {
+                          const absoluteIndex = menuPage * 6 + idx;
+                          const isSelected = absoluteIndex === menuHighlightIndex;
+                          const isLong = item.shortName.length >= 10;
+                          return (
+                            <button
+                              key={item.id}
+                              data-menu-card-code={item.code}
+                              onClick={() => {
+                                setMenuHighlightIndex(absoluteIndex);
+                                handleSelectMode(item.code);
+                              }}
+                              className={`flex flex-col items-start justify-center px-2 py-1.5 rounded-lg text-left border cursor-pointer overflow-hidden ${
+                                isSelected
+                                  ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold border-[var(--display-text)] static-glow-card'
+                                  : 'bg-[var(--menu-card-bg)] text-[var(--display-text)] border-[var(--m3-outline-variant)]'
+                              }`}
+                            >
+                              <span className={`text-[clamp(9.5px,min(2.4cqw,1.5cqh),11px)] font-extrabold leading-none mb-0.5 ${
+                                isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--label-shift)]'
+                              }`}>
+                                {item.key}:
+                              </span>
+                              <span className={`font-bold leading-[1.15] w-full tracking-tight break-words ${
+                                isLong
+                                  ? 'text-[clamp(10px,min(2.8cqw,1.8cqh),12px)]'
+                                  : 'text-[clamp(11.5px,min(3.5cqw,2.2cqh),14px)]'
+                              } ${
+                                isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--display-text)]'
+                              }`}>
+                                {item.shortName}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {/* Page indicator and helper footer */}
+                      <div className="flex items-center justify-between text-[9px] text-[var(--display-text)]/75 pt-1 border-t border-[var(--m3-outline-variant)]">
+                        <span>Use [▲▼◄►] to move, [=] to select</span>
+                        <span className="font-bold text-[var(--label-shift)]">Page {menuPage + 1}/2 ▲▼</span>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : displayMenu === 'SETUP' ? (
                 /* 2. IN-DISPLAY SETUP LIST: Scrollable list of 4 items per page */
                 <div className="flex-1 flex flex-col justify-between py-1 overflow-hidden font-sans">
@@ -2388,6 +2633,7 @@ export default function App() {
                   </div>
                 </div>
               )}
+              </div>
             </>
           )}
         </div>
@@ -2398,6 +2644,9 @@ export default function App() {
         <div 
           ref={keyBlockRef}
           data-testid="key-block"
+          onPointerDown={handleKeyPointerDown}
+          onPointerMove={handleKeyPointerMove}
+          onPointerUp={handleKeyPointerUp}
           style={{
             paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
             paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
@@ -2421,8 +2670,8 @@ export default function App() {
                   if (alphaActive) setAlphaActive(false);
                 }}
                 aria-label="SHIFT key"
-                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
-                  shiftActive ? 'text-slate-950 bg-[var(--label-shift)] shadow-[0_0_10px_var(--label-shift)]' : 'theme-label-shift'
+                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round flex items-center justify-center ${
+                  shiftActive ? 'text-slate-950 bg-[var(--label-shift)] static-glow-shift' : 'theme-label-shift'
                 }`}
               >
                 SHIFT
@@ -2442,8 +2691,8 @@ export default function App() {
                   if (shiftActive) setShiftActive(false);
                 }}
                 aria-label="ALPHA key"
-                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round transition-all flex items-center justify-center ${
-                  alphaActive ? 'text-white bg-[var(--label-alpha)] shadow-[0_0_10px_var(--label-alpha)]' : 'theme-label-alpha'
+                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round flex items-center justify-center ${
+                  alphaActive ? 'text-[var(--label-alpha-active-text)] bg-[var(--label-alpha)] static-glow-alpha' : 'theme-label-alpha'
                 }`}
               >
                 ALPHA
@@ -2458,36 +2707,36 @@ export default function App() {
                 <button
                   onClick={() => handleDpad('UP')}
                   aria-label="D-pad Up"
-                  className="absolute top-0 w-11 h-10 min-w-[44px] min-h-[40px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
+                  className="absolute top-0 w-11 h-10 min-w-[44px] min-h-[40px] flex items-center justify-center text-slate-300 hover:text-white"
                 >
-                  <ChevronUp className="w-4 h-4" />
+                  <DpadArrowSvg direction="UP" className="w-4 h-4" />
                 </button>
 
                 {/* Down */}
                 <button
                   onClick={() => handleDpad('DOWN')}
                   aria-label="D-pad Down"
-                  className="absolute bottom-0 w-11 h-10 min-w-[44px] min-h-[40px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
+                  className="absolute bottom-0 w-11 h-10 min-w-[44px] min-h-[40px] flex items-center justify-center text-slate-300 hover:text-white"
                 >
-                  <ChevronDown className="w-4 h-4" />
+                  <DpadArrowSvg direction="DOWN" className="w-4 h-4" />
                 </button>
 
                 {/* Left */}
                 <button
                   onClick={() => handleDpad('LEFT')}
                   aria-label="D-pad Left"
-                  className="absolute left-0 w-10 h-11 min-w-[40px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
+                  className="absolute left-0 w-10 h-11 min-w-[40px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-white"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <DpadArrowSvg direction="LEFT" className="w-4 h-4" />
                 </button>
 
                 {/* Right */}
                 <button
                   onClick={() => handleDpad('RIGHT')}
                   aria-label="D-pad Right"
-                  className="absolute right-0 w-10 h-11 min-w-[40px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform"
+                  className="absolute right-0 w-10 h-11 min-w-[40px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-white"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <DpadArrowSvg direction="RIGHT" className="w-4 h-4" />
                 </button>
 
                 {/* Center Core: Clean Casio Blank */}
@@ -2502,13 +2751,22 @@ export default function App() {
                 <span></span>
               </div>
               <button
+                ref={menuKeyRef}
                 onClick={() => {
                   playKeyClick('action');
                   if (shiftActive) {
                     setDisplayMenu((prev) => (prev === 'SETUP' ? 'NONE' : 'SETUP'));
                     setShiftActive(false);
+                  } else if (displayMenu === 'MENU') {
+                    closeInDisplayMenu('NONE');
                   } else {
-                    setDisplayMenu((prev) => (prev === 'MENU' ? 'NONE' : 'MENU'));
+                    pendingMenuFlipOriginRef.current =
+                      modeState.mode !== 'CALC' && lastModeOriginRectRef.current
+                        ? lastModeOriginRectRef.current
+                        : menuKeyRectRef.current;
+                    setIsMenuClosing(false);
+                    menuCloseTokenRef.current++;
+                    setDisplayMenu('MENU');
                     setMenuHighlightIndex(0);
                   }
                 }}
@@ -2567,7 +2825,9 @@ export default function App() {
             <div className="col-start-2 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift">SOLVE</span>
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-alpha">=</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-alpha font-math-serif not-italic inline-flex items-center">
+                  <OperatorSvg op="=" className="w-[1.05em] h-[1.05em]" />
+                </span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2585,7 +2845,11 @@ export default function App() {
             {/* Col 5, Row 2: INTEGRAL */}
             <div className="col-start-5 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift">d/dx</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift font-math-serif italic inline-flex items-baseline leading-none">
+                  <span>d</span>
+                  <span className="not-italic mx-[0.04em]">/</span>
+                  <span>dx</span>
+                </span>
                 <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-alpha">:</span>
               </div>
               <button
@@ -2595,16 +2859,21 @@ export default function App() {
                   () => handleToken(':')
                 )}
                 aria-label="Integral key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-serif text-sm"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
               >
-                ∫dx
+                <span data-testid="key-integral-glyph" className="inline-flex items-center justify-center gap-[0.12em] leading-none">
+                  <IntegralSvg className="w-[0.72em] h-[1.34em]" />
+                  <span className="font-math-serif italic text-[14.5px] leading-none">dx</span>
+                </span>
               </button>
             </div>
 
             {/* Col 6, Row 2: VARIABLE x */}
             <div className="col-start-6 row-start-2 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift">Σ</span>
+                <span className="text-[clamp(7.5px,0.95vh,9px)] font-bold theme-label-shift inline-flex items-center leading-none">
+                  <SigmaSvg className="w-[1.02em] h-[1.12em]" />
+                </span>
                 <span></span>
               </div>
               <button
@@ -2615,7 +2884,7 @@ export default function App() {
                 aria-label="Variable x key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal theme-label-alpha flex items-center justify-center font-bold text-sm"
               >
-                x
+                <span className="font-math-serif italic text-[17px] leading-none">x</span>
               </button>
             </div>
 
@@ -2623,67 +2892,89 @@ export default function App() {
             {/* Col 1, Row 3: Fraction */}
             <div className="col-start-1 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">a b/c</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift font-math-serif italic leading-none">
+                  a b<span className="not-italic">/</span>c
+                </span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handleFractionKey(), () => handleFractionKey())}
                 aria-label="Fraction key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
-                ■/□
+                <FractionKeySvg className="w-[1.95em] h-[1.15em]" />
               </button>
             </div>
 
             {/* Col 2, Row 3: Sqrt */}
             <div className="col-start-2 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">³√■</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift inline-flex items-center leading-none">
+                  <CubeRootShiftSvg className="w-[2.15em] h-[1.25em]" />
+                </span>
                 <span></span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handleSqrtKey(), () => handleToken('³√('))}
                 aria-label="Square root key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
-                √■
+                <SqrtKeySvg className="w-[1.85em] h-[1.15em]" />
               </button>
             </div>
 
             {/* Col 3, Row 3: x² */}
             <div className="col-start-3 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">x³</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift font-math-serif leading-none">
+                  <span className="italic">x</span>
+                  <sup className="not-italic text-[0.78em] ml-[0.04em]">3</sup>
+                </span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">DEC</span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handlePostfixKey('²'), () => handlePostfixKey('³'), undefined, 'func', 'x²')}
                 aria-label="x squared key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
-                x²
+                <span className="font-math-serif leading-none text-[14.5px] inline-flex items-baseline">
+                  <span className="italic">x</span>
+                  <sup className="not-italic text-[0.68em] ml-[0.05em]">2</sup>
+                </span>
               </button>
             </div>
 
             {/* Col 4, Row 3: x□ */}
             <div className="col-start-4 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">■√■</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift inline-flex items-center leading-none">
+                  <NthRootShiftSvg className="w-[2.25em] h-[1.25em]" />
+                </span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">HEX</span>
               </div>
               <button
                 onClick={() => handleSmartKey(() => handlePowerKey(), () => handleToken('^('), undefined, 'func', 'x^□')}
                 aria-label="x to power key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
-                x<sup>□</sup>
+                <span className="font-math-serif leading-none text-[14.5px] inline-flex items-baseline">
+                  <span className="italic">x</span>
+                  <sup className="-top-[0.42em] ml-[0.08em] inline-flex">
+                    <HollowBoxSvg className="w-[0.62em] h-[0.62em]" />
+                  </sup>
+                </span>
               </button>
             </div>
 
             {/* Col 5, Row 3: log□ */}
             <div className="col-start-5 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">10<sup>□</sup></span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift font-math-serif not-italic inline-flex items-baseline leading-none">
+                  <span>10</span>
+                  <sup className="-top-[0.22em] ml-[0.06em] inline-flex">
+                    <HollowBoxSvg className="w-[0.68em] h-[0.68em]" />
+                  </sup>
+                </span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">BIN</span>
               </div>
               <button
@@ -2691,14 +2982,24 @@ export default function App() {
                 aria-label="log base key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-[11px]"
               >
-                log<sub>□</sub>
+                <span className="inline-flex items-baseline leading-none">
+                  <span className="font-sans">log</span>
+                  <sub className="bottom-[-0.24em] ml-[0.08em] inline-flex">
+                    <HollowBoxSvg className="w-[0.66em] h-[0.66em]" />
+                  </sub>
+                </span>
               </button>
             </div>
 
             {/* Col 6, Row 3: ln */}
             <div className="col-start-6 row-start-3 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">e<sup>□</sup></span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift font-math-serif inline-flex items-baseline leading-none">
+                  <span className="italic">e</span>
+                  <sup className="-top-[0.22em] ml-[0.06em] inline-flex">
+                    <HollowBoxSvg className="w-[0.68em] h-[0.68em]" />
+                  </sup>
+                </span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-base">OCT</span>
               </div>
               <button
@@ -2725,9 +3026,13 @@ export default function App() {
                   '(-)'
                 )}
                 aria-label="Negation key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
-                (-)
+                <span className="font-math-serif not-italic text-[13.5px] leading-none inline-flex items-center">
+                  <span>(</span>
+                  <OperatorSvg op="−" className="w-[0.75em] h-[0.75em] mx-[0.03em]" />
+                  <span>)</span>
+                </span>
               </button>
             </div>
 
@@ -2751,16 +3056,19 @@ export default function App() {
                   "° ' \""
                 )}
                 aria-label="Degrees minutes seconds key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
-                °&apos;&quot;
+                <span className="font-math-serif not-italic text-[13.5px] leading-none tracking-tight">°′″</span>
               </button>
             </div>
 
             {/* Col 3, Row 4: x⁻¹ */}
             <div className="col-start-3 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">x!</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift font-math-serif leading-none">
+                  <span className="italic">x</span>
+                  <span className="not-italic">!</span>
+                </span>
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">C</span>
               </div>
               <button
@@ -2771,9 +3079,12 @@ export default function App() {
                   'hyp'
                 )}
                 aria-label="x inverse key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
-                x⁻¹
+                <span className="font-math-serif leading-none text-[14.5px] inline-flex items-baseline">
+                  <span className="italic">x</span>
+                  <sup className="not-italic text-[0.68em] ml-[0.04em]">−1</sup>
+                </span>
               </button>
             </div>
 
@@ -2842,7 +3153,7 @@ export default function App() {
             <div className="col-start-1 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
                 <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">RECALL</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">x</span>
+                <span className="text-[clamp(7.5px,0.95vh,9.5px)] font-bold theme-label-alpha font-math-serif italic leading-none">x</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2886,17 +3197,17 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleToken('('), () => handleToken('Abs('))}
                 aria-label="Left bracket key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-sm"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
               >
-                (
+                <span className="font-math-serif not-italic text-[15px] leading-none">(</span>
               </button>
             </div>
 
             {/* Col 4, Row 5: ) */}
             <div className="col-start-4 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">,</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">x</span>
+                <span className="text-[clamp(9px,1.1vh,11px)] font-bold theme-label-shift font-math-serif not-italic leading-[0.75] -mt-[1px]">,</span>
+                <span className="text-[clamp(7.5px,0.95vh,9.5px)] font-bold theme-label-alpha font-math-serif italic leading-none">x</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2905,17 +3216,21 @@ export default function App() {
                   () => handleToken('x', 'num', 'VAR')
                 )}
                 aria-label="Right bracket key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-sm"
+                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
               >
-                )
+                <span className="font-math-serif not-italic text-[15px] leading-none">)</span>
               </button>
             </div>
 
             {/* Col 5, Row 5: S<=>D */}
             <div className="col-start-5 row-start-5 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">a b/c⇔d/c</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">y</span>
+                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift inline-flex items-center gap-[0.1em] leading-none">
+                  <span className="font-math-serif italic">a b<span className="not-italic">/</span>c</span>
+                  <DoubleArrowSvg className="w-[1.05em] h-[0.7em]" />
+                  <span className="font-math-serif italic">d<span className="not-italic">/</span>c</span>
+                </span>
+                <span className="text-[clamp(7.5px,0.95vh,9.5px)] font-bold theme-label-alpha font-math-serif italic leading-none">y</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -2926,7 +3241,11 @@ export default function App() {
                 aria-label="S to D toggle key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
-                S⇔D
+                <span className="inline-flex items-center justify-center gap-[0.12em] leading-none">
+                  <span className="font-sans">S</span>
+                  <DoubleArrowSvg className="w-[1.05em] h-[0.75em]" />
+                  <span className="font-sans">D</span>
+                </span>
               </button>
             </div>
 
@@ -3114,7 +3433,7 @@ export default function App() {
                 aria-label="Multiply key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
-                ×
+                <OperatorSvg op="×" className="w-[1.05em] h-[1.05em]" />
               </button>
             </div>
 
@@ -3132,7 +3451,7 @@ export default function App() {
                 aria-label="Divide key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
-                ÷
+                <OperatorSvg op="÷" className="w-[1.05em] h-[1.05em]" />
               </button>
             </div>
 
@@ -3214,7 +3533,7 @@ export default function App() {
                 aria-label="Plus key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
-                +
+                <OperatorSvg op="+" className="w-[1.05em] h-[1.05em]" />
               </button>
             </div>
 
@@ -3232,7 +3551,7 @@ export default function App() {
                 aria-label="Minus key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
-                -
+                <OperatorSvg op="−" className="w-[1.05em] h-[1.05em]" />
               </button>
             </div>
 
@@ -3277,8 +3596,8 @@ export default function App() {
             {/* ×10ˣ */}
             <div className="col-start-3 row-start-4 key-wrapper">
               <div className="key-secondary-labels">
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-shift">π</span>
-                <span className="text-[clamp(7px,0.9vh,8.5px)] font-bold theme-label-alpha">e</span>
+                <span className="text-[clamp(7.5px,0.95vh,9.5px)] font-bold theme-label-shift font-math-serif not-italic leading-none">π</span>
+                <span className="text-[clamp(7.5px,0.95vh,9.5px)] font-bold theme-label-alpha font-math-serif italic leading-none">e</span>
               </div>
               <button
                 onClick={() => handleSmartKey(
@@ -3289,7 +3608,11 @@ export default function App() {
                 aria-label="Exponent times 10 to power key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xs flex items-center justify-center"
               >
-                ×10<sup>x</sup>
+                <span className="inline-flex items-baseline leading-none text-[13px]">
+                  <OperatorSvg op="×" className="w-[0.82em] h-[0.82em] self-center mr-[0.06em]" />
+                  <span className="font-sans font-semibold">10</span>
+                  <sup className="font-math-serif italic font-semibold text-[0.78em] ml-[0.04em]">x</sup>
+                </span>
               </button>
             </div>
 
@@ -3322,7 +3645,7 @@ export default function App() {
                 aria-label="Equals key"
                 className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-equals font-bold text-xl flex items-center justify-center"
               >
-                =
+                <OperatorSvg op="=" className="w-[0.95em] h-[0.95em]" />
               </button>
             </div>
 
@@ -3339,6 +3662,7 @@ export default function App() {
         onTogglePin={handleTogglePinHistory}
         onDeleteItem={handleDeleteHistoryItem}
         onClearHistory={handleClearHistory}
+        originRect={historyOriginRect}
       />
 
       {/* CLASSWIZ QR CODE SHEET MODAL (SHIFT + OPTN) */}
@@ -3390,6 +3714,9 @@ export default function App() {
             setResult(formatResult(rawNumericVal, fmt, fixDigits, sciDigits, engStep));
           }
         }}
+        originRect={settingsOriginRect}
+        perfOverlayOn={perfOverlayOn}
+        onTogglePerfOverlay={() => setPerfOverlayOn((prev) => !prev)}
         onResetCalculator={() => {
           localStorage.clear();
           handleAllClear();

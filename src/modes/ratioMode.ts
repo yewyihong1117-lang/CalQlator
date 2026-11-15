@@ -822,7 +822,7 @@ export const ratioModeModule: ModeModule = {
               React.createElement(
                 'div',
                 {
-                  className: `flex-1 py-1 px-1 border rounded text-center transition-all min-w-0 flex flex-col justify-between ${
+                  className: `flex-1 py-1 px-1 border rounded text-center min-w-0 flex flex-col justify-between ${
                     isSelected
                       ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold shadow-[0_0_6px_rgba(229,169,60,0.2)]'
                       : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'

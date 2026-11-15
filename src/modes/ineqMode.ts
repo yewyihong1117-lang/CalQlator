@@ -857,7 +857,7 @@ export const ineqModeModule: ModeModule = {
             'div',
             {
               key: label,
-              className: `py-1 px-0.5 border rounded text-center transition-all min-w-0 flex flex-col justify-between ${
+              className: `py-1 px-0.5 border rounded text-center min-w-0 flex flex-col justify-between ${
                 isSelected
                   ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold'
                   : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'

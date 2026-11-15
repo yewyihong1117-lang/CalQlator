@@ -113,9 +113,9 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
   const drawerNetIntegral = computeDefiniteIntegral(areaF, numAreaA, numAreaB, 'DEG');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[var(--bg)]">
       <div 
-        className="w-full max-w-lg h-[86vh] sm:h-[80vh] bg-[#121217] border border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-200"
+        className="w-full max-w-lg h-[86vh] sm:h-[80vh] bg-[var(--m3-surface)] border border-[var(--m3-outline-variant)] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden text-[var(--m3-on-surface)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}
@@ -159,7 +159,7 @@ export const AdvancedModesDrawer: React.FC<AdvancedModesDrawerProps> = ({
                   playKeyClick('func');
                   setActiveTab(tab.id as ModeTab);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-sans whitespace-nowrap transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-sans whitespace-nowrap ${
                   isActive 
                     ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20' 
                     : 'bg-[#181820] text-slate-400 hover:text-slate-200 hover:bg-slate-800'

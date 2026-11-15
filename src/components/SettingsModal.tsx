@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { 
   X, 
   RotateCcw, 
@@ -8,9 +8,11 @@ import {
   Sliders, 
   CheckSquare, 
   Sparkles,
-  Smartphone
+  Smartphone,
+  Activity
 } from 'lucide-react';
 import { AngleMode, DisplayFormat } from '../calcEngine';
+import { CachedRect, useFlipModalTransition } from '../motion/useMotionEffects';
 
 export type CalculatorMode = 'EXAM' | 'STUDY';
 export type CalculatorTheme = 'default' | 'icy';
@@ -37,6 +39,9 @@ interface SettingsModalProps {
   onSetDisplayFormat: (fmt: DisplayFormat) => void;
   onResetCalculator: () => void;
   onOpenMenu?: () => void;
+  originRect?: CachedRect | null;
+  perfOverlayOn?: boolean;
+  onTogglePerfOverlay?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -59,21 +64,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   displayFormat,
   onSetDisplayFormat,
   onResetCalculator,
+  originRect = null,
+  perfOverlayOn = false,
+  onTogglePerfOverlay,
 }) => {
-  if (!isOpen) return null;
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const isVisible = useFlipModalTransition(isOpen, originRect, surfaceRef, backdropRef);
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in"
+      ref={backdropRef}
+      data-testid="settings-modal-backdrop"
+      aria-hidden={!isVisible}
+      style={{
+        visibility: isVisible ? 'visible' : 'hidden',
+        pointerEvents: isOpen ? 'auto' : 'none',
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)] p-4"
       onClick={onClose}
     >
       <div 
+        ref={surfaceRef}
+        data-testid="settings-modal-surface"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: 'var(--m3-surface, #14141A)',
           color: 'var(--m3-on-surface, #E2E8F0)',
+          transformOrigin: 'center center',
         }}
-        className="w-full max-w-md rounded-3xl p-6 font-sans flex flex-col gap-5 max-h-[88vh] overflow-y-auto no-scrollbar shadow-2xl transition-all"
+        className="w-full max-w-md rounded-3xl p-6 font-sans flex flex-col gap-5 max-h-[88vh] overflow-y-auto no-scrollbar border border-[var(--m3-outline-variant)] shadow-lg"
       >
         
         {/* Header: Clean M3 Top App Bar */}
@@ -94,7 +114,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               backgroundColor: 'var(--m3-surface-container, #1C1C24)',
               color: 'var(--m3-on-surface, #E2E8F0)',
             }}
-            className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-85 active:scale-95 transition-all"
+            className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-85 active:scale-95 transition-opacity"
           >
             <X className="w-5 h-5" />
           </button>
@@ -145,7 +165,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     backgroundColor: calcMode === 'EXAM' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                     color: calcMode === 'EXAM' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                   }}
-                  className="px-4 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                  className="px-4 py-1.5 rounded-full text-xs font-semibold transition-opacity active:scale-95"
                 >
                   Exam
                 </button>
@@ -156,7 +176,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     backgroundColor: calcMode === 'STUDY' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                     color: calcMode === 'STUDY' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                   }}
-                  className="px-4 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                  className="px-4 py-1.5 rounded-full text-xs font-semibold transition-opacity active:scale-95"
                 >
                   Study
                 </button>
@@ -198,7 +218,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       backgroundColor: theme === 'default' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                       color: theme === 'default' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                     }}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-opacity active:scale-95"
                   >
                     Classic
                   </button>
@@ -209,7 +229,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       backgroundColor: theme === 'icy' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                       color: theme === 'icy' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                     }}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-opacity active:scale-95"
                   >
                     Icy
                   </button>
@@ -252,7 +272,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       backgroundColor: editorMode === 'CLASSIC' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                       color: editorMode === 'CLASSIC' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                     }}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-opacity active:scale-95"
                   >
                     Classic
                   </button>
@@ -263,7 +283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       backgroundColor: editorMode === 'PHONE' ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                       color: editorMode === 'PHONE' ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                     }}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-opacity active:scale-95"
                   >
                     Phone
                   </button>
@@ -322,7 +342,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         backgroundColor: isActive ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                         color: isActive ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                       }}
-                      className="flex-1 py-1.5 rounded-full text-xs font-semibold transition-all text-center active:scale-95"
+                      className="flex-1 py-1.5 rounded-full text-xs font-semibold transition-opacity text-center active:scale-95"
                     >
                       {label}
                     </button>
@@ -369,7 +389,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         backgroundColor: isActive ? 'var(--ui-accent, #E5A93C)' : 'transparent',
                         color: isActive ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
                       }}
-                      className="flex-1 py-1.5 rounded-full text-xs font-semibold transition-all text-center active:scale-95"
+                      className="flex-1 py-1.5 rounded-full text-xs font-semibold transition-opacity text-center active:scale-95"
                     >
                       {fmt}
                     </button>
@@ -391,12 +411,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div 
             style={{ backgroundColor: 'var(--m3-surface-container, #1C1C24)' }}
-            className="rounded-2xl divide-y divide-white/5"
+            className="rounded-2xl divide-y divide-[var(--m3-outline-variant)]"
           >
             {/* Haptic Switch Row */}
             <div 
               onClick={onToggleHaptic}
-              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors rounded-t-2xl"
+              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-[var(--m3-surface-container-high)] rounded-t-2xl"
             >
               <div className="flex items-center gap-3">
                 <div 
@@ -429,7 +449,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 style={{
                   backgroundColor: hapticOn ? 'var(--ui-accent, #E5A93C)' : 'var(--m3-surface-container-high, #262632)',
                 }}
-                className="w-13 h-7 rounded-full p-1 transition-colors relative flex items-center shrink-0 cursor-pointer"
+                className="w-13 h-7 rounded-full p-1 relative flex items-center shrink-0 cursor-pointer"
               >
                 <span 
                   style={{
@@ -444,7 +464,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Key Clicks Switch Row */}
             <div 
               onClick={onToggleSound}
-              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors rounded-b-2xl"
+              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-[var(--m3-surface-container-high)] rounded-b-2xl"
             >
               <div className="flex items-center gap-3">
                 <div 
@@ -477,7 +497,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 style={{
                   backgroundColor: soundOn ? 'var(--ui-accent, #E5A93C)' : 'var(--m3-surface-container-high, #262632)',
                 }}
-                className="w-13 h-7 rounded-full p-1 transition-colors relative flex items-center shrink-0 cursor-pointer"
+                className="w-13 h-7 rounded-full p-1 relative flex items-center shrink-0 cursor-pointer"
               >
                 <span 
                   style={{
@@ -502,7 +522,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div 
             style={{ backgroundColor: 'var(--m3-surface-container, #1C1C24)' }}
-            className="rounded-2xl divide-y divide-white/5"
+            className="rounded-2xl divide-y divide-[var(--m3-outline-variant)]"
           >
             {/* Row 1: Card Calibration */}
             <div 
@@ -510,7 +530,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClose();
                 onOpenCalibration();
               }}
-              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors rounded-t-2xl"
+              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-[var(--m3-surface-container-high)] rounded-t-2xl"
             >
               <div className="flex items-center gap-3">
                 <div 
@@ -546,7 +566,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClose();
                 onOpenTestHarness();
               }}
-              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors rounded-b-2xl"
+              className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-[var(--m3-surface-container-high)]"
             >
               <div className="flex items-center gap-3">
                 <div 
@@ -575,6 +595,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 ?test=1
               </span>
             </div>
+
+            {/* Row 3: Frame-time Debug Overlay */}
+            {onTogglePerfOverlay && (
+              <div
+                onClick={onTogglePerfOverlay}
+                className="min-h-[56px] px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-[var(--m3-surface-container-high)] rounded-b-2xl"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    style={{ backgroundColor: 'var(--m3-surface-container-high, #262632)' }}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                  >
+                    <Activity className="w-5 h-5" style={{ color: 'var(--ui-accent, #E5A93C)' }} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium leading-tight">Frame-time monitor</span>
+                    <span
+                      style={{ color: 'var(--m3-on-surface-variant, #94A3B8)' }}
+                      className="text-xs leading-normal"
+                    >
+                      Live rAF p50/p95/worst &amp; long-task HUD
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={perfOverlayOn}
+                  aria-label="Toggle frame-time monitor"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePerfOverlay();
+                  }}
+                  style={{
+                    backgroundColor: perfOverlayOn ? 'var(--ui-accent, #E5A93C)' : 'var(--m3-surface-container-high, #262632)',
+                  }}
+                  className="w-13 h-7 rounded-full p-1 relative flex items-center shrink-0 cursor-pointer"
+                >
+                  <span
+                    style={{
+                      backgroundColor: perfOverlayOn ? 'var(--ui-accent-text, #171104)' : 'var(--m3-on-surface-variant, #94A3B8)',
+                      transform: perfOverlayOn ? 'translateX(24px)' : 'translateX(0px)',
+                    }}
+                    className="w-5 h-5 rounded-full transition-transform shadow-md inline-block"
+                  />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -591,7 +660,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               backgroundColor: 'var(--m3-surface-container, #1C1C24)',
               color: 'var(--ui-danger, #F87171)',
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all hover:opacity-85 active:scale-95"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-opacity hover:opacity-85 active:scale-95"
           >
             <RotateCcw className="w-4 h-4" />
             <span>Reset calculator</span>
@@ -604,7 +673,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               backgroundColor: 'var(--ui-accent, #E5A93C)',
               color: 'var(--ui-accent-text, #171104)',
             }}
-            className="px-6 py-2.5 rounded-full text-xs font-semibold transition-all hover:opacity-90 active:scale-95 shadow-md"
+            className="px-6 py-2.5 rounded-full text-xs font-semibold transition-opacity hover:opacity-90 active:scale-95 shadow-md"
           >
             Done
           </button>

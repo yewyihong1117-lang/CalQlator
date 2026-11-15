@@ -23,8 +23,8 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
   const cardHeightMm = 53.98 * scale;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in">
-      <div className="w-full max-w-md bg-[#13151D] border border-slate-700/80 rounded-2xl shadow-2xl p-5 font-sans text-slate-100 flex flex-col gap-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)] p-4">
+      <div className="w-full max-w-md bg-[var(--m3-surface)] border border-[var(--m3-outline-variant)] rounded-2xl shadow-2xl p-5 font-sans text-[var(--m3-on-surface)] flex flex-col gap-4">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -57,7 +57,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
               maxWidth: '90vw',
               maxHeight: '40vh',
             }}
-            className="border-2 border-dashed border-amber-400 bg-amber-950/20 rounded-xl flex flex-col items-center justify-center relative p-3 text-center shadow-[0_0_15px_rgba(245,166,35,0.2)] transition-all duration-75"
+            className="border-2 border-dashed border-amber-400 bg-[#1B1710] rounded-xl flex flex-col items-center justify-center relative p-3 text-center"
           >
             <CreditCard className="w-8 h-8 text-amber-400/70 mb-1" />
             <span className="text-xs font-bold text-amber-300">

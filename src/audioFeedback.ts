@@ -4,6 +4,7 @@
  */
 
 let audioCtx: AudioContext | null = null;
+let cachedNoiseBuffer: AudioBuffer | null = null;
 let soundEnabled = true;
 let hapticEnabled = true;
 
@@ -38,49 +39,54 @@ export function isHapticEnabled(): boolean {
 }
 
 // Tactile Vibration Patterns (in milliseconds)
-// Tailored for modern smartphone linear resonance actuators (Taptic / LRA)
+// Light tick on regular press, slightly stronger on =, double pulse on error
 export const HAPTIC_PATTERNS = {
-  // Numeric Keys (0-9, dot, exp, Ans): Crisp, micro-tick dome switch feel
+  // Numeric Keys (0-9, dot, exp, Ans): Light micro-tick
   num: 8,
 
-  // Mathematical & Function Keys (sin, cos, tan, log, x², brackets): Firmer tactile click
-  func: 14,
+  // Mathematical & Function Keys (sin, cos, tan, log, x², brackets): Light tick
+  func: 10,
 
-  // Directional Cursor & History Navigation (D-Pad): Subtle directional tick
-  dpad: 10,
+  // Directional Cursor & History Navigation (D-Pad): Light tick
+  dpad: 8,
 
-  // Primary Action Keys (DEL, AC, ON, CLR): Double-pulse tactile bump
-  action: [18, 28, 12],
+  // Action Keys (DEL, AC, ON, CLR, MENU): Crisp tick
+  action: 12,
 
-  // SHIFT Toggle: Stepped ascending mode latch
-  shift: [10, 20, 18],
+  // SHIFT Toggle
+  shift: 10,
 
-  // ALPHA Toggle: Stepped descending mode latch
-  alpha: [16, 20, 12],
+  // ALPHA Toggle
+  alpha: 10,
 
-  // EQUALS (=): Deep, decisive calculation confirmation
-  equal: [22, 32, 25],
+  // EQUALS (=): Slightly stronger single confirmation pulse
+  equal: 22,
 
-  // S<=>D Conversion: Snappy double-tap
-  sd: [9, 18, 11],
+  // S<=>D Conversion
+  sd: 10,
 
-  // Error State: Alert rumble warning
-  error: [40, 35, 40, 35, 60],
+  // Error State: Distinct double vibration pulse
+  error: [25, 45, 35],
 } as const;
 
 export type HapticKeyType = keyof typeof HAPTIC_PATTERNS;
 
 let lastVibrateTime = 0;
 
+export function isHapticSupported(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+}
+
 /**
- * Directly trigger the Vibration API with the appropriate tactile pattern
+ * Directly trigger the Vibration API with the appropriate tactile pattern.
+ * Pass force=true for error/critical alerts so they are never swallowed by tap deduping.
  */
-export function triggerHaptic(type: HapticKeyType = 'num') {
+export function triggerHaptic(type: HapticKeyType = 'num', options?: { force?: boolean }) {
   if (!hapticEnabled) return;
-  if (typeof navigator === 'undefined' || !('vibrate' in navigator)) return;
+  if (!isHapticSupported()) return;
 
   const now = Date.now();
-  if (now - lastVibrateTime < 40) return; // Prevent double-trigger from pointerdown + click
+  if (!options?.force && now - lastVibrateTime < 65) return; // Prevent double-trigger from pointerdown + click
   lastVibrateTime = now;
 
   try {
@@ -99,8 +105,8 @@ export function triggerHaptic(type: HapticKeyType = 'num') {
  * Trigger synthesized audio click and coordinated haptic vibration
  */
 export function playKeyClick(type: HapticKeyType = 'num') {
-  // Fire haptic immediately
-  triggerHaptic(type);
+  // Fire haptic (deduped if already fired on pointerdown)
+  triggerHaptic(type, type === 'error' ? { force: true } : undefined);
 
   if (!soundEnabled) return;
 
@@ -158,16 +164,19 @@ export function playKeyClick(type: HapticKeyType = 'num') {
       return;
     }
 
-    // Realistic plastic key switch sound: white noise click + bandpass thud
-    const bufferSize = ctx.sampleRate * 0.025; // 25ms
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
+    // Realistic plastic key switch sound: cached white noise click + bandpass thud
+    if (!cachedNoiseBuffer || cachedNoiseBuffer.sampleRate !== ctx.sampleRate) {
+      const bufferSize = Math.floor(ctx.sampleRate * 0.025); // 25ms
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      cachedNoiseBuffer = noiseBuffer;
     }
 
     const whiteNoise = ctx.createBufferSource();
-    whiteNoise.buffer = noiseBuffer;
+    whiteNoise.buffer = cachedNoiseBuffer;
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';

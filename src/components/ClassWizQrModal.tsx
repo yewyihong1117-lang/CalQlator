@@ -22,9 +22,9 @@ export const ClassWizQrModal: React.FC<ClassWizQrModalProps> = ({
   const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrData}&bgcolor=FFFFFF&color=121216&margin=4`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--bg)]">
       <div 
-        className="w-full max-w-sm bg-[#131318] border border-slate-700/80 rounded-2xl p-5 shadow-2xl flex flex-col items-center text-center text-slate-100"
+        className="w-full max-w-sm bg-[var(--m3-surface)] border border-[var(--m3-outline-variant)] rounded-2xl p-5 shadow-2xl flex flex-col items-center text-center text-[var(--m3-on-surface)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -72,7 +72,7 @@ export const ClassWizQrModal: React.FC<ClassWizQrModalProps> = ({
             playKeyClick('action');
             onClose();
           }}
-          className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-sans font-bold text-xs shadow-md active:scale-98 transition-all"
+          className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-sans font-bold text-xs shadow-md transition-opacity"
         >
           Done
         </button>

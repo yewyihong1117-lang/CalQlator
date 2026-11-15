@@ -1,4 +1,12 @@
 import {createRoot} from 'react-dom/client';
+import '@fontsource/tinos/latin-400.css';
+import '@fontsource/tinos/latin-400-italic.css';
+import '@fontsource/tinos/latin-700.css';
+import '@fontsource/tinos/latin-700-italic.css';
+import '@fontsource/tinos/greek-400.css';
+import '@fontsource/tinos/greek-700.css';
+import '@fontsource/tinos/latin-ext-400.css';
+import '@fontsource/tinos/latin-ext-700.css';
 import App from './App.tsx';
 import './index.css';
 

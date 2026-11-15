@@ -1026,7 +1026,7 @@ export const eqnModeModule: ModeModule = {
                     'div',
                     {
                       key: colIdx,
-                      className: `flex-1 min-w-[34px] px-1 py-0.5 rounded text-[11px] truncate border transition-all ${
+                      className: `flex-1 min-w-[34px] px-1 py-0.5 rounded text-[11px] truncate border ${
                         isSelected
                           ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)] font-bold shadow-sm'
                           : 'border-[var(--display-text)]/20 bg-[var(--display-text)]/5 text-[var(--display-text)]'
@@ -1241,7 +1241,7 @@ export const eqnModeModule: ModeModule = {
             'div',
             {
               key: idx,
-              className: `flex-1 min-w-[50px] max-w-[80px] px-1.5 py-1 border rounded text-center transition-all ${
+              className: `flex-1 min-w-[50px] max-w-[80px] px-1.5 py-1 border rounded text-center ${
                 isSelected
                   ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 font-bold text-[var(--label-shift)] shadow-[0_0_6px_rgba(229,169,60,0.25)]'
                   : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'

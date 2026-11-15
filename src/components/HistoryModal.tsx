@@ -48,9 +48,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[var(--bg)]">
       <div 
-        className="w-full max-w-lg bg-[#111116] border border-slate-800 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden text-slate-100"
+        className="w-full max-w-lg bg-[var(--m3-surface)] border border-[var(--m3-outline-variant)] rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden text-[var(--m3-on-surface)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
@@ -171,7 +171,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             filteredHistory.map((item, idx) => (
               <div
                 key={item.id}
-                className="bg-[#14141A] border border-slate-800/90 hover:border-slate-700/80 rounded-xl p-3 transition-all hover:bg-[#181822] group shadow-sm"
+                className="bg-[#14141A] border border-slate-800 hover:border-slate-700 rounded-xl p-3 hover:bg-[#181822] group shadow-sm"
               >
                 {/* Top Item Meta */}
                 <div className="flex items-center justify-between text-[11px] font-sans text-slate-400 mb-1.5">

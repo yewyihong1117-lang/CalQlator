@@ -41,8 +41,8 @@ export const TestHarnessModal: React.FC<TestHarnessModalProps> = ({ isOpen, onCl
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-5 animate-in fade-in">
-      <div className="w-full max-w-2xl max-h-[92vh] bg-[#12141A] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden font-sans text-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)] p-3 sm:p-5">
+      <div className="w-full max-w-2xl max-h-[92vh] bg-[var(--m3-surface)] border border-[var(--m3-outline-variant)] rounded-2xl shadow-2xl flex flex-col overflow-hidden font-sans text-[var(--m3-on-surface)]">
         
         {/* Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-[#171A23]">
@@ -157,7 +157,7 @@ export const TestHarnessModal: React.FC<TestHarnessModalProps> = ({ isOpen, onCl
             filteredResults.map((r) => (
             <div
               key={r.tc.id}
-              className={`p-2.5 rounded-xl border transition-all ${
+              className={`p-2.5 rounded-xl border ${
                 r.passed
                   ? 'bg-[#141B1F] border-emerald-900/40 hover:border-emerald-800/60'
                   : 'bg-[#221316] border-red-900/50 hover:border-red-800/70'

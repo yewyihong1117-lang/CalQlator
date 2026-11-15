@@ -187,9 +187,9 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[var(--bg)]">
       <div 
-        className="w-full max-w-lg bg-[#111116] border border-slate-800 rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-100"
+        className="w-full max-w-lg bg-[var(--m3-surface)] border border-[var(--m3-outline-variant)] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-[var(--m3-on-surface)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -229,7 +229,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
               playKeyClick('action');
               setCalcMode('GEOMETRIC');
             }}
-            className={`flex-1 py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 transition-all ${
+            className={`flex-1 py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 ${
               calcMode === 'GEOMETRIC' 
                 ? 'bg-amber-400 text-slate-950 shadow-md' 
                 : 'bg-[#1C1C24] text-slate-300 hover:bg-[#252530]'
@@ -244,7 +244,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
               playKeyClick('action');
               setCalcMode('NET');
             }}
-            className={`flex-1 py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 transition-all ${
+            className={`flex-1 py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 ${
               calcMode === 'NET' 
                 ? 'bg-emerald-400 text-slate-950 shadow-md' 
                 : 'bg-[#1C1C24] text-slate-300 hover:bg-[#252530]'
@@ -259,7 +259,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
               playKeyClick('action');
               setCalcMode('BETWEEN');
             }}
-            className={`flex-1 py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 transition-all ${
+            className={`flex-1 py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 ${
               calcMode === 'BETWEEN' 
                 ? 'bg-cyan-400 text-slate-950 shadow-md' 
                 : 'bg-[#1C1C24] text-slate-300 hover:bg-[#252530]'
@@ -526,7 +526,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
             {/* Insert Formula into calculator */}
             <button
               onClick={handleInsertExpr}
-              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-sans text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-sans text-xs font-semibold flex items-center gap-1.5"
             >
               <CornerDownLeft className="w-3.5 h-3.5 text-amber-400" />
               <span>Insert Formula</span>
@@ -535,7 +535,7 @@ export const AreaCalculatorModal: React.FC<AreaCalculatorModalProps> = ({
             {/* Insert Value into calculator */}
             <button
               onClick={handleInsertVal}
-              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-sans text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-lg bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 font-sans text-xs font-semibold flex items-center gap-1.5"
             >
               <CornerDownLeft className="w-3.5 h-3.5 text-emerald-400" />
               <span>Insert Value</span>

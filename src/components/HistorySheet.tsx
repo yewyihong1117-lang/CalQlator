@@ -4,6 +4,7 @@ import { HistoryItem } from '../calcEngine';
 import { parseStringToAst } from '../mathAst';
 import { NaturalDisplay } from './NaturalDisplay';
 import { playKeyClick } from '../audioFeedback';
+import { CachedRect, useFlipModalTransition } from '../motion/useMotionEffects';
 
 interface HistorySheetProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface HistorySheetProps {
   onTogglePin: (id: string) => void;
   onDeleteItem: (id: string) => void;
   onClearHistory: () => void;
+  originRect?: CachedRect | null;
 }
 
 export const HistorySheet: React.FC<HistorySheetProps> = ({
@@ -23,16 +25,21 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
   onTogglePin,
   onDeleteItem,
   onClearHistory,
+  originRect = null,
 }) => {
   const [actionItemId, setActionItemId] = useState<string | null>(null);
   const [copiedNotice, setCopiedNotice] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
 
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const swipeStartYRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef<boolean>(false);
   const pointerStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const isVisible = useFlipModalTransition(isOpen, originRect, sheetRef, backdropRef);
 
   useEffect(() => {
     if (!isOpen) {
@@ -53,8 +60,6 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, actionItemId, onClose]);
-
-  if (!isOpen) return null;
 
   const pinnedItems = history.filter((item) => item.pinned);
   const unpinnedItems = history.filter((item) => !item.pinned);
@@ -116,6 +121,10 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
 
   // Swipe-up gesture on sheet handle / header to close
   const handleSwipeStart = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement | null)?.closest('button')) {
+      swipeStartYRef.current = null;
+      return;
+    }
     swipeStartYRef.current = e.clientY;
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   };
@@ -162,9 +171,9 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
           setActionItemId((prev) => (prev === item.id ? null : item.id));
         }}
         onClick={() => handleCardClick(item)}
-        className={`rounded-2xl px-4 py-3 border transition-colors cursor-pointer select-none ${
+        className={`rounded-2xl px-4 py-3 border cursor-pointer select-none ${
           item.pinned
-            ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)]/40'
+            ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)]'
             : 'bg-[var(--m3-surface-container)] hover:bg-[var(--m3-surface-container-high)] border-[var(--m3-outline-variant)]'
         }`}
       >
@@ -245,7 +254,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
                 onDeleteItem(item.id);
                 setActionItemId(null);
               }}
-              className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--ui-danger)]/15 text-[var(--ui-danger)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
+              className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--m3-surface)] text-[var(--ui-danger)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete</span>
@@ -258,17 +267,25 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
 
   return (
     <div
+      ref={backdropRef}
       data-testid="history-sheet-backdrop"
+      aria-hidden={!isVisible}
+      style={{
+        visibility: isVisible ? 'visible' : 'hidden',
+        pointerEvents: isOpen ? 'auto' : 'none',
+      }}
       onClick={onClose}
-      className="fixed inset-0 z-50 flex justify-center items-start bg-black/55 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex justify-center items-start bg-[var(--bg)]"
     >
       <div
+        ref={sheetRef}
         data-testid="history-sheet"
         onClick={(e) => e.stopPropagation()}
         style={{
-          transform: dragOffsetY < 0 ? `translateY(${dragOffsetY}px)` : undefined,
+          transform: dragOffsetY < 0 ? `translate3d(0, ${dragOffsetY}px, 0)` : undefined,
+          transformOrigin: 'center center',
         }}
-        className="w-full max-w-[440px] max-h-[82dvh] bg-[var(--m3-surface)] text-[var(--m3-on-surface)] border-x border-b border-[var(--m3-outline-variant)] rounded-b-[24px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-150"
+        className="w-full max-w-[440px] max-h-[82dvh] bg-[var(--m3-surface)] text-[var(--m3-on-surface)] border-x border-b border-[var(--m3-outline-variant)] rounded-b-[24px] shadow-lg flex flex-col overflow-hidden"
       >
         {/* Top Sheet Header (Shared 16px / 8px-grid horizontal margin) */}
         <div
@@ -320,7 +337,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
                     setShowClearConfirm(true);
                   }}
                   aria-label="Clear history"
-                  className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--ui-danger)] hover:bg-[var(--m3-surface-container-high)] transition-colors cursor-pointer"
+                  className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--ui-danger)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -333,7 +350,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
                 onClose();
               }}
               aria-label="Close history"
-              className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--m3-on-surface)] hover:bg-[var(--m3-surface-container-high)] transition-colors cursor-pointer"
+              className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--m3-on-surface)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

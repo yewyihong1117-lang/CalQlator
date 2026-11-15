@@ -12,6 +12,7 @@
     --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
     --font-mono: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
     --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-math: "Times New Roman", Tinos, "Liberation Serif", Times, serif;
 
     /* Theme CSS Variables (Default Theme: Authentic Casio ClassWiz) */
     --bg: #0E0E12;
@@ -25,24 +26,32 @@
     --key-equals-text: #0F172A;
     --label-shift: #E5A93C;
     --label-alpha: #E6007E;
+    --label-alpha-active-text: #FFFFFF;
     --label-base: #22D3EE;
     --display-bg: #0c1417;
     --display-text: #A7F3D0;
     --display-screen-gradient: linear-gradient(to bottom, #111e22 0%, #0c1619 60%, #081013 100%);
-    --display-dot-color: rgba(45, 85, 80, 0.28);
+    --display-dot-color: #162B28;
     --display-glow: rgba(110, 231, 183, 0.35);
 
-    /* Material 3 Expressive UI Surfaces & Single Accent (Default) */
+    /* Material 3 Expressive UI Surfaces & Single Accent (Default — 100% Opaque, No Glass) */
     --ui-accent: #E5A93C;
     --ui-accent-text: #171104;
-    --ui-accent-tonal: rgba(229, 169, 60, 0.16);
+    --ui-accent-tonal: color-mix(in srgb, #14141A 84%, #E5A93C 16%);
     --ui-danger: #F87171;
     --m3-surface: #14141A;
     --m3-surface-container: #1C1C24;
     --m3-surface-container-high: #262632;
     --m3-on-surface: #E2E8F0;
     --m3-on-surface-variant: #94A3B8;
-    --m3-outline-variant: rgba(226, 232, 240, 0.08);
+    --m3-outline-variant: #2A2A36;
+    --menu-card-bg: color-mix(in srgb, var(--display-bg) 82%, var(--display-text) 18%);
+    --luminous-core: rgba(229, 169, 60, 0.34);
+    --luminous-mid: rgba(229, 169, 60, 0.12);
+    --static-glow-equals: 0 0 12px rgba(229, 169, 60, 0.28);
+    --static-glow-shift: 0 0 12px rgba(229, 169, 60, 0.45);
+    --static-glow-alpha: 0 0 12px rgba(230, 0, 126, 0.45);
+    --static-glow-card: 0 0 12px rgba(167, 243, 208, 0.32);
 
     /* Display 3-Tier Type Scale (History, Active Input, Result) */
     --fs-history: clamp(12px, 3.1vw, 13.5px);
@@ -63,24 +72,32 @@
     --key-equals-text: #0B0E1A;
     --label-shift: #F5C96B;
     --label-alpha: #F08CFF;
+    --label-alpha-active-text: #0B0E1A;
     --label-base: #8FE3FF;
     --display-bg: #0B0E1A;
     --display-text: #A8EEFF;
     --display-screen-gradient: linear-gradient(to bottom, #151329 0%, #0E0B1A 60%, #07060F 100%);
-    --display-dot-color: rgba(143, 227, 255, 0.2);
+    --display-dot-color: #1A2438;
     --display-glow: rgba(168, 238, 255, 0.4);
 
-    /* Material 3 Expressive UI Surfaces & Single Accent (Icy) */
+    /* Material 3 Expressive UI Surfaces & Single Accent (Icy — 100% Opaque, No Glass) */
     --ui-accent: #8FE3FF;
     --ui-accent-text: #05161C;
-    --ui-accent-tonal: rgba(143, 227, 255, 0.16);
+    --ui-accent-tonal: color-mix(in srgb, #120F1D 84%, #8FE3FF 16%);
     --ui-danger: #F08CFF;
     --m3-surface: #120F1D;
     --m3-surface-container: #1D1830;
     --m3-surface-container-high: #292342;
     --m3-on-surface: #EDE7FF;
     --m3-on-surface-variant: #A8A0C2;
-    --m3-outline-variant: rgba(143, 227, 255, 0.12);
+    --m3-outline-variant: #2D2744;
+    --menu-card-bg: color-mix(in srgb, var(--display-bg) 82%, var(--display-text) 18%);
+    --luminous-core: rgba(143, 227, 255, 0.36);
+    --luminous-mid: rgba(143, 227, 255, 0.14);
+    --static-glow-equals: 0 0 14px rgba(143, 227, 255, 0.4);
+    --static-glow-shift: 0 0 12px rgba(245, 201, 107, 0.45);
+    --static-glow-alpha: 0 0 12px rgba(240, 140, 255, 0.45);
+    --static-glow-card: 0 0 14px rgba(168, 238, 255, 0.36);
   }
 
   *, *::before, *::after {
@@ -126,6 +143,12 @@
   font-feature-settings: "tnum";
   letter-spacing: -0.01em;
   color: var(--display-text);
+}
+
+/* Math serif font stack (Times New Roman -> locally bundled Tinos -> Liberation Serif -> Times) */
+.font-math-serif {
+  font-family: var(--font-math);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Calculate Mode Display Layout */
@@ -257,7 +280,46 @@
   }
 }
 
-/* Casio Key Hardware Styling with Theme-Driven CSS Variables */
+/* Single pre-rendered Luminous Flow layer (light only: radial-gradient moved by transform, faded by opacity) */
+.luminous-flow-pos {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 136px;
+  height: 136px;
+  pointer-events: none;
+  z-index: 45;
+  transform: translate3d(-999px, -999px, 0);
+}
+
+.luminous-flow-fade {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    var(--luminous-core) 0%,
+    var(--luminous-mid) 44%,
+    transparent 72%
+  );
+}
+
+/* Soft static glows on resting active states (never animated) */
+.static-glow-equals {
+  box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.3), var(--static-glow-equals);
+}
+.static-glow-shift {
+  box-shadow: var(--static-glow-shift);
+}
+.static-glow-alpha {
+  box-shadow: var(--static-glow-alpha);
+}
+.static-glow-card {
+  box-shadow: var(--static-glow-card);
+}
+
+/* Casio Key Hardware Styling with Theme-Driven CSS Variables (WAAPI springs own press/release transform) */
 /* 1. Function Keys (Charcoal / Icy Indigo) */
 .key-hardware-charcoal {
   background: var(--key-fn);
@@ -266,13 +328,6 @@
   border-bottom: 1.5px solid rgba(0, 0, 0, 0.6);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   touch-action: manipulation;
-  transition: transform 0.04s ease-out;
-}
-.key-hardware-charcoal:active, .key-hardware-charcoal.active-press {
-  transform: translateY(1.5px);
-  will-change: transform;
-  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
-  filter: brightness(0.9);
 }
 
 /* 2. Numeric Keys */
@@ -283,13 +338,6 @@
   border-bottom: 2px solid rgba(0, 0, 0, 0.25);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
   touch-action: manipulation;
-  transition: transform 0.04s ease-out;
-}
-.key-hardware-white:active, .key-hardware-white.active-press {
-  transform: translateY(1.5px);
-  will-change: transform;
-  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.3);
-  filter: brightness(0.93);
 }
 
 /* 3. Action Keys (DEL, AC - Blue / Icy Purple Accent) */
@@ -300,30 +348,16 @@
   border-bottom: 2px solid rgba(0, 0, 0, 0.4);
   box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.35);
   touch-action: manipulation;
-  transition: transform 0.04s ease-out;
-}
-.key-hardware-blue:active, .key-hardware-blue.active-press {
-  transform: translateY(1.5px);
-  will-change: transform;
-  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
-  filter: brightness(0.88);
 }
 
-/* 4. Equals Key (=) */
+/* 4. Equals Key (=) with subtle static luminous halo */
 .key-hardware-equals {
   background: var(--key-equals);
   color: var(--key-equals-text);
   border-top: 1px solid rgba(255, 255, 255, 0.6);
   border-bottom: 2px solid rgba(0, 0, 0, 0.3);
-  box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.3), var(--static-glow-equals);
   touch-action: manipulation;
-  transition: transform 0.04s ease-out;
-}
-.key-hardware-equals:active, .key-hardware-equals.active-press {
-  transform: translateY(1.5px);
-  will-change: transform;
-  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.45);
-  filter: brightness(0.92);
 }
 
 /* 5. Round Navigation Keys (SHIFT, ALPHA, MENU, ON) */
@@ -334,13 +368,6 @@
   border-bottom: 1.5px solid rgba(0, 0, 0, 0.5);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   touch-action: manipulation;
-  transition: transform 0.04s ease-out;
-}
-.key-hardware-round:active, .key-hardware-round.active-press {
-  transform: translateY(1.5px);
-  will-change: transform;
-  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
-  filter: brightness(0.88);
 }
 
 /* Label Colors mapped to Theme CSS variables */
