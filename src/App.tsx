@@ -58,6 +58,7 @@ import {
   hasActiveSpring,
   prefersReducedMotion,
 } from './motion/spring';
+import { useHistorySheetMotion } from './motion/useHistorySheetMotion';
 
 function useShrinkFirstFontSize(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -128,12 +129,10 @@ interface InsertedResultPayload {
 }
 
 interface DisplayWorkspaceProps {
-  inlineHistory: HistoryItem[];
   astState: MathAstState;
   setAstState: React.Dispatch<React.SetStateAction<MathAstState>>;
   errorMessage: string | null;
   result: string;
-  onInsertExpr: (expr: string, astRoot?: MathNode[]) => void;
   onInsertResult: (payload: InsertedResultPayload) => void;
   editorMode: EditorMode;
   justCommitted: boolean;
@@ -143,12 +142,10 @@ interface DisplayWorkspaceProps {
 }
 
 const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
-  inlineHistory,
   astState,
   setAstState,
   errorMessage,
   result,
-  onInsertExpr,
   onInsertResult,
   editorMode,
   justCommitted,
@@ -156,9 +153,6 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
   lastValidPreviewResult,
   onCursorTouched,
 }) => {
-  const historyScrollRef = useRef<HTMLDivElement>(null);
-  const [hasTopFade, setHasTopFade] = useState(false);
-
   const activeInputContainerRef = useRef<HTMLDivElement>(null);
   const activeInputWrapperRef = useRef<HTMLDivElement>(null);
   const activeResContainerRef = useRef<HTMLDivElement>(null);
@@ -203,148 +197,68 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
     prevDisplayedResultRef.current = activeResultText;
   }, [activeResultText]);
 
-  // Keep inline history anchored to the bottom (newest just above active input) and update top fade state
-  useLayoutEffect(() => {
-    const el = historyScrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    setHasTopFade(el.scrollHeight > el.clientHeight + 2);
-  }, [inlineHistory.length]);
-
-  useEffect(() => {
-    const el = historyScrollRef.current;
-    if (!el) return;
-    const updateFade = () => {
-      setHasTopFade(el.scrollHeight > el.clientHeight + 2 || el.scrollTop > 2);
-    };
-    updateFade();
-    el.addEventListener('scroll', updateFade, { passive: true });
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(updateFade);
-      ro.observe(el);
-    }
-    return () => {
-      el.removeEventListener('scroll', updateFade);
-      ro?.disconnect();
-    };
-  }, []);
-
   return (
     <div data-testid="display-workspace" className="display-workspace select-none">
-      {/* Scrollable Inline History Zone: grows upward from active input with top-edge fade */}
+      {/* Primary User Input Zone */}
       <div
-        ref={historyScrollRef}
-        data-testid="inline-history-scroll"
-        className={`calc-history-scroll no-scrollbar ${hasTopFade ? 'has-top-fade' : ''}`}
+        ref={activeInputContainerRef}
+        data-testid="active-input-line"
+        onClick={() => onCursorTouched?.()}
+        className="calc-active-input-line no-scrollbar"
       >
-        <div className="calc-history-list">
-          {inlineHistory.map((item, idx) => {
-            const distFromBottom = inlineHistory.length - 1 - idx;
-            const entryOpacity = Math.max(0.28, 0.84 - distFromBottom * 0.18);
-            const itemNodes =
-              item.astRoot && item.astRoot.length > 0
-                ? item.astRoot
-                : parseStringToAst(item.expression).root;
-
-            return (
-              <div
-                key={item.id}
-                data-testid={`inline-history-entry-${idx}`}
-                className="calc-history-entry"
-                style={{ opacity: entryOpacity }}
-              >
-                <div
-                  onClick={() => onInsertExpr(item.expression, item.astRoot)}
-                  title="Tap to edit in editor"
-                  className="calc-history-expr no-scrollbar cursor-pointer hover:opacity-100"
-                >
-                  <NaturalDisplay
-                    nodes={itemNodes}
-                    readOnly
-                    inheritColor
-                  />
-                </div>
-                <div
-                  onClick={() =>
-                    onInsertResult({
-                      numericVal: item.numericVal,
-                      display: item.result,
-                      exactResult: item.result === item.exactResult ? item.exactResult : undefined,
-                    })
-                  }
-                  title="Tap to insert result"
-                  className="calc-history-res no-scrollbar cursor-pointer hover:opacity-100"
-                >
-                  = {item.result}
-                </div>
-              </div>
-            );
-          })}
+        <div ref={activeInputWrapperRef} className="calc-active-input-inner">
+          <NaturalDisplay
+            nodes={astState.root}
+            cursor={astState.cursor}
+            pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
+            fontSize={activeExprFontSize}
+            onSetCursor={(slotId, offset) => {
+              onCursorTouched?.();
+              setAstState((prev) => ({
+                ...prev,
+                cursor: { slotId, offset },
+                pendingDeleteTemplateId: null,
+              }));
+            }}
+          />
         </div>
       </div>
 
-      {/* Anchored Active Input + Fixed-Height Result Zone */}
-      <div data-testid="calc-active-area" className="calc-active-area">
-        <div
-          ref={activeInputContainerRef}
-          data-testid="active-input-line"
-          onClick={() => onCursorTouched?.()}
-          className="calc-active-input-line"
-        >
-          <div ref={activeInputWrapperRef} className="w-full min-w-0">
-            <NaturalDisplay
-              nodes={astState.root}
-              cursor={astState.cursor}
-              pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
-              fontSize={activeExprFontSize}
-              onSetCursor={(slotId, offset) => {
-                onCursorTouched?.();
-                setAstState((prev) => ({
-                  ...prev,
-                  cursor: { slotId, offset },
-                  pendingDeleteTemplateId: null,
-                }));
-              }}
-            />
-          </div>
-        </div>
-
-        <div
-          ref={activeResContainerRef}
-          data-testid="active-result-line"
-          className="calc-active-result-line no-scrollbar"
-        >
-          <div ref={activeResContentRef} className="inline-flex items-center justify-end whitespace-nowrap">
-            {errorMessage ? (
+      {/* Anchored Bottom-Right Answer Zone */}
+      <div
+        ref={activeResContainerRef}
+        data-testid="active-result-line"
+        className="calc-active-result-line no-scrollbar"
+      >
+        <div ref={activeResContentRef} className="inline-flex items-center justify-end whitespace-nowrap">
+          {errorMessage ? (
+            <span
+              ref={resultPulseRef}
+              className="text-[var(--ui-danger)] font-bold text-sm tracking-wider"
+            >
+              [{errorMessage}]
+            </span>
+          ) : editorMode === 'PHONE' && !justCommitted ? (
+            previewText ? (
               <span
                 ref={resultPulseRef}
-                className="text-[var(--ui-danger)] font-bold text-sm tracking-wider"
-              >
-                [{errorMessage}]
-              </span>
-            ) : editorMode === 'PHONE' && !justCommitted ? (
-              previewText ? (
-                <span
-                  ref={resultPulseRef}
-                  style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
-                  className="opacity-55 text-[var(--display-text)] font-semibold"
-                >
-                  = {previewText}
-                </span>
-              ) : null
-            ) : result ? (
-              <span
-                ref={resultPulseRef}
-                onClick={() => onInsertResult({ numericVal: NaN, display: result })}
-                title="Tap to insert result"
                 style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
-                className="text-[var(--display-text)] cursor-pointer select-text"
+                className="opacity-55 text-[var(--display-text)] font-semibold"
               >
-                {result}
+                = {previewText}
               </span>
-            ) : null}
-          </div>
+            ) : null
+          ) : result ? (
+            <span
+              ref={resultPulseRef}
+              onClick={() => onInsertResult({ numericVal: NaN, display: result })}
+              title="Tap to insert result"
+              style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
+              className="text-[var(--display-text)] cursor-pointer select-text"
+            >
+              {result}
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
@@ -581,7 +495,6 @@ export default function App() {
     setAstState(createInitialAstState());
     setResult('0');
     setIsCalculated(false);
-    setActiveHistoryId(null);
     setDisplayMenu('NONE');
     setShiftActive(false);
     setAlphaActive(false);
@@ -676,11 +589,6 @@ export default function App() {
     return [];
   });
 
-  // Active committed history id (excluded from inline history while still shown as active result)
-  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
-  const [isHistorySheetOpen, setIsHistorySheetOpen] = useState<boolean>(false);
-  const grabSwipeStartYRef = useRef<number | null>(null);
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
@@ -705,8 +613,6 @@ export default function App() {
     setJustCommitted(false);
     setIsCalculated(false);
     setErrorMessage(null);
-    setActiveHistoryId(null);
-    setIsHistorySheetOpen(false);
   }, []);
 
   const handleTogglePinHistory = useCallback((id: string) => {
@@ -715,35 +621,11 @@ export default function App() {
 
   const handleDeleteHistoryItem = useCallback((id: string) => {
     setHistory((prev) => prev.filter((it) => it.id !== id));
-    setActiveHistoryId((prev) => (prev === id ? null : prev));
   }, []);
 
   const handleClearHistory = useCallback(() => {
     setHistory([]);
-    setActiveHistoryId(null);
   }, []);
-
-  // Insert history expression or load into active workspace for editing
-  const handleInsertHistoryExpression = useCallback((exprStr: string, astRoot?: MathNode[]) => {
-    playKeyClick('num');
-    triggerHaptic('num');
-    setActiveHistoryId(null);
-    pushUndoState(astState);
-    const nextRoot: MathNode[] =
-      astRoot && astRoot.length > 0
-        ? JSON.parse(JSON.stringify(astRoot))
-        : parseStringToAst(exprStr).root;
-    setAstState({
-      root: nextRoot,
-      cursor: { slotId: 'root', offset: nextRoot.length },
-      pendingDeleteTemplateId: null,
-    });
-    setJustCommitted(false);
-    setErrorMessage(null);
-    setIsCalculated(false);
-    setSdCycleState(0);
-    setEngStep(0);
-  }, [astState]);
 
   // Live preview calculation for Phone Edit mode
   useEffect(() => {
@@ -777,7 +659,6 @@ export default function App() {
   const handleInsertHistoryResult = useCallback((payload: InsertedResultPayload) => {
     playKeyClick('num');
     triggerHaptic('num');
-    setActiveHistoryId(null);
     setErrorMessage(null);
     pushUndoState(astState);
 
@@ -841,16 +722,17 @@ export default function App() {
 
   // DOM Refs & Cached FLIP / Luminous Flow Refs
   const appRootRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const displayRef = useRef<HTMLDivElement>(null);
   const keyBlockRef = useRef<HTMLDivElement>(null);
   const settingsGearRef = useRef<HTMLButtonElement>(null);
   const menuKeyRef = useRef<HTMLButtonElement>(null);
   const historyGrabRef = useRef<HTMLButtonElement>(null);
+  const historySheetRef = useRef<HTMLDivElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
   const modeContainerRef = useRef<HTMLDivElement>(null);
 
   const [settingsOriginRect, setSettingsOriginRect] = useState<CachedRect | null>(null);
-  const [historyOriginRect, setHistoryOriginRect] = useState<CachedRect | null>(null);
   const menuKeyRectRef = useRef<CachedRect | null>(null);
   const menuCardRectsRef = useRef<Record<string, CachedRect>>({});
   const pendingMenuFlipOriginRef = useRef<CachedRect | null>(null);
@@ -860,6 +742,19 @@ export default function App() {
   const [isMenuClosing, setIsMenuClosing] = useState(false);
   const menuCloseTokenRef = useRef(0);
   const prevDisplayMenuRef = useRef<DisplayMenuType>('NONE');
+
+  const {
+    isExpanded: isHistorySheetExpanded,
+    snapToExpanded: setHistorySheetExpanded,
+    handleDragStart: handleHistoryDragStart,
+    handleDragMove: handleHistoryDragMove,
+    handleDragEnd: handleHistoryDragEnd,
+    wasRecentPointerTap: wasHistoryPointerTap,
+  } = useHistorySheetMotion({
+    enabled: !isPoweredOff && modeState.mode === 'CALC' && displayMenu === 'NONE',
+    mainRef,
+    historySheetRef,
+  });
 
   const {
     handlePointerDown: handleKeyPointerDown,
@@ -873,17 +768,6 @@ export default function App() {
       if (settingsGearRef.current) {
         const next = toCachedRect(settingsGearRef.current.getBoundingClientRect());
         setSettingsOriginRect((prev) =>
-          prev &&
-          Math.abs(prev.left - next.left) < 0.5 &&
-          Math.abs(prev.top - next.top) < 0.5 &&
-          Math.abs(prev.width - next.width) < 0.5
-            ? prev
-            : next
-        );
-      }
-      if (historyGrabRef.current) {
-        const next = toCachedRect(historyGrabRef.current.getBoundingClientRect());
-        setHistoryOriginRect((prev) =>
           prev &&
           Math.abs(prev.left - next.left) < 0.5 &&
           Math.abs(prev.top - next.top) < 0.5 &&
@@ -1209,7 +1093,6 @@ export default function App() {
     setResult('0');
     setIsCalculated(false);
     setJustCommitted(false);
-    setActiveHistoryId(null);
     setLivePreviewResult('');
     setLastValidPreviewResult('');
     setShiftActive(false);
@@ -1443,7 +1326,6 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
 
     pushUndoState(astState);
 
@@ -1505,7 +1387,6 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1536,7 +1417,6 @@ export default function App() {
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1563,7 +1443,6 @@ export default function App() {
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1596,7 +1475,6 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1629,7 +1507,6 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1667,7 +1544,6 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1700,7 +1576,6 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1733,7 +1608,6 @@ export default function App() {
     }
 
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1764,7 +1638,6 @@ export default function App() {
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
     if (errorMessage) setErrorMessage(null);
-    setActiveHistoryId(null);
     pushUndoState(astState);
 
     let currentState = astState;
@@ -1798,7 +1671,6 @@ export default function App() {
 
     setJustCommitted(false);
     setIsCalculated(false);
-    setActiveHistoryId(null);
     pushUndoState(astState);
     setAstState(deleteAst(astState));
     setErrorMessage(null);
@@ -1898,7 +1770,6 @@ export default function App() {
         setAstState(navUp);
         setIsCalculated(false);
         setJustCommitted(false);
-        setActiveHistoryId(null);
         return;
       }
       if (history.length > 0) {
@@ -1909,7 +1780,6 @@ export default function App() {
         setResult(item.result);
         setRawNumericVal(item.numericVal);
         setIsCalculated(true);
-        setActiveHistoryId(item.id);
       }
       return;
     }
@@ -1920,7 +1790,6 @@ export default function App() {
         setAstState(navDown);
         setIsCalculated(false);
         setJustCommitted(false);
-        setActiveHistoryId(null);
         return;
       }
       if (historyIndex !== -1) {
@@ -1930,7 +1799,6 @@ export default function App() {
           setAstState(createInitialAstState());
           setResult('0');
           setIsCalculated(false);
-          setActiveHistoryId(null);
         } else {
           setHistoryIndex(nextIdx);
           const item = history[nextIdx];
@@ -1938,7 +1806,6 @@ export default function App() {
           setResult(item.result);
           setRawNumericVal(item.numericVal);
           setIsCalculated(true);
-          setActiveHistoryId(item.id);
         }
       }
       return;
@@ -1946,7 +1813,6 @@ export default function App() {
 
     setJustCommitted(false);
     setIsCalculated(false);
-    setActiveHistoryId(null);
     const dirMap = {
       LEFT: 'left' as const,
       RIGHT: 'right' as const,
@@ -1993,7 +1859,6 @@ export default function App() {
       handleSelectMode('CALC');
       setAstState(createInitialAstState());
       setResult('0');
-      setActiveHistoryId(null);
       setHistory([]);
       setDisplayMenu('NONE');
       return;
@@ -2056,14 +1921,12 @@ export default function App() {
         setLastValidPreviewResult(formattedOutput);
       }
 
-      setActiveHistoryId(newHistoryItem.id);
       setHistory((prev) => [newHistoryItem, ...prev.slice(0, 49)]);
       setHistoryIndex(-1);
     } else {
       setErrorMessage(evalResult.error || 'Syntax ERROR');
       triggerHaptic('error', { force: true });
       setResult('');
-      setActiveHistoryId(null);
       if (editorMode === 'PHONE') {
         setJustCommitted(false);
       }
@@ -2161,11 +2024,6 @@ export default function App() {
   const menuPage = Math.floor(menuHighlightIndex / 6);
   const currentMenuGrid = MENU_PAGES[menuPage] || MENU_PAGES[0];
 
-  // Inline history: exclude active calculation while it is the active one, ordered oldest->newest so newest sits right above active input
-  const inlineHistory = [...history]
-    .filter((it) => it.id !== activeHistoryId)
-    .reverse();
-
   return (
     <div
       ref={appRootRef}
@@ -2202,13 +2060,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Container: Sized edge-to-edge on mobile, letterboxed on desktop using dvh */}
-      <main 
+      {/* Main Container: Adaptive height up to 960px, edge-to-edge on mobile, centered on desktop */}
+      <main
+        ref={mainRef}
         style={{
           transform: calibrationScale !== 1.0 ? `scale(${calibrationScale})` : undefined,
           transformOrigin: 'top center',
         }}
-        className="w-full max-w-[440px] h-[100dvh] bg-[var(--bg)] flex flex-col justify-between relative overflow-hidden select-none"
+        className="w-full max-w-[440px] h-[100dvh] max-h-[960px] bg-[var(--bg)] flex flex-col justify-between gap-[var(--display-keypad-gap)] relative overflow-hidden select-none"
       >
         {/* Key-Path Trainer Floating Pill (Study Mode) */}
         {calcMode === 'STUDY' && trainerRoute && (
@@ -2220,16 +2079,16 @@ export default function App() {
 
         {/* 2. MINIMALIST HIGH-CONTRAST LCD DISPLAY SCREEN */}
         {/* Shared 16px (8px-grid) left/right margin matching keypad below */}
-        <div 
+        <div
           ref={displayRef}
           data-testid="display-screen"
           style={{
             paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
             paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
             paddingTop: 'max(8px, env(safe-area-inset-top, 8px))',
-            paddingBottom: '8px',
+            paddingBottom: '10px',
           }}
-          className={`flex-1 w-full min-h-[140px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none ${
+          className={`flex-1 w-full min-h-[160px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none ${
             isPoweredOff ? 'bg-[var(--display-bg)]' : 'lcd-screen-bg'
           }`}
         >
@@ -2244,20 +2103,11 @@ export default function App() {
             <>
               {/* TOP NOTIFICATION-CENTER GRAB HANDLE + SLIM STATUS INDICATOR HEADER */}
               <div
-                onPointerDown={(e) => {
-                  grabSwipeStartYRef.current = e.clientY;
-                }}
-                onPointerUp={(e) => {
-                  if (grabSwipeStartYRef.current !== null) {
-                    const dy = e.clientY - grabSwipeStartYRef.current;
-                    grabSwipeStartYRef.current = null;
-                    if (dy > 24 && modeState.mode === 'CALC' && displayMenu === 'NONE') {
-                      playKeyClick('action');
-                      setIsHistorySheetOpen(true);
-                    }
-                  }
-                }}
-                className="w-full shrink-0 flex flex-col items-center pb-1"
+                onPointerDown={(e) => handleHistoryDragStart(e, 'top')}
+                onPointerMove={handleHistoryDragMove}
+                onPointerUp={handleHistoryDragEnd}
+                onPointerCancel={handleHistoryDragEnd}
+                className="w-full shrink-0 flex flex-col items-center pb-1.5 touch-none"
               >
                 {modeState.mode === 'CALC' && displayMenu === 'NONE' && (
                   <button
@@ -2267,12 +2117,13 @@ export default function App() {
                     aria-label="Open calculation history sheet"
                     title="Swipe down or tap for History"
                     onClick={() => {
+                      if (wasHistoryPointerTap()) return;
                       playKeyClick('action');
-                      setIsHistorySheetOpen(true);
+                      setHistorySheetExpanded(true);
                     }}
-                    className="w-24 h-4 -mt-1 flex items-center justify-center cursor-pointer touch-none group"
+                    className="w-32 h-6 -mt-0.5 flex items-center justify-center cursor-pointer touch-none group"
                   >
-                    <span className="w-9 h-1 rounded-full bg-[var(--display-text)]/35 group-hover:bg-[var(--display-text)]/70" />
+                    <span className="w-11 h-1 rounded-full bg-[var(--display-text)]/40 group-hover:bg-[var(--display-text)]/75" />
                   </button>
                 )}
 
@@ -2350,7 +2201,7 @@ export default function App() {
                         ref={modeContainerRef}
                         data-testid="mode-display-container"
                         style={{ transformOrigin: 'center center' }}
-                        className="flex-1 w-full flex flex-col justify-between overflow-hidden"
+                        className="flex-1 w-full min-h-0 flex flex-col justify-between overflow-hidden"
                       >
                         {currentModeModule.renderDisplay(modeContext)}
                       </div>
@@ -2361,12 +2212,10 @@ export default function App() {
                         className="flex-1 w-full min-h-0 flex flex-col justify-between overflow-hidden"
                       >
                         <DisplayWorkspace
-                          inlineHistory={inlineHistory}
                           astState={astState}
                           setAstState={setAstState}
                           errorMessage={errorMessage}
                           result={result}
-                          onInsertExpr={handleInsertHistoryExpression}
                           onInsertResult={handleInsertHistoryResult}
                           editorMode={editorMode}
                           justCommitted={justCommitted}
@@ -2375,7 +2224,6 @@ export default function App() {
                           onCursorTouched={() => {
                             setJustCommitted(false);
                             setIsCalculated(false);
-                            setActiveHistoryId(null);
                           }}
                         />
                       </div>
@@ -2734,7 +2582,7 @@ export default function App() {
         {/* 3. KEYPAD SECTION: Physical fx-570EX Unit Grid */}
         {/* Scale key block uniformly by width; side padding min 16px keeps keys out of back-gesture zone */}
         {/* RULE: The key block never moves or shifts when menus open */}
-        <div 
+        <div
           ref={keyBlockRef}
           data-testid="key-block"
           onPointerDown={handleKeyPointerDown}
@@ -2743,12 +2591,12 @@ export default function App() {
           style={{
             paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
             paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
-            paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+            paddingBottom: 'max(calc(12px + var(--vh-extra) * 0.02), env(safe-area-inset-bottom, 12px))',
           }}
-          className="shrink-0 w-full pt-0 flex flex-col gap-1 justify-end"
+          className="shrink-0 w-full pt-0 flex flex-col gap-[var(--keypad-split-gap)] justify-end"
         >
-          {/* FUNCTION KEYS BLOCK: 6 columns × 7 rows */}
-          <div className="grid grid-cols-6 gap-x-1.5 gap-y-0.5 relative w-full">
+          {/* FUNCTION KEYS BLOCK: 6 columns × 5 rows */}
+          <div className="grid grid-cols-6 gap-x-1.5 gap-y-[var(--key-row-gap)] relative w-full">
             
             {/* Col 1, Row 1: SHIFT */}
             <div className="col-start-1 row-start-1 key-wrapper">
@@ -2763,7 +2611,7 @@ export default function App() {
                   if (alphaActive) setAlphaActive(false);
                 }}
                 aria-label="SHIFT key"
-                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round flex items-center justify-center ${
+                className={`w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round flex items-center justify-center ${
                   shiftActive ? 'text-slate-950 bg-[var(--label-shift)] static-glow-shift' : 'theme-label-shift'
                 }`}
               >
@@ -2784,7 +2632,7 @@ export default function App() {
                   if (shiftActive) setShiftActive(false);
                 }}
                 aria-label="ALPHA key"
-                className={`w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round flex items-center justify-center ${
+                className={`w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round flex items-center justify-center ${
                   alphaActive ? 'text-[var(--label-alpha-active-text)] bg-[var(--label-alpha)] static-glow-alpha' : 'theme-label-alpha'
                 }`}
               >
@@ -2794,7 +2642,7 @@ export default function App() {
 
             {/* Cols 3-4, Rows 1-2: 4-WAY D-PAD */}
             <div className="col-start-3 col-span-2 row-start-1 row-span-2 relative flex items-center justify-center my-auto py-0 z-10 pointer-events-auto">
-              <div className="relative w-[90px] h-[79px] rounded-full bg-[#1A1A22] border border-slate-700/60 shadow-[inset_0_1px_3px_rgba(255,255,255,0.1),0_2px_5px_rgba(0,0,0,0.6)] flex items-center justify-center overflow-hidden">
+              <div className="relative w-[clamp(88px,23vw,108px)] h-[clamp(79px,calc(var(--key-fn-h)*1.75+10px),102px)] rounded-full bg-[#1A1A22] border border-slate-700/60 shadow-[inset_0_1px_3px_rgba(255,255,255,0.1),0_2px_5px_rgba(0,0,0,0.6)] flex items-center justify-center overflow-hidden">
                 
                 {/* Up */}
                 <button
@@ -2865,7 +2713,7 @@ export default function App() {
                 }}
                 aria-label="MENU key"
                 data-testid="menu-key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-semibold key-hardware-round text-slate-200 flex items-center justify-center cursor-pointer select-none"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-semibold key-hardware-round text-slate-200 flex items-center justify-center cursor-pointer select-none"
               >
                 MENU
               </button>
@@ -2880,7 +2728,7 @@ export default function App() {
               <button
                 onClick={handleOn}
                 aria-label="ON key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round text-slate-100 border border-slate-600/50 flex items-center justify-center"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-full font-sans text-[10px] sm:text-xs font-bold key-hardware-round text-slate-100 border border-slate-600/50 flex items-center justify-center"
               >
                 ON
               </button>
@@ -2908,7 +2756,7 @@ export default function App() {
                   () => setIsQrModalOpen(true)
                 )}
                 aria-label="OPTN key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] font-bold"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-[clamp(9.5px,1.35vh,11.5px)] font-bold"
               >
                 OPTN
               </button>
@@ -2929,7 +2777,7 @@ export default function App() {
                   () => handleToken('=')
                 )}
                 aria-label="CALC key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-semibold text-[clamp(9.5px,1.35vh,11.5px)]"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-semibold text-[clamp(9.5px,1.35vh,11.5px)]"
               >
                 CALC
               </button>
@@ -2952,7 +2800,7 @@ export default function App() {
                   () => handleToken(':')
                 )}
                 aria-label="Integral key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
               >
                 <span data-testid="key-integral-glyph" className="inline-flex items-center justify-center gap-[0.12em] leading-none">
                   <IntegralSvg className="w-[0.72em] h-[1.34em]" />
@@ -2975,7 +2823,7 @@ export default function App() {
                   () => handleToken('Σ(')
                 )}
                 aria-label="Variable x key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal theme-label-alpha flex items-center justify-center font-bold text-sm"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal theme-label-alpha flex items-center justify-center font-bold text-sm"
               >
                 <span className="font-math-serif italic text-[17px] leading-none">x</span>
               </button>
@@ -2993,7 +2841,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleFractionKey(), () => handleFractionKey())}
                 aria-label="Fraction key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
                 <FractionKeySvg className="w-[1.95em] h-[1.15em]" />
               </button>
@@ -3010,7 +2858,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleSqrtKey(), () => handleToken('³√('))}
                 aria-label="Square root key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
                 <SqrtKeySvg className="w-[1.85em] h-[1.15em]" />
               </button>
@@ -3028,7 +2876,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handlePostfixKey('²'), () => handlePostfixKey('³'), undefined, 'func', 'x²')}
                 aria-label="x squared key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
                 <span className="font-math-serif leading-none text-[14.5px] inline-flex items-baseline">
                   <span className="italic">x</span>
@@ -3048,7 +2896,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handlePowerKey(), () => handleToken('^('), undefined, 'func', 'x^□')}
                 aria-label="x to power key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
                 <span className="font-math-serif leading-none text-[14.5px] inline-flex items-baseline">
                   <span className="italic">x</span>
@@ -3073,7 +2921,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleLogBaseKey(), () => handleConstantPowerKey(['1', '0']), undefined, 'func', 'log')}
                 aria-label="log base key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-[11px]"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-[11px]"
               >
                 <span className="inline-flex items-baseline leading-none">
                   <span className="font-sans">log</span>
@@ -3098,7 +2946,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleToken('ln('), () => handleConstantPowerKey(['e']), undefined, 'func', 'ln')}
                 aria-label="ln key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 ln
               </button>
@@ -3119,7 +2967,7 @@ export default function App() {
                   '(-)'
                 )}
                 aria-label="Negation key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
                 <span className="font-math-serif not-italic text-[13.5px] leading-none inline-flex items-center">
                   <span>(</span>
@@ -3149,7 +2997,7 @@ export default function App() {
                   "° ' \""
                 )}
                 aria-label="Degrees minutes seconds key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
                 <span className="font-math-serif not-italic text-[13.5px] leading-none tracking-tight">°′″</span>
               </button>
@@ -3172,7 +3020,7 @@ export default function App() {
                   'hyp'
                 )}
                 aria-label="x inverse key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
                 <span className="font-math-serif leading-none text-[14.5px] inline-flex items-baseline">
                   <span className="italic">x</span>
@@ -3195,7 +3043,7 @@ export default function App() {
                   'sin'
                 )}
                 aria-label="sine key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 sin
               </button>
@@ -3215,7 +3063,7 @@ export default function App() {
                   'cos'
                 )}
                 aria-label="cosine key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 cos
               </button>
@@ -3235,7 +3083,7 @@ export default function App() {
                   'tan'
                 )}
                 aria-label="tangent key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs"
               >
                 tan
               </button>
@@ -3255,7 +3103,7 @@ export default function App() {
                   () => handleVariableOperation('X')
                 )}
                 aria-label="Store key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 STO
               </button>
@@ -3275,7 +3123,7 @@ export default function App() {
                   'ENG'
                 )}
                 aria-label="Engineering format key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 ENG
               </button>
@@ -3290,7 +3138,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleToken('('), () => handleToken('Abs('))}
                 aria-label="Left bracket key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
               >
                 <span className="font-math-serif not-italic text-[15px] leading-none">(</span>
               </button>
@@ -3309,7 +3157,7 @@ export default function App() {
                   () => handleToken('x', 'num', 'VAR')
                 )}
                 aria-label="Right bracket key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-sm"
               >
                 <span className="font-math-serif not-italic text-[15px] leading-none">)</span>
               </button>
@@ -3332,7 +3180,7 @@ export default function App() {
                   () => handleVariableOperation('Y')
                 )}
                 aria-label="S to D toggle key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 <span className="inline-flex items-center justify-center gap-[0.12em] leading-none">
                   <span className="font-sans">S</span>
@@ -3355,7 +3203,7 @@ export default function App() {
                   () => handleVariableOperation('M')
                 )}
                 aria-label="Memory plus key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
+                className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center font-sans text-xs font-semibold"
               >
                 M+
               </button>
@@ -3364,7 +3212,7 @@ export default function App() {
           </div>
 
           {/* NUMERIC & ARITHMETIC KEYPAD: 5 columns × 4 rows */}
-          <div className="grid grid-cols-5 gap-x-1.5 gap-y-0.5 relative w-full pt-0.5">
+          <div className="grid grid-cols-5 gap-x-1.5 gap-y-[var(--key-row-gap)] relative w-full pt-0.5">
 
             {/* ROW 1: 7, 8, 9, DEL, AC */}
             {/* Key 7 */}
@@ -3379,7 +3227,7 @@ export default function App() {
                   () => setDisplayMenu('CONST_CAT')
                 )}
                 aria-label="7 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 7
               </button>
@@ -3397,7 +3245,7 @@ export default function App() {
                   () => setDisplayMenu('CONV_CAT')
                 )}
                 aria-label="8 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 8
               </button>
@@ -3415,7 +3263,7 @@ export default function App() {
                   () => setDisplayMenu('RESET')
                 )}
                 aria-label="9 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 9
               </button>
@@ -3430,7 +3278,7 @@ export default function App() {
               <button
                 onClick={() => handleSmartKey(() => handleDelete(), () => handleUndo())}
                 aria-label="Delete key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-blue text-white font-bold text-xs flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-blue text-white font-bold text-xs flex items-center justify-center"
               >
                 DEL
               </button>
@@ -3448,7 +3296,7 @@ export default function App() {
                   () => setIsPoweredOff(true)
                 )}
                 aria-label="All clear key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-blue text-white font-bold text-xs flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-blue text-white font-bold text-xs flex items-center justify-center"
               >
                 AC
               </button>
@@ -3470,7 +3318,7 @@ export default function App() {
                   }
                 )}
                 aria-label="4 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 4
               </button>
@@ -3491,7 +3339,7 @@ export default function App() {
                   }
                 )}
                 aria-label="5 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 5
               </button>
@@ -3506,7 +3354,7 @@ export default function App() {
               <button
                 onClick={() => handleToken('6')}
                 aria-label="6 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 6
               </button>
@@ -3524,7 +3372,7 @@ export default function App() {
                   () => handleToken('P', 'func', 'OP_NPR')
                 )}
                 aria-label="Multiply key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 <OperatorSvg op="×" className="w-[1.05em] h-[1.05em]" />
               </button>
@@ -3542,7 +3390,7 @@ export default function App() {
                   () => handleToken('C', 'func', 'OP_NCR')
                 )}
                 aria-label="Divide key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 <OperatorSvg op="÷" className="w-[1.05em] h-[1.05em]" />
               </button>
@@ -3564,7 +3412,7 @@ export default function App() {
                   }
                 )}
                 aria-label="1 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 1
               </button>
@@ -3585,7 +3433,7 @@ export default function App() {
                   }
                 )}
                 aria-label="2 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 2
               </button>
@@ -3606,7 +3454,7 @@ export default function App() {
                   }
                 )}
                 aria-label="3 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 3
               </button>
@@ -3624,7 +3472,7 @@ export default function App() {
                   () => handleToken('Pol(')
                 )}
                 aria-label="Plus key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 <OperatorSvg op="+" className="w-[1.05em] h-[1.05em]" />
               </button>
@@ -3642,7 +3490,7 @@ export default function App() {
                   () => handleToken('Rec(')
                 )}
                 aria-label="Minus key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 <OperatorSvg op="−" className="w-[1.05em] h-[1.05em]" />
               </button>
@@ -3661,7 +3509,7 @@ export default function App() {
                   () => handleToken('Rnd(')
                 )}
                 aria-label="0 key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-base flex items-center justify-center"
               >
                 0
               </button>
@@ -3680,7 +3528,7 @@ export default function App() {
                   () => handleToken(Math.floor(Math.random() * 10).toString())
                 )}
                 aria-label="Decimal point key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-lg flex items-center justify-center"
               >
                 .
               </button>
@@ -3699,7 +3547,7 @@ export default function App() {
                   () => handleToken('e')
                 )}
                 aria-label="Exponent times 10 to power key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xs flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xs flex items-center justify-center"
               >
                 <span className="inline-flex items-baseline leading-none text-[13px]">
                   <OperatorSvg op="×" className="w-[0.82em] h-[0.82em] self-center mr-[0.06em]" />
@@ -3721,7 +3569,7 @@ export default function App() {
                   () => handleToken('Ans')
                 )}
                 aria-label="Answer recall key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xs flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-white text-slate-900 font-bold text-xs flex items-center justify-center"
               >
                 Ans
               </button>
@@ -3736,7 +3584,7 @@ export default function App() {
               <button
                 onClick={handleEqual}
                 aria-label="Equals key"
-                className="w-full h-[40px] min-h-[40px] min-w-[44px] rounded-lg key-hardware-equals font-bold text-xl flex items-center justify-center"
+                className="w-full h-[var(--key-num-h)] min-h-[40px] min-w-[44px] rounded-lg key-hardware-equals font-bold text-xl flex items-center justify-center"
               >
                 <OperatorSvg op="=" className="w-[0.95em] h-[0.95em]" />
               </button>
@@ -3744,27 +3592,33 @@ export default function App() {
 
           </div>
         </div>
-      </main>
 
-      {/* NOTIFICATION-CENTER HISTORY SHEET */}
-      <HistorySheet
-        isOpen={isHistorySheetOpen}
-        onClose={() => setIsHistorySheetOpen(false)}
-        history={history}
-        onLoadCard={handleLoadHistoryCard}
-        onInsertResult={(item) => {
-          handleInsertHistoryResult({
-            numericVal: item.numericVal,
-            display: item.result,
-            exactResult: item.result === item.exactResult ? item.exactResult : undefined,
-          });
-          setIsHistorySheetOpen(false);
-        }}
-        onTogglePin={handleTogglePinHistory}
-        onDeleteItem={handleDeleteHistoryItem}
-        onClearHistory={handleClearHistory}
-        originRect={historyOriginRect}
-      />
+        {/* NOTIFICATION-CENTER HISTORY SHEET */}
+        <HistorySheet
+          sheetRef={historySheetRef}
+          isExpanded={isHistorySheetExpanded}
+          onClose={() => setHistorySheetExpanded(false)}
+          onHandlePointerDown={(e) => handleHistoryDragStart(e, 'sheet')}
+          onHandlePointerMove={handleHistoryDragMove}
+          onHandlePointerUp={handleHistoryDragEnd}
+          history={history}
+          onLoadCard={(item) => {
+            handleLoadHistoryCard(item);
+            setHistorySheetExpanded(false);
+          }}
+          onInsertResult={(item) => {
+            handleInsertHistoryResult({
+              numericVal: item.numericVal,
+              display: item.result,
+              exactResult: item.result === item.exactResult ? item.exactResult : undefined,
+            });
+            setHistorySheetExpanded(false);
+          }}
+          onTogglePin={handleTogglePinHistory}
+          onDeleteItem={handleDeleteHistoryItem}
+          onClearHistory={handleClearHistory}
+        />
+      </main>
 
       {/* CLASSWIZ QR CODE SHEET MODAL (SHIFT + OPTN) */}
       <ClassWizQrModal

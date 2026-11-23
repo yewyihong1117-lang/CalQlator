@@ -140,14 +140,14 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
           setActionItemId((prev) => (prev === item.id ? null : item.id));
         }}
         onClick={() => handleCardClick(item)}
-        className={`rounded-2xl px-3.5 py-2.5 border cursor-pointer select-none ${
+        className={`rounded-2xl pl-3.5 pr-2 py-2.5 border cursor-pointer select-none ${
           item.pinned
             ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)]'
             : 'bg-[var(--m3-surface-container)] hover:bg-[var(--m3-surface-container-high)] border-[var(--m3-outline-variant)]'
         }`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0 text-[var(--m3-on-surface)]/85 overflow-x-auto no-scrollbar">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="flex-1 min-w-0 pt-0.5 text-[var(--m3-on-surface)]/85 overflow-x-auto no-scrollbar">
             <NaturalDisplay
               nodes={nodes}
               readOnly
@@ -155,16 +155,35 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
               fontSize={14}
             />
           </div>
-          {item.pinned && (
-            <Pin className="w-3.5 h-3.5 shrink-0 mt-1 text-[var(--ui-accent)]" />
-          )}
+          <div className="flex items-center gap-0.5 shrink-0">
+            {item.pinned && (
+              <Pin className="w-3.5 h-3.5 text-[var(--ui-accent)] mr-0.5" />
+            )}
+            <button
+              type="button"
+              data-testid={`history-remove-btn-${item.id}`}
+              aria-label="Remove history entry"
+              title="Remove from history"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                playKeyClick('action');
+                if (actionItemId === item.id) setActionItemId(null);
+                onDeleteItem(item.id);
+              }}
+              className="min-w-[36px] min-h-[36px] -my-1 flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)]/75 hover:text-[var(--ui-danger)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
-        <div className="mt-0.5 flex items-baseline justify-between gap-2">
-          <span className="text-[10.5px] text-[var(--m3-on-surface-variant)]">
+        <div className="mt-1 pr-1.5 flex items-center justify-between gap-2">
+          <span className="text-[10.5px] text-[var(--m3-on-surface-variant)] shrink-0">
             {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
-          <span
+          <button
+            type="button"
             onClick={(e) => {
               if (!onInsertResult || longPressTriggeredRef.current || actionItemId === item.id) return;
               e.stopPropagation();
@@ -172,10 +191,10 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
               onInsertResult(item);
             }}
             title="Tap to insert result"
-            className="text-base font-bold tabular-nums text-[var(--m3-on-surface)] text-right truncate hover:text-[var(--ui-accent)]"
+            className="max-w-[78%] overflow-x-auto no-scrollbar whitespace-nowrap px-2 py-0.5 -mr-2 rounded-lg text-base font-bold tabular-nums text-[var(--m3-on-surface)] text-right hover:text-[var(--ui-accent)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
           >
             = {item.result}
-          </span>
+          </button>
         </div>
 
         {isActionsOpen && (
@@ -252,86 +271,106 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
       }}
       className="absolute inset-0 z-40 bg-[var(--m3-surface)] text-[var(--m3-on-surface)] border-b border-[var(--m3-outline-variant)] shadow-md flex flex-col overflow-hidden"
     >
-      {/* Top Sheet Header */}
+      {/* Taller Top Sheet Header & Drag-to-Collapse Zone */}
       <div
+        data-testid="history-sheet-top-bar"
         onPointerDown={onHandlePointerDown}
         onPointerMove={onHandlePointerMove}
         onPointerUp={onHandlePointerUp}
         onPointerCancel={onHandlePointerUp}
-        className="px-4 pt-[max(12px,env(safe-area-inset-top,12px))] pb-2.5 border-b border-[var(--m3-outline-variant)] flex items-center justify-between touch-none shrink-0"
+        className="px-4 pt-[max(14px,env(safe-area-inset-top,14px))] pb-3.5 min-h-[76px] border-b border-[var(--m3-outline-variant)] bg-[var(--m3-surface-container)] flex flex-col justify-between gap-2 touch-none shrink-0 cursor-grab active:cursor-grabbing"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold tracking-tight text-[var(--m3-on-surface)]">
-            History
-          </span>
-          {copiedNotice && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--ui-accent)]">
-              <Check className="w-3 h-3" />
-              {copiedNotice}
-            </span>
-          )}
+        {/* Top Pull/Collapse Pill */}
+        <div
+          data-testid="history-sheet-top-handle"
+          className="w-full flex items-center justify-center py-1"
+        >
+          <div className="w-10 h-1 rounded-full bg-[var(--m3-on-surface-variant)]/45" />
         </div>
 
-        <div className="flex items-center gap-1">
-          {history.length > 0 && (
-            showClearConfirm ? (
-              <div className="flex items-center gap-1">
+        {/* Title & Actions Row */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold tracking-tight text-[var(--m3-on-surface)]">
+              History
+            </span>
+            {history.length > 0 && (
+              <span className="text-[11px] font-medium tabular-nums text-[var(--m3-on-surface-variant)]">
+                ({history.length})
+              </span>
+            )}
+            {copiedNotice && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--ui-accent)]">
+                <Check className="w-3 h-3" />
+                {copiedNotice}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {history.length > 0 && (
+              showClearConfirm ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playKeyClick('action');
+                      onClearHistory();
+                      setShowClearConfirm(false);
+                    }}
+                    className="min-h-[36px] px-2.5 py-1 rounded-xl bg-[var(--ui-danger)] text-[var(--ui-accent-text)] text-xs font-semibold cursor-pointer"
+                  >
+                    Clear all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowClearConfirm(false)}
+                    className="min-h-[36px] px-2.5 py-1 rounded-xl bg-[var(--m3-surface-container-high)] text-[var(--m3-on-surface-variant)] text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
                   onClick={() => {
                     playKeyClick('action');
-                    onClearHistory();
-                    setShowClearConfirm(false);
+                    setShowClearConfirm(true);
                   }}
-                  className="px-2 py-0.5 rounded-lg bg-[var(--ui-danger)] text-[var(--ui-accent-text)] text-[11px] font-semibold cursor-pointer"
+                  aria-label="Clear all history"
+                  title="Clear all history"
+                  className="min-w-[40px] min-h-[40px] px-2.5 flex items-center justify-center gap-1 rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--ui-danger)] hover:bg-[var(--m3-surface-container-high)] text-xs font-medium cursor-pointer"
                 >
-                  Clear
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowClearConfirm(false)}
-                  className="px-2 py-0.5 rounded-lg bg-[var(--m3-surface-container-high)] text-[var(--m3-on-surface-variant)] text-[11px] cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  playKeyClick('action');
-                  setShowClearConfirm(true);
-                }}
-                aria-label="Clear history"
-                className="min-w-[32px] min-h-[32px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--ui-danger)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              playKeyClick('action');
-              onClose();
-            }}
-            aria-label="Close history"
-            className="min-w-[32px] min-h-[32px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--m3-on-surface)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+              )
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                playKeyClick('action');
+                onClose();
+              }}
+              aria-label="Close history"
+              title="Collapse history"
+              className="min-w-[44px] min-h-[44px] -mr-1.5 flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--m3-on-surface)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Scrollable History Cards */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2.5 space-y-2 no-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3.5 pb-4 space-y-2.5 no-scrollbar">
         {history.length === 0 ? (
           <div className="py-6 text-center">
             <p className="text-xs font-medium text-[var(--m3-on-surface-variant)]">
               No calculations yet
             </p>
             <p className="text-[11px] text-[var(--m3-on-surface-variant)]/75 mt-0.5">
-              Tap card to load · Hold for actions
+              Tap expression to edit · Tap = to insert · Hold for actions
             </p>
           </div>
         ) : (
@@ -365,9 +404,9 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
         onPointerMove={onHandlePointerMove}
         onPointerUp={onHandlePointerUp}
         onPointerCancel={onHandlePointerUp}
-        className="w-full pt-3 pb-[max(12px,env(safe-area-inset-bottom,12px))] flex flex-col items-center justify-center gap-0.5 border-t border-[var(--m3-outline-variant)] bg-[var(--m3-surface-container)] cursor-grab active:cursor-grabbing touch-none shrink-0"
+        className="w-full min-h-[48px] pt-3.5 pb-[max(14px,env(safe-area-inset-bottom,14px))] flex flex-col items-center justify-center gap-0.5 border-t border-[var(--m3-outline-variant)] bg-[var(--m3-surface-container)] cursor-grab active:cursor-grabbing touch-none shrink-0"
       >
-        <div className="w-9 h-1 rounded-full bg-[var(--m3-on-surface-variant)]/50" />
+        <div className="w-10 h-1 rounded-full bg-[var(--m3-on-surface-variant)]/55" />
       </div>
     </div>
   );
