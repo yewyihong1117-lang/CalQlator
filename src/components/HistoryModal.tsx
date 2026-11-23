@@ -8,7 +8,7 @@ interface HistoryModalProps {
   onClose: () => void;
   history: HistoryItem[];
   onSelectHistory: (item: HistoryItem) => void;
-  onInsertAns: (val: string) => void;
+  onInsertAns: (val: { numericVal: number; display: string; exactResult?: string }) => void;
   onClearHistory: () => void;
   onDeleteItem: (id: string) => void;
 }
@@ -220,7 +220,11 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                     <button
                       onClick={() => {
                         playKeyClick('action');
-                        onInsertAns(item.result);
+                        onInsertAns({
+                          numericVal: item.numericVal,
+                          display: item.result,
+                          exactResult: item.exactResult,
+                        });
                         onClose();
                       }}
                       className="px-2.5 py-1 rounded bg-[#22222E] hover:bg-slate-700 text-slate-200 border border-slate-700/60 flex items-center gap-1 text-[11px] font-semibold transition-colors active:scale-95"

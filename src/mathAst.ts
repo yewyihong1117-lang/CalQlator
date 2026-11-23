@@ -11,6 +11,7 @@ export type TokenType = 'DEFAULT' | 'OP_NPR' | 'OP_NCR' | 'VAR' | 'FUNC';
 
 export type MathNode =
   | { type: 'token'; id: string; val: string; tokenType?: TokenType }
+  | { type: 'value'; id: string; numericVal: number; display: string; exactResult?: string }
   | { type: 'frac'; id: string; num: MathNode[]; den: MathNode[] }
   | { type: 'int'; id: string; integrand: MathNode[]; lower: MathNode[]; upper: MathNode[]; variable?: string }
   | { type: 'deriv'; id: string; expr: MathNode[]; at: MathNode[]; variable?: string }
@@ -181,12 +182,20 @@ export interface ExtractedOperand {
   hasImpliedMult: boolean;
 }
 
+function isOperandTokenNode(node: MathNode): boolean {
+  if (node.type !== 'token') return false;
+  if (node.tokenType === 'OP_NCR' || node.tokenType === 'OP_NPR') return false;
+  if (node.tokenType === 'VAR') return true;
+  return /^[0-9.]+$/.test(node.val) || /^([a-zA-Zπe]|Ans)$/.test(node.val);
+}
+
 /**
  * Extract the previous operand before current cursor:
  * 3a. Walks back over all postfix wrappers (x², x³, x⁻¹, x!, °, %, and completed power nodes).
  * 3b. Takes the primary beneath them: a number (whole, including decimal), a bracket group,
  *     a function call with its argument (sin(30)), a root, or a fraction.
  * 3e. Identifies implied multiplication before the operand: e.g. (6)2 -> implied mult before 2.
+ * Returns null if the token right before the cursor is an operator or opening delimiter.
  */
 export function extractPreviousOperand(
   slotNodes: MathNode[],
@@ -200,7 +209,7 @@ export function extractPreviousOperand(
   let startIndex = endIndex;
   let hasImpliedMult = false;
 
-  // Case 1: Structured non-token node (postfix, power, frac, sqrt, int, logBase)
+  // Case 1: Structured non-token node (postfix, power, frac, sqrt, int, deriv, logBase)
   if (lastNode.type !== 'token') {
     startIndex = endIndex;
   }
@@ -213,7 +222,7 @@ export function extractPreviousOperand(
       if (node.type === 'token') {
         if (node.val === ')') {
           depth++;
-        } else if (node.val === '(' || node.val.endsWith('(')) {
+        } else if (node.val === '(' || node.val === '(-' || node.val.endsWith('(')) {
           depth--;
           if (depth === 0) {
             foundStart = i;
@@ -226,46 +235,56 @@ export function extractPreviousOperand(
     if (foundStart !== -1) {
       startIndex = foundStart;
       // Check if preceding token is a function name like 'sin', 'cos', 'tan', etc.
-      if (startIndex > 0 && slotNodes[startIndex - 1].type === 'token') {
+      if (
+        slotNodes[foundStart].type === 'token' &&
+        (slotNodes[foundStart] as { type: 'token'; val: string }).val === '(' &&
+        startIndex > 0 &&
+        slotNodes[startIndex - 1].type === 'token'
+      ) {
         const prevVal = (slotNodes[startIndex - 1] as { type: 'token'; val: string }).val;
         if (/^(sin|cos|tan|sin⁻¹|cos⁻¹|tan⁻¹|ln|log|sinh|cosh|tanh|Abs|Pol|Rec|d\/dx)$/.test(prevVal)) {
           startIndex--;
         }
       }
     } else {
-      startIndex = endIndex;
+      return null;
     }
   }
   // Case 3: Number sequence (digits and decimal point)
-  else if (/^[0-9.]$/.test(lastNode.val)) {
+  else if (/^[0-9.]+$/.test(lastNode.val)) {
     let i = endIndex;
-    while (i >= 0 && slotNodes[i].type === 'token' && /^[0-9.]$/.test((slotNodes[i] as { type: 'token'; val: string }).val)) {
+    while (
+      i >= 0 &&
+      slotNodes[i].type === 'token' &&
+      /^[0-9.]+$/.test((slotNodes[i] as { type: 'token'; val: string }).val)
+    ) {
       i--;
     }
     startIndex = i + 1;
   }
-  // Case 4: Identifier, variable or constant (x, A, B, C, D, E, F, X, Y, M, π, e, Ans)
-  else if (/^[a-zA-Zπe]|Ans$/.test(lastNode.val)) {
+  // Case 4: Standalone identifier, variable, or constant (x, y, A-F, M, X, Y, π, e, Ans)
+  else if (isOperandTokenNode(lastNode)) {
     startIndex = endIndex;
   }
-  // Case 5: Single operator or unknown token
+  // Case 5: Operator (+, -, ×, ÷, ^, nCr, nPr) or opening delimiter ('(', '(-', 'sin(', '×10^(', ',', etc.)
   else {
-    startIndex = endIndex;
+    return null;
   }
 
   // Check if there was implied multiplication immediately preceding startIndex:
   // e.g. (6)2 -> startIndex is at '2', preceding node is ')'!
   // or 2(3) -> startIndex is at '(', preceding node is '2'!
-  // or (6)(2) -> startIndex is at second '(', preceding node is ')'!
-  if (startIndex > 0) {
+  // Never emit implied multiplication if extracted node starts with a legacy binary '×10^(' token.
+  const firstExtracted = slotNodes[startIndex];
+  const startsWithBinaryTimes =
+    firstExtracted?.type === 'token' && firstExtracted.val === '×10^(';
+
+  if (startIndex > 0 && !startsWithBinaryTimes) {
     const prevNode = slotNodes[startIndex - 1];
     if (prevNode.type !== 'token') {
       hasImpliedMult = true;
-    } else {
-      const pv = prevNode.val;
-      if (pv === ')' || /^[0-9.a-zA-Zπe]|Ans$/.test(pv)) {
-        hasImpliedMult = true;
-      }
+    } else if (prevNode.val === ')' || isOperandTokenNode(prevNode)) {
+      hasImpliedMult = true;
     }
   }
 
@@ -295,6 +314,40 @@ export function insertToken(state: MathAstState, tokenVal: string, tokenType?: T
     root: newRoot,
     cursor: {
       slotId: state.cursor.slotId,
+      offset: offset + 1,
+    },
+    pendingDeleteTemplateId: null,
+  };
+}
+
+/**
+ * Insert an atomic full-precision history/result value node at the current cursor
+ */
+export function insertValueNode(
+  state: MathAstState,
+  numericVal: number,
+  display: string,
+  exactResult?: string
+): MathAstState {
+  const newRoot = cloneAst(state.root);
+  const slotNodes = getSlotNodes(newRoot, state.cursor.slotId) || newRoot;
+  const targetSlotId = getSlotNodes(newRoot, state.cursor.slotId) ? state.cursor.slotId : 'root';
+
+  const newNode: MathNode = {
+    type: 'value',
+    id: generateUniqueId('val'),
+    numericVal,
+    display,
+    ...(exactResult !== undefined ? { exactResult } : {}),
+  };
+
+  const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
+  slotNodes.splice(offset, 0, newNode);
+
+  return {
+    root: newRoot,
+    cursor: {
+      slotId: targetSlotId,
       offset: offset + 1,
     },
     pendingDeleteTemplateId: null,
@@ -419,11 +472,46 @@ export function insertConstantPower(state: MathAstState, baseTokenVals: string[]
 }
 
 /**
+ * Insert scientific notation ×10^□ as a binary '×' token followed by a structured
+ * power(base=['1','0'], exp=[]) node, focusing the superscript exponent slot.
+ */
+export function insertScientificTenPower(state: MathAstState): MathAstState {
+  const newRoot = cloneAst(state.root);
+  const slotNodes = getSlotNodes(newRoot, state.cursor.slotId);
+  if (!slotNodes) return state;
+
+  const offset = Math.min(Math.max(0, state.cursor.offset), slotNodes.length);
+  const powerId = generateUniqueId('power');
+  const timesNode: MathNode = {
+    type: 'token',
+    id: generateUniqueId('tok'),
+    val: '×',
+  };
+  const powerNode: MathNode = {
+    type: 'power',
+    id: powerId,
+    base: [
+      { type: 'token', id: generateUniqueId('tok'), val: '1' },
+      { type: 'token', id: generateUniqueId('tok'), val: '0' },
+    ],
+    exp: [],
+  };
+
+  slotNodes.splice(offset, 0, timesNode, powerNode);
+
+  return {
+    root: newRoot,
+    cursor: { slotId: `${powerId}_exp`, offset: 0 },
+    pendingDeleteTemplateId: null,
+  };
+}
+
+/**
  * Rule 3: FRACTION KEY OPERAND: on ÷ (and the a b/c key), take the previous operand:
  * a. Walk back over all postfix wrappers (x², x³, x⁻¹, x!, °, %, and completed power nodes).
  * b. Take the primary beneath them: a number (whole, including decimal), a bracket group,
  *    a function call with its argument (sin(30)), a root, or a fraction.
- * c. Put that whole thing in the numerator; cursor goes into the empty denominator.
+ * c. Put that whole thing in the numerator; cursor goes into the empty denominator (or numerator if empty).
  * d. Drop outer brackets only if the bracket group is the entire operand. If a postfix wraps it, keep them.
  * e. Implied multiplication stays outside: (6)2÷ gives (6)×(2/□).
  */
@@ -442,51 +530,81 @@ export function insertFraction(state: MathAstState): MathAstState {
 
   if (operandInfo && operandInfo.nodes.length > 0) {
     const rawNodes = operandInfo.nodes;
-
-    // Rule 3d: Drop outer brackets ONLY if the bracket group is the entire operand.
-    // If a postfix wraps it, keep them.
-    let isPlainBracketGroup = false;
     const firstNode = rawNodes[0];
     const lastNode = rawNodes[rawNodes.length - 1];
+
+    // Guard legacy '×10^(exp)' token groups: leave '×' outside and move only 10^(exp) into numerator.
+    let splitLeadingTimes = false;
     if (
       rawNodes.length >= 2 &&
       firstNode.type === 'token' &&
-      firstNode.val === '(' &&
+      firstNode.val === '×10^(' &&
       lastNode.type === 'token' &&
       lastNode.val === ')'
     ) {
-      let depth = 0;
-      let matchedAtEnd = false;
-      for (let i = 0; i < rawNodes.length; i++) {
-        const n = rawNodes[i];
-        if (n.type === 'token') {
-          if (n.val === '(') depth++;
-          else if (n.val === ')') {
-            depth--;
-            if (depth === 0 && i === rawNodes.length - 1) {
-              matchedAtEnd = true;
+      splitLeadingTimes = true;
+      numNodes = [
+        {
+          type: 'power',
+          id: generateUniqueId('power'),
+          base: [
+            { type: 'token', id: generateUniqueId('tok'), val: '1' },
+            { type: 'token', id: generateUniqueId('tok'), val: '0' },
+          ],
+          exp: rawNodes.slice(1, -1),
+        },
+      ];
+    } else {
+      // Rule 3d: Drop outer brackets ONLY if the bracket group is the entire operand.
+      // If a postfix wraps it, keep them.
+      let isPlainBracketGroup = false;
+      if (
+        rawNodes.length >= 2 &&
+        firstNode.type === 'token' &&
+        firstNode.val === '(' &&
+        lastNode.type === 'token' &&
+        lastNode.val === ')'
+      ) {
+        let depth = 0;
+        let matchedAtEnd = false;
+        for (let i = 0; i < rawNodes.length; i++) {
+          const n = rawNodes[i];
+          if (n.type === 'token') {
+            if (n.val === '(') depth++;
+            else if (n.val === ')') {
+              depth--;
+              if (depth === 0 && i === rawNodes.length - 1) {
+                matchedAtEnd = true;
+              }
             }
           }
         }
+        if (matchedAtEnd) {
+          isPlainBracketGroup = true;
+        }
       }
-      if (matchedAtEnd) {
-        isPlainBracketGroup = true;
-      }
-    }
 
-    if (isPlainBracketGroup) {
-      // Drop outer brackets
-      numNodes = rawNodes.slice(1, -1);
-    } else {
-      numNodes = rawNodes;
+      if (isPlainBracketGroup) {
+        // Drop outer brackets
+        numNodes = rawNodes.slice(1, -1);
+      } else {
+        numNodes = rawNodes;
+      }
     }
 
     // Remove extracted operand from slotNodes
     slotNodes.splice(operandInfo.startIndex, operandInfo.nodes.length);
     insertIndex = operandInfo.startIndex;
 
-    // Rule 3e: Implied multiplication stays outside: (6)2÷ gives (6)×(2/□)
-    if (operandInfo.hasImpliedMult) {
+    if (splitLeadingTimes) {
+      slotNodes.splice(insertIndex, 0, {
+        type: 'token',
+        id: generateUniqueId('tok'),
+        val: '×',
+      });
+      insertIndex++;
+    } else if (operandInfo.hasImpliedMult) {
+      // Rule 3e: Implied multiplication stays outside: (6)2÷ gives (6)×(2/□)
       const timesToken: MathNode = {
         type: 'token',
         id: generateUniqueId('tok'),
@@ -506,10 +624,11 @@ export function insertFraction(state: MathAstState): MathAstState {
 
   slotNodes.splice(insertIndex, 0, fracNode);
 
-  // Cursor goes into the empty denominator
+  // If a numerator was captured, focus the empty denominator; otherwise focus the empty numerator.
+  const targetSlot = numNodes.length > 0 ? `${fracId}_den` : `${fracId}_num`;
   return {
     root: newRoot,
-    cursor: { slotId: `${fracId}_den`, offset: 0 },
+    cursor: { slotId: targetSlot, offset: 0 },
     pendingDeleteTemplateId: null,
   };
 }
@@ -947,8 +1066,8 @@ export function deleteAst(state: MathAstState): MathAstState {
       };
     }
 
-    // If removing a template node directly from parent
-    if (removedNode && removedNode.type !== 'token') {
+    // If removing a multi-slot template node directly from parent (atomic value nodes delete in one press)
+    if (removedNode && removedNode.type !== 'token' && removedNode.type !== 'value') {
       if (pendingDeleteTemplateId !== removedNode.id) {
         return { ...state, pendingDeleteTemplateId: removedNode.id };
       }
@@ -1022,6 +1141,17 @@ export function astToExpression(nodes: MathNode[]): string {
       } else {
         expr += node.val;
       }
+    } else if (node.type === 'value') {
+      if (node.exactResult && /^-?\d+\/\d+$/.test(node.exactResult)) {
+        const [n, d] = node.exactResult.split('/');
+        expr += `((${n})/(${d}))`;
+      } else if (isFinite(node.numericVal)) {
+        const s = node.numericVal.toString();
+        const m = /^(-?\d+(?:\.\d+)?)[eE]([+-]?\d+)$/.exec(s);
+        expr += m ? `((${m[1]})×10^(${m[2]}))` : `(${s})`;
+      } else {
+        expr += '0';
+      }
     } else if (node.type === 'frac') {
       const numExpr = astToExpression(node.num) || '0';
       const denExpr = astToExpression(node.den) || '1';
@@ -1076,6 +1206,8 @@ export function astToDisplayText(nodes: MathNode[]): string {
   for (const node of nodes) {
     if (node.type === 'token') {
       text += node.val;
+    } else if (node.type === 'value') {
+      text += node.display;
     } else if (node.type === 'frac') {
       const numText = astToDisplayText(node.num) || '□';
       const denText = astToDisplayText(node.den) || '□';
@@ -1118,6 +1250,7 @@ export function astToDisplayText(nodes: MathNode[]): string {
 export function astToStructureDescription(state: MathAstState): string {
   function nodeToStructure(node: MathNode): string {
     if (node.type === 'token') return node.val;
+    if (node.type === 'value') return node.display;
     if (node.type === 'frac') {
       const numStr = node.num.length === 0 ? 'empty' : node.num.map(nodeToStructure).join('');
       const denStr = node.den.length === 0 ? 'empty' : node.den.map(nodeToStructure).join('');
@@ -1174,6 +1307,8 @@ export function simulateKeystrokes(keys: string[]): MathAstState {
       state = insertConstantPower(state, ['e']);
     } else if (k === '10^□') {
       state = insertConstantPower(state, ['1', '0']);
+    } else if (k === '×10^x' || k === '×10^(') {
+      state = insertScientificTenPower(state);
     } else if (k === 'x²' || k === '²') {
       state = insertPostfix(state, '²');
     } else if (k === 'x³' || k === '³') {
@@ -1216,12 +1351,96 @@ export function simulateKeystrokes(keys: string[]): MathAstState {
 }
 
 /**
+ * Fold `×10^(exp)` and `base^(exp)` segments in flat token lists into structured `power` nodes
+ * so expressions restored from history strings render with raised superscripts.
+ */
+function foldPowerTemplatesInNodes(rawNodes: MathNode[]): MathNode[] {
+  const out: MathNode[] = [];
+  let i = 0;
+
+  while (i < rawNodes.length) {
+    const node = rawNodes[i];
+    if (
+      node.type === 'token' &&
+      node.val === '×10^' &&
+      rawNodes[i + 1]?.type === 'token' &&
+      (rawNodes[i + 1] as { type: 'token'; val: string }).val === '('
+    ) {
+      let depth = 1;
+      let j = i + 2;
+      while (j < rawNodes.length && depth > 0) {
+        const cur = rawNodes[j];
+        if (cur.type === 'token') {
+          if (cur.val === '(' || cur.val.endsWith('(')) depth++;
+          else if (cur.val === ')') depth--;
+        }
+        j++;
+      }
+      if (depth === 0) {
+        const expInner = foldPowerTemplatesInNodes(rawNodes.slice(i + 2, j - 1));
+        out.push({ type: 'token', id: generateUniqueId('tok'), val: '×' });
+        out.push({
+          type: 'power',
+          id: generateUniqueId('power'),
+          base: [
+            { type: 'token', id: generateUniqueId('tok'), val: '1' },
+            { type: 'token', id: generateUniqueId('tok'), val: '0' },
+          ],
+          exp: expInner,
+        });
+        i = j;
+        continue;
+      }
+    }
+
+    if (
+      node.type === 'token' &&
+      node.val === '^' &&
+      out.length > 0 &&
+      rawNodes[i + 1]?.type === 'token' &&
+      (rawNodes[i + 1] as { type: 'token'; val: string }).val === '('
+    ) {
+      let depth = 1;
+      let j = i + 2;
+      while (j < rawNodes.length && depth > 0) {
+        const cur = rawNodes[j];
+        if (cur.type === 'token') {
+          if (cur.val === '(' || cur.val.endsWith('(')) depth++;
+          else if (cur.val === ')') depth--;
+        }
+        j++;
+      }
+      if (depth === 0) {
+        const operandInfo = extractPreviousOperand(out, out.length);
+        if (operandInfo && operandInfo.nodes.length > 0) {
+          out.splice(operandInfo.startIndex, operandInfo.nodes.length);
+          const expInner = foldPowerTemplatesInNodes(rawNodes.slice(i + 2, j - 1));
+          out.push({
+            type: 'power',
+            id: generateUniqueId('power'),
+            base: operandInfo.nodes,
+            exp: expInner,
+          });
+          i = j;
+          continue;
+        }
+      }
+    }
+
+    out.push(node);
+    i++;
+  }
+
+  return out;
+}
+
+/**
  * Convert plain string (from history or paste) into basic AST nodes
  */
 export function parseStringToAst(exprStr: string): MathAstState {
   if (!exprStr) return createInitialAstState();
 
-  const nodes: MathNode[] = [];
+  const rawNodes: MathNode[] = [];
   const tokenRegex = /(sin⁻¹|cos⁻¹|tan⁻¹|sinh|cosh|tanh|sin|cos|tan|ln|log|Ans|Pol|Rec|d\/dx|×10\^|√|³√|\d+(\.\d+)?|[a-zA-Z]|[-+×÷=()²³⁻¹^!%,.])/g;
   let match: RegExpExecArray | null;
   let lastIndex = 0;
@@ -1231,20 +1450,22 @@ export function parseStringToAst(exprStr: string): MathAstState {
       const skipped = exprStr.slice(lastIndex, match.index).trim();
       if (skipped) {
         for (const char of skipped) {
-          nodes.push({ type: 'token', id: generateUniqueId('tok'), val: char });
+          rawNodes.push({ type: 'token', id: generateUniqueId('tok'), val: char });
         }
       }
     }
-    nodes.push({ type: 'token', id: generateUniqueId('tok'), val: match[0] });
+    rawNodes.push({ type: 'token', id: generateUniqueId('tok'), val: match[0] });
     lastIndex = tokenRegex.lastIndex;
   }
 
   if (lastIndex < exprStr.length) {
     const remaining = exprStr.slice(lastIndex);
     for (const char of remaining) {
-      nodes.push({ type: 'token', id: generateUniqueId('tok'), val: char });
+      rawNodes.push({ type: 'token', id: generateUniqueId('tok'), val: char });
     }
   }
+
+  const nodes = foldPowerTemplatesInNodes(rawNodes);
 
   return {
     root: nodes,

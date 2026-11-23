@@ -29,8 +29,8 @@ import {
 } from './audioFeedback';
 import { 
   MathAstState, MathNode, createInitialAstState,
-  insertToken, insertFraction, insertIntegral, insertDerivative, insertSqrt,
-  insertPower, insertConstantPower, insertPostfix, PostfixOp, insertLogBase, navigateAst, deleteAst,
+  insertToken, insertValueNode, insertFraction, insertIntegral, insertDerivative, insertSqrt,
+  insertPower, insertConstantPower, insertScientificTenPower, insertPostfix, PostfixOp, insertLogBase, navigateAst, deleteAst,
   astToExpression, astToDisplayText, parseStringToAst, TokenType
 } from './mathAst';
 import { NaturalDisplay } from './components/NaturalDisplay';
@@ -121,6 +121,12 @@ function useShrinkFirstFontSize(
   return fontSizePx;
 }
 
+interface InsertedResultPayload {
+  numericVal: number;
+  display: string;
+  exactResult?: string;
+}
+
 interface DisplayWorkspaceProps {
   inlineHistory: HistoryItem[];
   astState: MathAstState;
@@ -128,7 +134,7 @@ interface DisplayWorkspaceProps {
   errorMessage: string | null;
   result: string;
   onInsertExpr: (expr: string, astRoot?: MathNode[]) => void;
-  onInsertResult: (res: string) => void;
+  onInsertResult: (payload: InsertedResultPayload) => void;
   editorMode: EditorMode;
   justCommitted: boolean;
   livePreviewResult: string;
@@ -260,7 +266,13 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
                   />
                 </div>
                 <div
-                  onClick={() => onInsertResult(item.exactResult || item.result)}
+                  onClick={() =>
+                    onInsertResult({
+                      numericVal: item.numericVal,
+                      display: item.result,
+                      exactResult: item.result === item.exactResult ? item.exactResult : undefined,
+                    })
+                  }
                   title="Tap to insert result"
                   className="calc-history-res no-scrollbar cursor-pointer hover:opacity-100"
                 >
@@ -291,6 +303,7 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
                 setAstState((prev) => ({
                   ...prev,
                   cursor: { slotId, offset },
+                  pendingDeleteTemplateId: null,
                 }));
               }}
             />
@@ -323,7 +336,7 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
             ) : result ? (
               <span
                 ref={resultPulseRef}
-                onClick={() => onInsertResult(result)}
+                onClick={() => onInsertResult({ numericVal: NaN, display: result })}
                 title="Tap to insert result"
                 style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
                 className="text-[var(--display-text)] cursor-pointer select-text"
@@ -637,6 +650,8 @@ export default function App() {
     playAudioFeedback: (type?: string) => playKeyClick((type as any) || 'func'),
     angleMode,
     displayFormat,
+    fixDigits,
+    sciDigits,
   };
 
   // Editor Mode: CLASSIC or PHONE
@@ -713,38 +728,22 @@ export default function App() {
     playKeyClick('num');
     triggerHaptic('num');
     setActiveHistoryId(null);
-    if (editorMode === 'PHONE') {
-      let nextRoot: MathNode[];
-      if (astRoot && astRoot.length > 0) {
-        nextRoot = JSON.parse(JSON.stringify(astRoot));
-      } else {
-        nextRoot = parseStringToAst(exprStr).root;
-      }
-      setAstState({
-        root: nextRoot,
-        cursor: { slotId: 'root', offset: nextRoot.length },
-        pendingDeleteTemplateId: null,
-      });
-      setJustCommitted(false);
-      setErrorMessage(null);
-      setIsCalculated(false);
-    } else {
-      const parsed = astRoot && astRoot.length > 0
-        ? { root: JSON.parse(JSON.stringify(astRoot)), cursor: { slotId: 'root', offset: astRoot.length }, pendingDeleteTemplateId: null }
-        : parseStringToAst(exprStr);
-      if (astState.root.length === 0 || isCalculated) {
-        setAstState(parsed);
-        setIsCalculated(false);
-        setErrorMessage(null);
-      } else {
-        setAstState((prev) => ({
-          ...prev,
-          root: [...prev.root, ...parsed.root],
-          cursor: { slotId: 'root', offset: prev.root.length + parsed.root.length },
-        }));
-      }
-    }
-  }, [editorMode, isCalculated, astState.root.length]);
+    pushUndoState(astState);
+    const nextRoot: MathNode[] =
+      astRoot && astRoot.length > 0
+        ? JSON.parse(JSON.stringify(astRoot))
+        : parseStringToAst(exprStr).root;
+    setAstState({
+      root: nextRoot,
+      cursor: { slotId: 'root', offset: nextRoot.length },
+      pendingDeleteTemplateId: null,
+    });
+    setJustCommitted(false);
+    setErrorMessage(null);
+    setIsCalculated(false);
+    setSdCycleState(0);
+    setEngStep(0);
+  }, [astState]);
 
   // Live preview calculation for Phone Edit mode
   useEffect(() => {
@@ -775,24 +774,34 @@ export default function App() {
     }
   }, [astState.root, editorMode, justCommitted, angleMode, variables, lastAns, displayFormat, fixDigits, sciDigits]);
 
-  const handleInsertHistoryResult = useCallback((valStr: string) => {
+  const handleInsertHistoryResult = useCallback((payload: InsertedResultPayload) => {
     playKeyClick('num');
     triggerHaptic('num');
     setActiveHistoryId(null);
-    const cleanStr = valStr.replace(/^=\s*/, '');
-    const parsed = parseStringToAst(cleanStr);
-    if (astState.root.length === 0 || isCalculated) {
-      setAstState(parsed);
-      setIsCalculated(false);
-      setErrorMessage(null);
-    } else {
-      setAstState((prev) => ({
-        ...prev,
-        root: [...prev.root, ...parsed.root],
-        cursor: { slotId: 'root', offset: prev.root.length + parsed.root.length },
-      }));
+    setErrorMessage(null);
+    pushUndoState(astState);
+
+    const cleanDisplay = payload.display.replace(/^=\s*/, '');
+    let numericVal = payload.numericVal;
+    let exactRes = payload.exactResult;
+    if (typeof numericVal !== 'number' || !isFinite(numericVal)) {
+      numericVal = rawNumericVal;
+      if (cleanDisplay === result && cleanDisplay === lastExactResult) {
+        exactRes = lastExactResult;
+      }
     }
-  }, [astState.root.length, isCalculated]);
+
+    const startFresh = isCalculated || (editorMode === 'PHONE' && justCommitted);
+    if (startFresh) {
+      setAstState(insertValueNode(createInitialAstState(), numericVal, cleanDisplay, exactRes));
+    } else {
+      setAstState((prev) => insertValueNode(prev, numericVal, cleanDisplay, exactRes));
+    }
+    setIsCalculated(false);
+    setJustCommitted(false);
+    setSdCycleState(0);
+    setEngStep(0);
+  }, [astState, isCalculated, editorMode, justCommitted, rawNumericVal, result, lastExactResult]);
 
   const commitPendingHistory = useCallback(() => {}, []);
 
@@ -1502,14 +1511,18 @@ export default function App() {
     let currentState = astState;
     if (editorMode === 'PHONE') {
       if (justCommitted) {
-        currentState = createInitialAstState();
+        currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
+        setSdCycleState(0);
+        setEngStep(0);
       }
     } else if (isCalculated) {
       commitPendingHistory();
-      currentState = createInitialAstState();
+      currentState = parseStringToAst('Ans');
       setIsCalculated(false);
+      setSdCycleState(0);
+      setEngStep(0);
     }
 
     setAstState(insertFraction(currentState));
@@ -1625,11 +1638,15 @@ export default function App() {
         currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
+        setSdCycleState(0);
+        setEngStep(0);
       }
     } else if (isCalculated) {
       commitPendingHistory();
       currentState = parseStringToAst('Ans');
       setIsCalculated(false);
+      setSdCycleState(0);
+      setEngStep(0);
     }
 
     setAstState(insertPower(currentState));
@@ -1671,6 +1688,39 @@ export default function App() {
     if (alphaActive) setAlphaActive(false);
   };
 
+  // Natural Display: Scientific Notation Key (×10ˣ -> ×10^□ superscript template)
+  const handleScientificTenPowerKey = () => {
+    if (isPoweredOff || displayMenu !== 'NONE') return;
+    playKeyClick('func');
+    setKeystrokes((k) => k + 1);
+
+    if (modeState.mode !== 'CALC') {
+      const handled = currentModeModule.handleKey('×10^(', modeContext);
+      if (handled) return;
+    }
+
+    if (errorMessage) setErrorMessage(null);
+    setActiveHistoryId(null);
+    pushUndoState(astState);
+
+    let currentState = astState;
+    if (editorMode === 'PHONE') {
+      if (justCommitted) {
+        currentState = parseStringToAst('Ans');
+        setJustCommitted(false);
+        setIsCalculated(false);
+      }
+    } else if (isCalculated) {
+      commitPendingHistory();
+      currentState = parseStringToAst('Ans');
+      setIsCalculated(false);
+    }
+
+    setAstState(insertScientificTenPower(currentState));
+    if (shiftActive) setShiftActive(false);
+    if (alphaActive) setAlphaActive(false);
+  };
+
   // Postfix Operator Keys: x², x³, x⁻¹, x!, °, %
   const handlePostfixKey = (op: PostfixOp) => {
     if (isPoweredOff || displayMenu !== 'NONE') return;
@@ -1692,11 +1742,15 @@ export default function App() {
         currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
+        setSdCycleState(0);
+        setEngStep(0);
       }
     } else if (isCalculated) {
       commitPendingHistory();
       currentState = parseStringToAst('Ans');
       setIsCalculated(false);
+      setSdCycleState(0);
+      setEngStep(0);
     }
 
     setAstState(insertPostfix(currentState, op));
@@ -1737,15 +1791,13 @@ export default function App() {
     playKeyClick('action');
     setKeystrokes((k) => k + 1);
 
-    if (editorMode === 'PHONE') {
-      setJustCommitted(false);
-    }
-
     if (modeState.mode !== 'CALC') {
       const handled = currentModeModule.handleKey('DEL', modeContext);
       if (handled) return;
     }
 
+    setJustCommitted(false);
+    setIsCalculated(false);
     setActiveHistoryId(null);
     pushUndoState(astState);
     setAstState(deleteAst(astState));
@@ -1844,6 +1896,8 @@ export default function App() {
       const navUp = navigateAst(astState, 'up');
       if (navUp !== astState && (navUp.cursor.slotId !== astState.cursor.slotId || navUp.cursor.offset !== astState.cursor.offset)) {
         setAstState(navUp);
+        setIsCalculated(false);
+        setJustCommitted(false);
         setActiveHistoryId(null);
         return;
       }
@@ -1864,6 +1918,8 @@ export default function App() {
       const navDown = navigateAst(astState, 'down');
       if (navDown !== astState && (navDown.cursor.slotId !== astState.cursor.slotId || navDown.cursor.offset !== astState.cursor.offset)) {
         setAstState(navDown);
+        setIsCalculated(false);
+        setJustCommitted(false);
         setActiveHistoryId(null);
         return;
       }
@@ -1888,6 +1944,8 @@ export default function App() {
       return;
     }
 
+    setJustCommitted(false);
+    setIsCalculated(false);
     setActiveHistoryId(null);
     const dirMap = {
       LEFT: 'left' as const,
@@ -2316,6 +2374,7 @@ export default function App() {
                           lastValidPreviewResult={lastValidPreviewResult}
                           onCursorTouched={() => {
                             setJustCommitted(false);
+                            setIsCalculated(false);
                             setActiveHistoryId(null);
                           }}
                         />
@@ -3635,7 +3694,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleToken('×10^('),
+                  () => handleScientificTenPowerKey(),
                   () => handleToken('π'),
                   () => handleToken('e')
                 )}
@@ -3693,6 +3752,14 @@ export default function App() {
         onClose={() => setIsHistorySheetOpen(false)}
         history={history}
         onLoadCard={handleLoadHistoryCard}
+        onInsertResult={(item) => {
+          handleInsertHistoryResult({
+            numericVal: item.numericVal,
+            display: item.result,
+            exactResult: item.result === item.exactResult ? item.exactResult : undefined,
+          });
+          setIsHistorySheetOpen(false);
+        }}
         onTogglePin={handleTogglePinHistory}
         onDeleteItem={handleDeleteHistoryItem}
         onClearHistory={handleClearHistory}

@@ -66,15 +66,26 @@ export function toSuperscript(str: string | number): string {
     .join('');
 }
 
+function formatMantissaExp(val: number, sigFigs: number): { mantissa: number; exp: number } {
+  const [mStr, eStr] = Math.abs(val).toExponential(sigFigs - 1).split('e');
+  let exp = parseInt(eStr, 10);
+  let mantissa = parseFloat(mStr) * (val < 0 ? -1 : 1);
+  if (Math.abs(mantissa) >= 10) {
+    mantissa /= 10;
+    exp += 1;
+  }
+  return { mantissa, exp };
+}
+
 // Engineering notation (powers of 3)
 export function toEngineering(val: number, engStep = 0): string {
   if (!isFinite(val) || val === 0) return '0';
-  const exp = Math.floor(Math.log10(Math.abs(val)));
+  const { mantissa, exp } = formatMantissaExp(val, 10);
   const baseEngExp = Math.floor(exp / 3) * 3 + engStep * 3;
-  const mantissa = val / Math.pow(10, baseEngExp);
-  const roundedMantissa = parseFloat(mantissa.toPrecision(10));
-  if (baseEngExp === 0) return `${roundedMantissa}`;
-  return `${roundedMantissa}×10${toSuperscript(baseEngExp)}`;
+  const shift = exp - baseEngExp;
+  const engMantissa = parseFloat((mantissa * Math.pow(10, shift)).toPrecision(10));
+  if (baseEngExp === 0) return `${engMantissa}`;
+  return `${engMantissa}×10${toSuperscript(baseEngExp)}`;
 }
 
 // Format numbers according to authentic fx-570EX standard
@@ -88,7 +99,7 @@ export function formatResult(
   if (isNaN(val)) return 'Math ERROR';
   if (!isFinite(val)) return 'Math ERROR';
 
-  if (Math.abs(val) < 1e-15) return '0';
+  if (val === 0) return '0';
 
   if (format === 'FIX') {
     return val.toFixed(Math.max(0, Math.min(9, fixDigits)));
@@ -96,15 +107,9 @@ export function formatResult(
 
   if (format === 'SCI') {
     const sigFigs = sciDigits === 0 ? 10 : Math.max(1, Math.min(10, sciDigits));
-    let exp = Math.floor(Math.log10(Math.abs(val)));
-    let mantissa = val / Math.pow(10, exp);
-    let roundedMantissa = parseFloat(mantissa.toPrecision(sigFigs));
-    if (Math.abs(roundedMantissa) >= 10) {
-      roundedMantissa /= 10;
-      exp += 1;
-    }
-    exp += engStep * 3;
-    const finalMantissa = parseFloat((roundedMantissa * Math.pow(10, -engStep * 3)).toPrecision(10));
+    const { mantissa, exp: baseExp } = formatMantissaExp(val, sigFigs);
+    const exp = baseExp + engStep * 3;
+    const finalMantissa = parseFloat((mantissa * Math.pow(10, -engStep * 3)).toPrecision(10));
     return `${finalMantissa}×10${toSuperscript(exp)}`;
   }
 
@@ -119,14 +124,8 @@ export function formatResult(
   const abs = Math.abs(val);
 
   if (abs >= 1e10 || abs < threshold) {
-    let exp = Math.floor(Math.log10(abs));
-    let mantissa = val / Math.pow(10, exp);
-    let roundedMantissa = parseFloat(mantissa.toPrecision(10));
-    if (Math.abs(roundedMantissa) >= 10) {
-      roundedMantissa /= 10;
-      exp += 1;
-    }
-    return `${roundedMantissa}×10${toSuperscript(exp)}`;
+    const { mantissa, exp } = formatMantissaExp(val, 10);
+    return `${mantissa}×10${toSuperscript(exp)}`;
   }
 
   // Normal decimal display within range [threshold, 1e10)
@@ -346,13 +345,15 @@ export const METRIC_CONVERSIONS = [
   { code: '40', name: 'cal ➔ J', fn: (v: number) => v * 4.184 },
 ];
 
-// Clean floating-point noise (e.g. 2.0000000001 -> 2, 1e-16 -> 0)
-export function cleanFloatNoise(val: number): number {
-  if (!isFinite(val) || isNaN(val)) return val;
-  if (Math.abs(val) < 1e-13) return 0;
+// Clean floating-point cancellation noise using relative tolerance only (never zeroes genuinely tiny numbers)
+export function cleanFloatNoise(val: number, refScale?: number): number {
+  if (!isFinite(val) || isNaN(val) || val === 0) return val === 0 ? 0 : val;
+  if (refScale !== undefined && refScale > 0 && Math.abs(val) <= 1e-12 * refScale) {
+    return 0;
+  }
   if (Math.abs(val) <= 1e9) {
     const nearest = Math.round(val);
-    if (Math.abs(val - nearest) <= 1e-9 * Math.max(1, Math.abs(nearest))) {
+    if (nearest !== 0 && Math.abs(val - nearest) <= 1e-9 * Math.abs(nearest)) {
       return nearest;
     }
   }
@@ -441,11 +442,14 @@ function adaptiveGaussKronrod(
 
   const startTime = Date.now();
 
+  let maxIntegrand = 0;
   const evalSafe = (x: number): number => {
     const y = evalFn(x);
     if (isNaN(y) || !isFinite(y)) {
       throw new Error('Math ERROR');
     }
+    const ay = Math.abs(y);
+    if (ay > maxIntegrand) maxIntegrand = ay;
     return y;
   };
 
@@ -502,7 +506,7 @@ function adaptiveGaussKronrod(
   if (!isFinite(raw) || isNaN(raw)) {
     throw new Error('Math ERROR');
   }
-  return cleanFloatNoise(raw);
+  return cleanFloatNoise(raw, maxIntegrand * Math.abs(b - a));
 }
 
 // Numerical Definite Integration using Adaptive Gauss-Kronrod G7-K15
@@ -697,7 +701,8 @@ function riddersDerivative(
     throw new Error("Can't Solve");
   }
 
-  return cleanFloatNoise(ans);
+  const derivScale = Math.max(Math.abs(f0) / Math.max(hh, 1e-15), Math.abs(dRight1), Math.abs(dLeft1));
+  return cleanFloatNoise(ans, derivScale);
 }
 
 export function computeDerivative(
@@ -1878,6 +1883,25 @@ function astNodesToTokens(
   while (i < nodes.length) {
     const node = nodes[i];
     const offset = i;
+
+    if (node.type === 'value') {
+      let calcVal: CalcValue;
+      const fracMatch = node.exactResult ? /^(-?\d+)\/(\d+)$/.exec(node.exactResult) : null;
+      if (fracMatch) {
+        calcVal = makeRational(BigInt(fracMatch[1]), BigInt(fracMatch[2]));
+      } else if (
+        Number.isInteger(node.numericVal) &&
+        Math.abs(node.numericVal) <= Number.MAX_SAFE_INTEGER &&
+        node.exactResult !== undefined
+      ) {
+        calcVal = makeRational(BigInt(node.numericVal), 1n);
+      } else {
+        calcVal = { type: 'decimal', value: node.numericVal };
+      }
+      tokens.push({ type: 'VALUE', value: calcVal, offset });
+      i++;
+      continue;
+    }
 
     if (node.type === 'token') {
       const val = node.val;

@@ -4,53 +4,53 @@ import { HistoryItem } from '../calcEngine';
 import { parseStringToAst } from '../mathAst';
 import { NaturalDisplay } from './NaturalDisplay';
 import { playKeyClick } from '../audioFeedback';
-import { CachedRect, useFlipModalTransition } from '../motion/useMotionEffects';
 
 interface HistorySheetProps {
-  isOpen: boolean;
+  sheetRef: React.RefObject<HTMLDivElement | null>;
+  isExpanded: boolean;
   onClose: () => void;
+  onHandlePointerDown: (e: React.PointerEvent) => void;
+  onHandlePointerMove: (e: React.PointerEvent) => void;
+  onHandlePointerUp: (e: React.PointerEvent) => void;
   history: HistoryItem[];
   onLoadCard: (item: HistoryItem) => void;
+  onInsertResult?: (item: HistoryItem) => void;
   onTogglePin: (id: string) => void;
   onDeleteItem: (id: string) => void;
   onClearHistory: () => void;
-  originRect?: CachedRect | null;
 }
 
 export const HistorySheet: React.FC<HistorySheetProps> = ({
-  isOpen,
+  sheetRef,
+  isExpanded,
   onClose,
+  onHandlePointerDown,
+  onHandlePointerMove,
+  onHandlePointerUp,
   history,
   onLoadCard,
+  onInsertResult,
   onTogglePin,
   onDeleteItem,
   onClearHistory,
-  originRect = null,
 }) => {
   const [actionItemId, setActionItemId] = useState<string | null>(null);
   const [copiedNotice, setCopiedNotice] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [dragOffsetY, setDragOffsetY] = useState(0);
 
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const swipeStartYRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef<boolean>(false);
   const pointerStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
-  const isVisible = useFlipModalTransition(isOpen, originRect, sheetRef, backdropRef);
-
   useEffect(() => {
-    if (!isOpen) {
+    if (!isExpanded) {
       setActionItemId(null);
       setShowClearConfirm(false);
-      setDragOffsetY(0);
     }
-  }, [isOpen]);
+  }, [isExpanded]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isExpanded) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (actionItemId) setActionItemId(null);
@@ -59,7 +59,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, actionItemId, onClose]);
+  }, [isExpanded, actionItemId, onClose]);
 
   const pinnedItems = history.filter((item) => item.pinned);
   const unpinnedItems = history.filter((item) => !item.pinned);
@@ -119,37 +119,6 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
     setActionItemId(null);
   };
 
-  // Swipe-up gesture on sheet handle / header to close
-  const handleSwipeStart = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement | null)?.closest('button')) {
-      swipeStartYRef.current = null;
-      return;
-    }
-    swipeStartYRef.current = e.clientY;
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-  };
-
-  const handleSwipeMove = (e: React.PointerEvent) => {
-    if (swipeStartYRef.current === null) return;
-    const delta = e.clientY - swipeStartYRef.current;
-    if (delta < 0) {
-      setDragOffsetY(delta);
-    }
-  };
-
-  const handleSwipeEnd = (e: React.PointerEvent) => {
-    if (swipeStartYRef.current === null) return;
-    const delta = e.clientY - swipeStartYRef.current;
-    swipeStartYRef.current = null;
-    if (delta < -36) {
-      setDragOffsetY(0);
-      playKeyClick('action');
-      onClose();
-    } else {
-      setDragOffsetY(0);
-    }
-  };
-
   const renderCard = (item: HistoryItem) => {
     const isActionsOpen = actionItemId === item.id;
     const nodes = item.astRoot && item.astRoot.length > 0
@@ -171,20 +140,19 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
           setActionItemId((prev) => (prev === item.id ? null : item.id));
         }}
         onClick={() => handleCardClick(item)}
-        className={`rounded-2xl px-4 py-3 border cursor-pointer select-none ${
+        className={`rounded-2xl px-3.5 py-2.5 border cursor-pointer select-none ${
           item.pinned
             ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)]'
             : 'bg-[var(--m3-surface-container)] hover:bg-[var(--m3-surface-container-high)] border-[var(--m3-outline-variant)]'
         }`}
       >
-        {/* Top Row: Structured AST Expression + Optional Pin */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0 text-[var(--m3-on-surface)]/85 overflow-x-auto no-scrollbar">
             <NaturalDisplay
               nodes={nodes}
               readOnly
               inheritColor
-              fontSize={15}
+              fontSize={14}
             />
           </div>
           {item.pinned && (
@@ -192,28 +160,35 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
           )}
         </div>
 
-        {/* Bottom Row: Result right-aligned */}
-        <div className="mt-1 flex items-baseline justify-between gap-2">
-          <span className="text-[11px] text-[var(--m3-on-surface-variant)]">
+        <div className="mt-0.5 flex items-baseline justify-between gap-2">
+          <span className="text-[10.5px] text-[var(--m3-on-surface-variant)]">
             {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
-          <span className="text-lg font-bold tabular-nums text-[var(--m3-on-surface)] text-right truncate">
+          <span
+            onClick={(e) => {
+              if (!onInsertResult || longPressTriggeredRef.current || actionItemId === item.id) return;
+              e.stopPropagation();
+              playKeyClick('num');
+              onInsertResult(item);
+            }}
+            title="Tap to insert result"
+            className="text-base font-bold tabular-nums text-[var(--m3-on-surface)] text-right truncate hover:text-[var(--ui-accent)]"
+          >
             = {item.result}
           </span>
         </div>
 
-        {/* Long-press Contextual Actions */}
         {isActionsOpen && (
           <div
             data-testid={`history-card-actions-${item.id}`}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="mt-2.5 pt-2.5 border-t border-[var(--m3-outline-variant)] grid grid-cols-2 gap-1.5"
+            className="mt-2 pt-2 border-t border-[var(--m3-outline-variant)] grid grid-cols-2 gap-1.5"
           >
             <button
               type="button"
               onClick={() => handleCopyText(item.result, 'Copied result')}
-              className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--ui-accent-tonal)] text-[var(--m3-on-surface)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
+              className="min-h-[36px] px-2.5 py-1 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--ui-accent-tonal)] text-[var(--m3-on-surface)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Copy className="w-3.5 h-3.5 text-[var(--ui-accent)]" />
               <span>Copy result</span>
@@ -221,7 +196,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
             <button
               type="button"
               onClick={() => handleCopyText(item.expression, 'Copied expression')}
-              className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--ui-accent-tonal)] text-[var(--m3-on-surface)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
+              className="min-h-[36px] px-2.5 py-1 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--ui-accent-tonal)] text-[var(--m3-on-surface)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Copy className="w-3.5 h-3.5 text-[var(--ui-accent)]" />
               <span>Copy expr</span>
@@ -233,7 +208,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
                 onTogglePin(item.id);
                 setActionItemId(null);
               }}
-              className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--ui-accent-tonal)] text-[var(--m3-on-surface)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
+              className="min-h-[36px] px-2.5 py-1 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--ui-accent-tonal)] text-[var(--m3-on-surface)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
             >
               {item.pinned ? (
                 <>
@@ -254,7 +229,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
                 onDeleteItem(item.id);
                 setActionItemId(null);
               }}
-              className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--m3-surface)] text-[var(--ui-danger)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
+              className="min-h-[36px] px-2.5 py-1 rounded-xl bg-[var(--m3-surface-container-high)] hover:bg-[var(--m3-surface)] text-[var(--ui-danger)] text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete</span>
@@ -267,145 +242,132 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
 
   return (
     <div
-      ref={backdropRef}
-      data-testid="history-sheet-backdrop"
-      aria-hidden={!isVisible}
+      ref={sheetRef}
+      data-testid="history-sheet"
+      aria-hidden={!isExpanded}
       style={{
-        visibility: isVisible ? 'visible' : 'hidden',
-        pointerEvents: isOpen ? 'auto' : 'none',
+        visibility: 'hidden',
+        opacity: 0,
+        pointerEvents: 'none',
       }}
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex justify-center items-start bg-[var(--bg)]"
+      className="absolute inset-0 z-40 bg-[var(--m3-surface)] text-[var(--m3-on-surface)] border-b border-[var(--m3-outline-variant)] shadow-md flex flex-col overflow-hidden"
     >
+      {/* Top Sheet Header */}
       <div
-        ref={sheetRef}
-        data-testid="history-sheet"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          transform: dragOffsetY < 0 ? `translate3d(0, ${dragOffsetY}px, 0)` : undefined,
-          transformOrigin: 'center center',
-        }}
-        className="w-full max-w-[440px] max-h-[82dvh] bg-[var(--m3-surface)] text-[var(--m3-on-surface)] border-x border-b border-[var(--m3-outline-variant)] rounded-b-[24px] shadow-lg flex flex-col overflow-hidden"
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={onHandlePointerUp}
+        className="px-4 pt-[max(12px,env(safe-area-inset-top,12px))] pb-2.5 border-b border-[var(--m3-outline-variant)] flex items-center justify-between touch-none shrink-0"
       >
-        {/* Top Sheet Header (Shared 16px / 8px-grid horizontal margin) */}
-        <div
-          onPointerDown={handleSwipeStart}
-          onPointerMove={handleSwipeMove}
-          onPointerUp={handleSwipeEnd}
-          className="px-4 pt-[max(12px,env(safe-area-inset-top,12px))] pb-3 border-b border-[var(--m3-outline-variant)] flex items-center justify-between touch-none shrink-0"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold tracking-tight text-[var(--m3-on-surface)]">
-              History
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold tracking-tight text-[var(--m3-on-surface)]">
+            History
+          </span>
+          {copiedNotice && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--ui-accent)]">
+              <Check className="w-3 h-3" />
+              {copiedNotice}
             </span>
-            {copiedNotice && (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--ui-accent)]">
-                <Check className="w-3.5 h-3.5" />
-                {copiedNotice}
-              </span>
-            )}
-          </div>
+          )}
+        </div>
 
-          <div className="flex items-center gap-1.5">
-            {history.length > 0 && (
-              showClearConfirm ? (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playKeyClick('action');
-                      onClearHistory();
-                      setShowClearConfirm(false);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-[var(--ui-danger)] text-[var(--ui-accent-text)] text-xs font-semibold cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowClearConfirm(false)}
-                    className="px-2 py-1 rounded-lg bg-[var(--m3-surface-container-high)] text-[var(--m3-on-surface-variant)] text-xs cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
+        <div className="flex items-center gap-1">
+          {history.length > 0 && (
+            showClearConfirm ? (
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => {
                     playKeyClick('action');
-                    setShowClearConfirm(true);
+                    onClearHistory();
+                    setShowClearConfirm(false);
                   }}
-                  aria-label="Clear history"
-                  className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--ui-danger)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
+                  className="px-2 py-0.5 rounded-lg bg-[var(--ui-danger)] text-[var(--ui-accent-text)] text-[11px] font-semibold cursor-pointer"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  Clear
                 </button>
-              )
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                playKeyClick('action');
-                onClose();
-              }}
-              aria-label="Close history"
-              className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--m3-on-surface)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Scrollable History Cards */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
-          {history.length === 0 ? (
-            <div className="py-10 text-center">
-              <p className="text-sm font-medium text-[var(--m3-on-surface-variant)]">
-                No calculations yet
-              </p>
-              <p className="text-xs text-[var(--m3-on-surface-variant)]/75 mt-1">
-                Tap any card to load it, or press & hold for actions
-              </p>
-            </div>
-          ) : (
-            <>
-              {pinnedItems.length > 0 && (
-                <div className="space-y-2 pb-1">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ui-accent)] px-0.5">
-                    Pinned
-                  </div>
-                  {pinnedItems.map(renderCard)}
-                </div>
-              )}
-              {unpinnedItems.length > 0 && (
-                <div className="space-y-2">
-                  {pinnedItems.length > 0 && (
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--m3-on-surface-variant)] px-0.5 pt-1">
-                      Recent
-                    </div>
-                  )}
-                  {unpinnedItems.map(renderCard)}
-                </div>
-              )}
-            </>
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="px-2 py-0.5 rounded-lg bg-[var(--m3-surface-container-high)] text-[var(--m3-on-surface-variant)] text-[11px] cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  playKeyClick('action');
+                  setShowClearConfirm(true);
+                }}
+                aria-label="Clear history"
+                className="min-w-[32px] min-h-[32px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--ui-danger)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )
           )}
+          <button
+            type="button"
+            onClick={() => {
+              playKeyClick('action');
+              onClose();
+            }}
+            aria-label="Close history"
+            className="min-w-[32px] min-h-[32px] flex items-center justify-center rounded-xl text-[var(--m3-on-surface-variant)] hover:text-[var(--m3-on-surface)] hover:bg-[var(--m3-surface-container-high)] cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
+      </div>
 
-        {/* Bottom Swipe-Up Grab Handle */}
-        <div
-          data-testid="history-sheet-close-handle"
-          onPointerDown={handleSwipeStart}
-          onPointerMove={handleSwipeMove}
-          onPointerUp={handleSwipeEnd}
-          onClick={onClose}
-          className="w-full py-3 flex flex-col items-center justify-center gap-1 border-t border-[var(--m3-outline-variant)] bg-[var(--m3-surface-container)] cursor-pointer touch-none shrink-0"
-        >
-          <div className="w-10 h-1 rounded-full bg-[var(--m3-on-surface-variant)]/45" />
-          <span className="text-[10px] text-[var(--m3-on-surface-variant)]/80">
-            Tap card to load · Hold for actions · Swipe up to close
-          </span>
-        </div>
+      {/* Scrollable History Cards */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2.5 space-y-2 no-scrollbar">
+        {history.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-xs font-medium text-[var(--m3-on-surface-variant)]">
+              No calculations yet
+            </p>
+            <p className="text-[11px] text-[var(--m3-on-surface-variant)]/75 mt-0.5">
+              Tap card to load · Hold for actions
+            </p>
+          </div>
+        ) : (
+          <>
+            {pinnedItems.length > 0 && (
+              <div className="space-y-1.5 pb-1">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-accent)] px-0.5">
+                  Pinned
+                </div>
+                {pinnedItems.map(renderCard)}
+              </div>
+            )}
+            {unpinnedItems.length > 0 && (
+              <div className="space-y-1.5">
+                {pinnedItems.length > 0 && (
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--m3-on-surface-variant)] px-0.5 pt-0.5">
+                    Recent
+                  </div>
+                )}
+                {unpinnedItems.map(renderCard)}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Bottom Drag / Close Handle */}
+      <div
+        data-testid="history-sheet-close-handle"
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={onHandlePointerUp}
+        className="w-full pt-3 pb-[max(12px,env(safe-area-inset-bottom,12px))] flex flex-col items-center justify-center gap-0.5 border-t border-[var(--m3-outline-variant)] bg-[var(--m3-surface-container)] cursor-grab active:cursor-grabbing touch-none shrink-0"
+      >
+        <div className="w-9 h-1 rounded-full bg-[var(--m3-on-surface-variant)]/50" />
       </div>
     </div>
   );

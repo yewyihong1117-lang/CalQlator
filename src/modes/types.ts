@@ -95,6 +95,8 @@ export interface ModeContext {
   // Display helpers
   angleMode: 'DEG' | 'RAD' | 'GRA';
   displayFormat: 'NORM1' | 'NORM2' | 'FIX' | 'SCI';
+  fixDigits?: number;
+  sciDigits?: number;
 }
 
 export interface ModeModule {

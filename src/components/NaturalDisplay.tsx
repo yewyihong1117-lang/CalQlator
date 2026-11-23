@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { MathNode, CursorPosition } from '../mathAst';
+import { MathNode, CursorPosition, getSlotNodes } from '../mathAst';
 import { IntegralSvg, RadicalHookSvg, HollowBoxSvg, OperatorSvg, SigmaSvg } from './MathGlyphs';
 
 interface NaturalDisplayProps {
@@ -35,11 +35,12 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
     if (activeCursorEl) {
       const cRect = container.getBoundingClientRect();
       const kRect = activeCursorEl.getBoundingClientRect();
-      const pad = 16;
+      const scale = container.clientWidth > 0 && cRect.width > 0 ? cRect.width / container.clientWidth : 1;
+      const pad = 16 * scale;
       if (kRect.left < cRect.left + pad) {
-        container.scrollLeft -= cRect.left + pad - kRect.left;
+        container.scrollLeft -= (cRect.left + pad - kRect.left) / scale;
       } else if (kRect.right > cRect.right - pad) {
-        container.scrollLeft += kRect.right - (cRect.right - pad);
+        container.scrollLeft += (kRect.right - (cRect.right - pad)) / scale;
       }
     } else {
       container.scrollLeft = container.scrollWidth;
@@ -143,11 +144,6 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       }
       return (
         <span
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onSetCursor?.(slotId, 0);
-          }}
           className={`inline-flex items-center justify-center w-[0.95em] h-[1.05em] text-[0.88em] leading-none align-baseline rounded-[0.15em] cursor-pointer font-sans select-none ${
             isCurrentSlot
               ? 'border border-dashed border-current bg-current/15 opacity-100'
@@ -163,49 +159,33 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
     for (let i = 0; i <= slotNodes.length; i++) {
       elements.push(renderCursor(slotId, i));
       if (i < slotNodes.length) {
-        elements.push(renderNode(slotNodes[i], slotId, i));
+        elements.push(renderNode(slotNodes[i], slotId, i, true));
       }
     }
 
     return (
-      <span
-        onPointerDown={
-          readOnly
-            ? undefined
-            : (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onSetCursor?.(slotId, slotNodes.length);
-              }
-        }
-        className="inline-flex items-baseline flex-nowrap whitespace-nowrap align-baseline"
-      >
+      <span className="inline-flex items-baseline flex-nowrap whitespace-nowrap align-baseline">
         {elements}
       </span>
     );
   };
 
-  // Render individual math node (token, fraction, integral, derivative, sqrt, power, postfix, logBase)
-  const renderNode = (node: MathNode, parentSlotId: string, index: number) => {
+  // Render individual math node (token, value, fraction, integral, derivative, sqrt, power, postfix, logBase)
+  const renderNode = (node: MathNode, parentSlotId: string, index: number, trackInSlot = true) => {
     const isPendingDelete = !readOnly && pendingDeleteTemplateId === node.id;
     const pendingDeleteClass = isPendingDelete
       ? 'border border-dashed border-[var(--ui-danger)]'
       : 'border border-transparent';
+    const astAttrs = trackInSlot
+      ? { 'data-ast-slot': parentSlotId, 'data-ast-index': index }
+      : {};
 
     if (node.type === 'token') {
       return (
         <span
           key={node.id}
+          {...astAttrs}
           data-token={node.val}
-          onPointerDown={
-            readOnly
-              ? undefined
-              : (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onSetCursor?.(parentSlotId, index + 1);
-                }
-          }
           className={`inline-block align-baseline px-[0.04em] tracking-wide select-none ${
             readOnly ? '' : 'cursor-pointer hover:opacity-80 transition-opacity'
           }`}
@@ -215,18 +195,40 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       );
     }
 
+    if (node.type === 'value') {
+      return (
+        <span
+          key={node.id}
+          {...astAttrs}
+          data-node-type="value"
+          className={`inline-block align-baseline px-[0.06em] tracking-wide select-none ${
+            readOnly ? '' : 'cursor-pointer hover:opacity-80 transition-opacity'
+          }`}
+        >
+          {node.display}
+        </span>
+      );
+    }
+
     if (node.type === 'frac') {
       return (
         <span
           key={node.id}
+          {...astAttrs}
           className={`inline-flex flex-col items-center justify-center align-middle mx-[0.12em] rounded px-[0.06em] leading-none ${pendingDeleteClass}`}
         >
           {/* Numerator Box */}
-          <span className="w-full flex items-baseline justify-center pb-[0.1em] border-b-[1.55px] border-current min-w-[1.15em] text-center text-[0.76em] leading-[1.1]">
+          <span
+            data-slot-id={`${node.id}_num`}
+            className="w-full flex items-baseline justify-center pb-[0.1em] border-b-[1.55px] border-current min-w-[1.15em] text-center text-[0.76em] leading-[1.1]"
+          >
             {renderSlotList(node.num, `${node.id}_num`, '□')}
           </span>
           {/* Denominator Box */}
-          <span className="w-full flex items-baseline justify-center pt-[0.1em] min-w-[1.15em] text-center text-[0.76em] leading-[1.1]">
+          <span
+            data-slot-id={`${node.id}_den`}
+            className="w-full flex items-baseline justify-center pt-[0.1em] min-w-[1.15em] text-center text-[0.76em] leading-[1.1]"
+          >
             {renderSlotList(node.den, `${node.id}_den`, '□')}
           </span>
         </span>
@@ -237,24 +239,34 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       return (
         <span
           key={node.id}
+          {...astAttrs}
           data-glyph="integral"
           className={`inline-flex items-center align-middle mx-[0.14em] rounded px-[0.06em] ${pendingDeleteClass}`}
         >
           {/* Integral Symbol with Upper Limit at Top and Lower Limit at Bottom */}
           <span className="inline-flex flex-col items-center justify-center leading-none select-none mr-[0.22em]">
-            <span className="text-[0.54em] leading-none mb-[0.08em] flex items-baseline justify-center">
+            <span
+              data-slot-id={`${node.id}_upper`}
+              className="text-[0.54em] leading-none mb-[0.08em] flex items-baseline justify-center"
+            >
               {renderSlotList(node.upper, `${node.id}_upper`, '□')}
             </span>
             <span data-glyph="integral-svg" className="inline-flex items-center justify-center text-current select-none leading-none my-[0.04em]">
               <IntegralSvg className="w-[0.74em] h-[1.42em]" />
             </span>
-            <span className="text-[0.54em] leading-none mt-[0.08em] flex items-baseline justify-center">
+            <span
+              data-slot-id={`${node.id}_lower`}
+              className="text-[0.54em] leading-none mt-[0.08em] flex items-baseline justify-center"
+            >
               {renderSlotList(node.lower, `${node.id}_lower`, '□')}
             </span>
           </span>
 
           {/* Integrand Box */}
-          <span className="inline-flex items-baseline text-[0.9em] mr-[0.12em]">
+          <span
+            data-slot-id={`${node.id}_integrand`}
+            className="inline-flex items-baseline text-[0.9em] mr-[0.12em]"
+          >
             {renderSlotList(node.integrand, `${node.id}_integrand`, '□')}
           </span>
 
@@ -271,6 +283,7 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       return (
         <span
           key={node.id}
+          {...astAttrs}
           className={`inline-flex items-center align-middle mx-[0.12em] rounded px-[0.06em] ${pendingDeleteClass}`}
         >
           {/* d/dx Stacked Prefix */}
@@ -286,7 +299,9 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
           {/* Expression Box inside Parentheses */}
           <span className="inline-flex items-baseline text-[0.92em]">
             <span className="font-math-serif not-italic opacity-80 mr-[0.05em]">(</span>
-            {renderSlotList(node.expr, `${node.id}_expr`, '□')}
+            <span data-slot-id={`${node.id}_expr`} className="inline-flex items-baseline">
+              {renderSlotList(node.expr, `${node.id}_expr`, '□')}
+            </span>
             <span className="font-math-serif not-italic opacity-80 ml-[0.05em]">)</span>
           </span>
 
@@ -300,7 +315,9 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
                 {varName}
                 <span className="not-italic">=</span>
               </span>
-              {renderSlotList(node.at, `${node.id}_at`, '□')}
+              <span data-slot-id={`${node.id}_at`} className="inline-flex items-baseline">
+                {renderSlotList(node.at, `${node.id}_at`, '□')}
+              </span>
             </span>
           </span>
         </span>
@@ -311,13 +328,17 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       return (
         <span
           key={node.id}
+          {...astAttrs}
           data-glyph="sqrt"
           className={`inline-flex items-stretch align-baseline mx-[0.08em] rounded ${pendingDeleteClass}`}
         >
           {/* Radical Sign */}
           <RadicalHookSvg className="w-[0.58em] self-stretch -mr-[0.02em]" />
           {/* Overbar with Radicand Content */}
-          <span className="border-t-[1.65px] border-current pt-[0.1em] pl-[0.1em] pr-[0.14em] min-w-[0.95em] inline-flex items-baseline">
+          <span
+            data-slot-id={`${node.id}_content`}
+            className="border-t-[1.65px] border-current pt-[0.1em] pl-[0.1em] pr-[0.14em] min-w-[0.95em] inline-flex items-baseline"
+          >
             {renderSlotList(node.content, `${node.id}_content`, '□')}
           </span>
         </span>
@@ -328,12 +349,13 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       return (
         <span
           key={node.id}
+          {...astAttrs}
           className={`inline-flex items-baseline align-baseline rounded ${pendingDeleteClass}`}
         >
-          {/* Base */}
+          {/* Base (atomic relative to outer slot navigation) */}
           <span className="inline-flex items-baseline">
             {node.base.length > 0 ? (
-              node.base.map((b, idx) => renderNode(b, `${node.id}_base`, idx))
+              node.base.map((b, idx) => renderNode(b, `${node.id}_base`, idx, false))
             ) : (
               <span className="inline-flex items-center justify-center w-[0.95em] h-[1.05em] text-[0.88em] leading-none opacity-40">
                 <HollowBoxSvg className="w-[0.68em] h-[0.68em]" />
@@ -341,7 +363,10 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
             )}
           </span>
           {/* Exponent Superscript Slot */}
-          <span className="inline-flex items-baseline -translate-y-[0.42em] ml-[0.04em] text-[0.64em] min-w-[0.75em]">
+          <span
+            data-slot-id={`${node.id}_exp`}
+            className="inline-flex items-baseline -translate-y-[0.42em] ml-[0.04em] text-[0.64em] min-w-[0.75em]"
+          >
             {renderSlotList(node.exp, `${node.id}_exp`, '□')}
           </span>
         </span>
@@ -354,11 +379,12 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       return (
         <span
           key={node.id}
+          {...astAttrs}
           className={`inline-flex items-baseline align-baseline rounded ${pendingDeleteClass}`}
         >
-          {/* Target Nodes */}
+          {/* Target Nodes (atomic relative to outer slot navigation) */}
           <span className="inline-flex items-baseline">
-            {node.target.map((t, idx) => renderNode(t, `${node.id}_target`, idx))}
+            {node.target.map((t, idx) => renderNode(t, `${node.id}_target`, idx, false))}
           </span>
           {/* Postfix Operator Symbol */}
           <span
@@ -378,19 +404,25 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       return (
         <span
           key={node.id}
+          {...astAttrs}
           className={`inline-flex items-baseline align-baseline mx-[0.08em] rounded ${pendingDeleteClass}`}
         >
           <span className="text-[0.92em] font-sans select-none mr-[0.05em]">
             log
           </span>
           {/* Subscript Base */}
-          <span className="inline-flex items-baseline text-[0.62em] translate-y-[0.22em] mr-[0.06em]">
+          <span
+            data-slot-id={`${node.id}_base`}
+            className="inline-flex items-baseline text-[0.62em] translate-y-[0.22em] mr-[0.06em]"
+          >
             {renderSlotList(node.base, `${node.id}_base`, '□')}
           </span>
           {/* Argument in Parentheses */}
           <span className="inline-flex items-baseline text-[0.92em]">
             <span className="font-math-serif not-italic opacity-75 mr-[0.04em]">(</span>
-            {renderSlotList(node.arg, `${node.id}_arg`, '□')}
+            <span data-slot-id={`${node.id}_arg`} className="inline-flex items-baseline">
+              {renderSlotList(node.arg, `${node.id}_arg`, '□')}
+            </span>
             <span className="font-math-serif not-italic opacity-75 ml-[0.04em]">)</span>
           </span>
         </span>
@@ -400,12 +432,49 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
     return null;
   };
 
+  // Hit-test cursor placement against the structured AST node tree
+  const handleContainerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (readOnly || !onSetCursor) return;
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const targetEl = e.target instanceof Element ? (e.target.closest('[data-slot-id]') as HTMLElement | null) : null;
+    const rawSlotId = targetEl && container.contains(targetEl) ? targetEl.getAttribute('data-slot-id') : null;
+    const slotId = rawSlotId && getSlotNodes(nodes, rawSlotId) !== null ? rawSlotId : 'root';
+    const slotNodes = getSlotNodes(nodes, slotId) || nodes;
+
+    if (slotNodes.length === 0) {
+      onSetCursor(slotId, 0);
+      return;
+    }
+
+    const childEls = Array.from(container.querySelectorAll('[data-ast-slot]')).filter(
+      (el) => el.getAttribute('data-ast-slot') === slotId && el.hasAttribute('data-ast-index')
+    ) as HTMLElement[];
+
+    let targetOffset = slotNodes.length;
+    for (const el of childEls) {
+      const idx = Number(el.getAttribute('data-ast-index'));
+      if (Number.isNaN(idx)) continue;
+      const rect = el.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (e.clientX < midX) {
+        targetOffset = idx;
+        break;
+      }
+    }
+
+    onSetCursor(slotId, targetOffset);
+  };
+
   const baseColorClass = inheritColor ? 'text-current' : 'text-[var(--display-text)]';
 
   return (
     <div
       ref={containerRef}
-      onPointerDown={readOnly ? undefined : () => onSetCursor?.('root', nodes.length)}
+      data-slot-id={readOnly ? undefined : 'root'}
+      onPointerDown={readOnly ? undefined : handleContainerPointerDown}
       style={{
         fontSize: fontSize ? `${fontSize}px` : undefined,
         overflowX: 'auto',
