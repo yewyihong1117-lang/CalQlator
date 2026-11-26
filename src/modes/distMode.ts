@@ -1519,16 +1519,16 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-error',
           className:
-            'flex flex-col h-full justify-between p-2.5 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, getDistTitle(data.distType)),
-          React.createElement('span', { className: 'text-[10px] tracking-wider' }, 'DIST')
+          React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)] tracking-wider' }, 'DIST')
         ),
         React.createElement(
           'div',
@@ -1540,7 +1540,7 @@ export const distModeModule: ModeModule = {
           ),
           React.createElement(
             'div',
-            { className: 'text-[11px] text-[var(--display-text)]/70' },
+            { className: 'text-[11px] text-[var(--display-muted)]' },
             'Check domain / parameters'
           )
         ),
@@ -1548,7 +1548,7 @@ export const distModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, '[AC] / [◄] / [►]: Return'),
           React.createElement('span', null, '[OPTN]: Options')
@@ -1567,16 +1567,16 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-submenu',
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, 'Distribution'),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70' }, 'OPTN')
+          React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)]' }, 'OPTN')
         ),
         React.createElement(
           'div',
@@ -1587,10 +1587,10 @@ export const distModeModule: ModeModule = {
               'div',
               {
                 key: it.id,
-                className: `flex items-center gap-2.5 px-2 py-1 rounded text-xs ${
+                className: `flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs border ${
                   isSel
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-semibold'
-                    : 'text-[var(--display-text)]'
+                    ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)] text-[var(--ui-accent)] font-semibold'
+                    : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement(
@@ -1598,8 +1598,8 @@ export const distModeModule: ModeModule = {
                 {
                   className: `font-bold px-1.5 py-0.5 rounded text-[10px] border ${
                     isSel
-                      ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)]'
-                      : 'border-[var(--display-text)]/30 bg-[var(--display-text)]/5'
+                      ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)]'
+                      : 'border-[var(--display-divider)] bg-[var(--display-bg)] text-[var(--display-muted)]'
                   }`,
                 },
                 it.key
@@ -1612,7 +1612,7 @@ export const distModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, '[1]-[2] or [=]: Select'),
           React.createElement('span', null, '[AC]: Back')
@@ -1633,18 +1633,18 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-select-menu',
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, 'Distribution'),
           React.createElement(
             'span',
-            { className: 'text-[10px] text-[var(--display-text)]/70' },
+            { className: 'text-[10px] font-normal text-[var(--display-muted)]' },
             `Page ${curPage + 1}/2`
           )
         ),
@@ -1658,10 +1658,10 @@ export const distModeModule: ModeModule = {
               'div',
               {
                 key: item.type,
-                className: `flex items-center gap-2.5 px-2 py-1 rounded ${
+                className: `flex items-center gap-2.5 px-2.5 py-1 rounded-xl border ${
                   isSelected
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-semibold'
-                    : 'text-[var(--display-text)]'
+                    ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)] text-[var(--ui-accent)] font-semibold'
+                    : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement(
@@ -1669,8 +1669,8 @@ export const distModeModule: ModeModule = {
                 {
                   className: `font-bold px-1.5 py-0.5 rounded text-[10px] border ${
                     isSelected
-                      ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)]'
-                      : 'border-[var(--display-text)]/30 bg-[var(--display-text)]/5 text-[var(--display-text)]/80'
+                      ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)]'
+                      : 'border-[var(--display-divider)] bg-[var(--display-bg)] text-[var(--display-muted)]'
                   }`,
                 },
                 item.key
@@ -1683,7 +1683,7 @@ export const distModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, curPage === 0 ? '[1]-[4]  [▼]: Page 2' : '[1]-[3]  [▲]: Page 1'),
           React.createElement('span', null, '[=]: OK')
@@ -1706,16 +1706,16 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-input-mode',
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, getDistTitle(data.distType)),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70' }, 'Input Mode')
+          React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)]' }, 'Input Mode')
         ),
         React.createElement(
           'div',
@@ -1726,10 +1726,10 @@ export const distModeModule: ModeModule = {
               'div',
               {
                 key: opt.num,
-                className: `flex items-center gap-2.5 px-2 py-1.5 rounded ${
+                className: `flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl border ${
                   isSel
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-semibold'
-                    : 'text-[var(--display-text)]'
+                    ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)] text-[var(--ui-accent)] font-semibold'
+                    : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement(
@@ -1737,8 +1737,8 @@ export const distModeModule: ModeModule = {
                 {
                   className: `font-bold px-2 py-0.5 rounded text-xs border ${
                     isSel
-                      ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)]'
-                      : 'border-[var(--display-text)]/30 bg-[var(--display-text)]/5'
+                      ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)]'
+                      : 'border-[var(--display-divider)] bg-[var(--display-bg)] text-[var(--display-muted)]'
                   }`,
                 },
                 opt.num
@@ -1751,7 +1751,7 @@ export const distModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, '[1]: List  [2]: Variable'),
           React.createElement('span', null, '[AC]: Back')
@@ -1783,25 +1783,25 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-list-table',
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, `${getDistTitle(data.distType)} (List)`),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70' }, `n=${list.length}`)
+          React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)]' }, `n=${list.length}`)
         ),
         React.createElement(
           'div',
-          { className: 'my-auto w-full border border-[var(--display-text)]/20 rounded overflow-hidden text-xs' },
+          { className: 'my-auto w-full border border-[var(--display-divider)] rounded-xl bg-[var(--display-surface)] overflow-hidden text-xs' },
           React.createElement(
             'div',
             {
               className:
-                'grid grid-cols-[2.2rem_1fr] bg-[var(--display-text)]/10 border-b border-[var(--display-text)]/20 px-2 py-0.5 text-[10px] font-bold text-[var(--display-text)]/80',
+                'grid grid-cols-[2.2rem_1fr] bg-[var(--display-bg)] border-b border-[var(--display-divider)] px-2 py-0.5 text-[10px] font-bold text-[var(--ui-accent)]',
             },
             React.createElement('span', null, '#'),
             React.createElement('span', { className: 'text-right' }, 'x')
@@ -1821,13 +1821,13 @@ export const distModeModule: ModeModule = {
               'div',
               {
                 key: idx,
-                className: `grid grid-cols-[2.2rem_1fr] px-2 py-0.5 tabular-nums border-b border-[var(--display-text)]/10 last:border-b-0 ${
+                className: `grid grid-cols-[2.2rem_1fr] px-2 py-0.5 tabular-nums border-b border-[var(--display-divider)] last:border-b-0 ${
                   isSel
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-bold'
+                    ? 'bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
                     : 'text-[var(--display-text)]'
                 }`,
               },
-              React.createElement('span', { className: 'text-[10px] opacity-70 self-center' }, String(idx + 1)),
+              React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] self-center' }, String(idx + 1)),
               React.createElement('span', { className: 'text-right truncate' }, cellText)
             );
           })
@@ -1839,16 +1839,16 @@ export const distModeModule: ModeModule = {
             'div',
             {
               className:
-                'text-xs font-bold flex items-center justify-between px-1.5 py-0.5 rounded bg-[var(--display-text)]/5 border border-[var(--display-text)]/15',
+                'text-xs font-bold flex items-center justify-between px-2 py-0.5 rounded-lg bg-[var(--display-surface)] border border-[var(--display-divider)]',
             },
-            React.createElement('span', { className: 'text-[var(--label-shift)]' }, `x${curRow + 1} =`),
+            React.createElement('span', { className: 'text-[var(--ui-accent)]' }, `x${curRow + 1} =`),
             React.createElement('span', { className: 'truncate max-w-[210px] tabular-nums' }, activeDisplayVal || ' ')
           ),
           React.createElement(
             'div',
             {
               className:
-                'text-[9.5px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between',
+                'text-[10px] text-[var(--display-muted)] pt-0.5 border-t border-[var(--display-divider)] flex justify-between',
             },
             React.createElement('span', null, list.length > 0 && buf === '' && curRow === list.length ? '[=]: Next Params' : '[=]: Store x'),
             React.createElement('span', null, list.length > 0 ? '[►]: Params  [DEL]: Del' : '[OPTN]: Type')
@@ -1879,20 +1879,20 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-param-form',
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement(
             'span',
             null,
             data.inputMode === 'LIST' ? `${getDistTitle(data.distType)} (List)` : getDistTitle(data.distType)
           ),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70' }, 'DIST')
+          React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)]' }, 'DIST')
         ),
 
         // Parameter rows
@@ -1915,10 +1915,10 @@ export const distModeModule: ModeModule = {
               {
                 key: f.key,
                 'data-testid': `dist-param-${f.key}`,
-                className: `flex items-center justify-between px-2 py-0.5 rounded text-xs ${
+                className: `flex items-center justify-between px-2.5 py-0.5 rounded-lg text-xs border ${
                   isSel
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-bold'
-                    : 'text-[var(--display-text)]'
+                    ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)] text-[var(--ui-accent)] font-bold'
+                    : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement('span', { className: 'font-math-serif' }, `${f.label} :`),
@@ -1934,10 +1934,10 @@ export const distModeModule: ModeModule = {
             'div',
             {
               'data-testid': 'dist-param-execute',
-              className: `flex items-center justify-between px-2 py-0.5 rounded text-xs ${
+              className: `flex items-center justify-between px-2.5 py-0.5 rounded-lg text-xs border ${
                 isExecuteFocused
-                  ? 'bg-[var(--label-shift)]/25 text-[var(--label-shift)] font-bold border border-[var(--label-shift)]/60'
-                  : 'text-[var(--display-text)]/75'
+                  ? 'bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold border-[var(--ui-accent)]'
+                  : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-muted)]'
               }`,
             },
             React.createElement('span', null, 'Execute'),
@@ -1953,11 +1953,11 @@ export const distModeModule: ModeModule = {
             'div',
             {
               className:
-                'text-[11px] font-bold flex items-center justify-between px-1.5 py-0.5 rounded bg-[var(--display-text)]/5 border border-[var(--display-text)]/15',
+                'text-[11px] font-bold flex items-center justify-between px-2 py-0.5 rounded-lg bg-[var(--display-surface)] border border-[var(--display-divider)]',
             },
             React.createElement(
               'span',
-              { className: 'text-[var(--label-shift)] font-math-serif' },
+              { className: 'text-[var(--ui-accent)] font-math-serif' },
               activeFieldDef ? `${activeFieldDef.label} =` : 'Execute'
             ),
             React.createElement('span', { className: 'truncate max-w-[200px] tabular-nums' }, activePreviewText || ' ')
@@ -1966,7 +1966,7 @@ export const distModeModule: ModeModule = {
             'div',
             {
               className:
-                'text-[9.5px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between',
+                'text-[10px] text-[var(--display-muted)] pt-0.5 border-t border-[var(--display-divider)] flex justify-between',
             },
             React.createElement('span', null, '[▲▼]: Field  [=]: Next/Run'),
             React.createElement('span', null, '[OPTN]: Type')
@@ -1988,23 +1988,23 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-result',
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, getDistTitle(data.distType)),
-          React.createElement('span', { className: 'text-[10px] tracking-wider' }, 'DIST')
+          React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)] tracking-wider' }, 'DIST')
         ),
         React.createElement(
           'div',
-          { className: 'my-auto py-2 px-2 flex flex-col justify-center space-y-1' },
+          { className: 'my-auto py-1 flex flex-col justify-center items-end space-y-1' },
           React.createElement(
             'div',
-            { className: 'text-xs text-[var(--label-shift)] font-semibold font-math-serif' },
+            { className: 'text-sm text-[var(--display-muted)] font-normal font-math-serif' },
             `${label} =`
           ),
           React.createElement(
@@ -2012,7 +2012,7 @@ export const distModeModule: ModeModule = {
             {
               'data-testid': 'dist-result-value',
               className:
-                'text-right text-xl sm:text-2xl font-bold tracking-wider tabular-nums text-[var(--display-text)] select-text break-all',
+                'text-right text-3xl sm:text-4xl font-light tracking-tight tabular-nums text-[var(--display-text)] select-text break-all',
             },
             `${label} = ${formatted}`
           )
@@ -2021,7 +2021,7 @@ export const distModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, '[=] / [AC]: Edit Params'),
           React.createElement('span', null, '[OPTN]: Type')
@@ -2045,25 +2045,25 @@ export const distModeModule: ModeModule = {
         {
           'data-testid': 'dist-list-result',
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, `${getDistTitle(data.distType)} (List)`),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70' }, `${curRow + 1}/${rows.length}`)
+          React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)]' }, `${curRow + 1}/${rows.length}`)
         ),
         React.createElement(
           'div',
-          { className: 'my-auto w-full border border-[var(--display-text)]/20 rounded overflow-hidden text-xs' },
+          { className: 'my-auto w-full border border-[var(--display-divider)] rounded-xl bg-[var(--display-surface)] overflow-hidden text-xs' },
           React.createElement(
             'div',
             {
               className:
-                'grid grid-cols-[1.8rem_1fr_1.6fr] bg-[var(--display-text)]/10 border-b border-[var(--display-text)]/20 px-2 py-0.5 text-[10px] font-bold text-[var(--display-text)]/80',
+                'grid grid-cols-[1.8rem_1fr_1.6fr] bg-[var(--display-bg)] border-b border-[var(--display-divider)] px-2 py-0.5 text-[10px] font-bold text-[var(--ui-accent)]',
             },
             React.createElement('span', null, '#'),
             React.createElement('span', { className: 'text-right pr-2' }, 'x'),
@@ -2076,13 +2076,13 @@ export const distModeModule: ModeModule = {
               'div',
               {
                 key: absIdx,
-                className: `grid grid-cols-[1.8rem_1fr_1.6fr] px-2 py-0.5 tabular-nums border-b border-[var(--display-text)]/10 last:border-b-0 ${
+                className: `grid grid-cols-[1.8rem_1fr_1.6fr] px-2 py-0.5 tabular-nums border-b border-[var(--display-divider)] last:border-b-0 ${
                   isSel
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-bold'
+                    ? 'bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
                     : 'text-[var(--display-text)]'
                 }`,
               },
-              React.createElement('span', { className: 'text-[10px] opacity-70 self-center' }, String(absIdx + 1)),
+              React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] self-center' }, String(absIdx + 1)),
               React.createElement('span', { className: 'text-right pr-2 truncate' }, row.xRaw),
               React.createElement('span', { className: 'text-right truncate' }, formatDistNumber(row.pVal, ctx))
             );
@@ -2096,9 +2096,9 @@ export const distModeModule: ModeModule = {
                 'div',
                 {
                   className:
-                    'text-[11px] font-bold flex items-center justify-between px-1.5 py-0.5 rounded bg-[var(--display-text)]/5 border border-[var(--display-text)]/15 tabular-nums',
+                    'text-[11px] font-bold flex items-center justify-between px-2 py-0.5 rounded-lg bg-[var(--display-surface)] border border-[var(--display-divider)] tabular-nums',
                 },
-                React.createElement('span', { className: 'text-[var(--label-shift)]' }, `x=${selectedRow.xRaw}`),
+                React.createElement('span', { className: 'text-[var(--ui-accent)]' }, `x=${selectedRow.xRaw}`),
                 React.createElement('span', null, `P = ${formatDistNumber(selectedRow.pVal, ctx)}`)
               )
             : null,
@@ -2106,7 +2106,7 @@ export const distModeModule: ModeModule = {
             'div',
             {
               className:
-                'text-[9.5px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between',
+                'text-[10px] text-[var(--display-muted)] pt-0.5 border-t border-[var(--display-divider)] flex justify-between',
             },
             React.createElement('span', null, '[▲▼]: Row  [=] / [AC]: Edit'),
             React.createElement('span', null, '[OPTN]: Type')

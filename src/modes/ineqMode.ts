@@ -569,34 +569,34 @@ export const ineqModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, 'Polynomial Degree?'),
           React.createElement(
             'span',
-            { className: 'text-[10px] text-[var(--display-text)]/70 tracking-wider' },
+            { className: 'text-[10px] font-normal text-[var(--display-muted)] tracking-wider' },
             'INEQ'
           )
         ),
         React.createElement(
           'div',
-          { className: 'space-y-1.5 text-xs my-auto pl-1' },
+          { className: 'space-y-1.5 text-xs my-auto' },
           degOptions.map((opt) => {
             const isSelected = curDeg === opt.num;
             return React.createElement(
               'div',
               {
                 key: opt.num,
-                className: `flex items-center gap-2 px-1.5 py-1 rounded transition-colors ${
+                className: `flex items-center gap-2 px-2.5 py-1 rounded-xl border transition-colors ${
                   isSelected
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-semibold'
-                    : 'text-[var(--display-text)]'
+                    ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)] text-[var(--ui-accent)] font-semibold'
+                    : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement(
@@ -604,8 +604,8 @@ export const ineqModeModule: ModeModule = {
                 {
                   className: `font-bold px-1.5 py-0.5 rounded text-[11px] border ${
                     isSelected
-                      ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)]'
-                      : 'border-[var(--display-text)]/30 bg-[var(--display-text)]/5 text-[var(--display-text)]/80'
+                      ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)]'
+                      : 'border-[var(--display-divider)] bg-[var(--display-bg)] text-[var(--display-muted)]'
                   }`,
                 },
                 String(opt.num)
@@ -618,7 +618,7 @@ export const ineqModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, 'Select Degree (2 ~ 4)'),
           React.createElement('span', null, '[▲▼]: Move  [=]: OK')
@@ -649,18 +649,18 @@ export const ineqModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, `${polyHead} 0`),
           React.createElement(
             'span',
-            { className: 'text-[10px] text-[var(--label-shift)]' },
+            { className: 'text-[10px] font-normal text-[var(--display-muted)]' },
             `Degree ${degree}`
           )
         ),
@@ -673,17 +673,17 @@ export const ineqModeModule: ModeModule = {
               'div',
               {
                 key: item.num,
-                className: `px-2 py-1.5 rounded border flex items-center justify-between transition-colors ${
+                className: `px-2.5 py-1.5 rounded-xl border flex items-center justify-between transition-colors ${
                   isSelected
-                    ? 'border-[var(--label-shift)] bg-[var(--display-text)]/15 text-[var(--label-shift)] font-bold'
-                    : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                    ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
+                    : 'border-[var(--display-divider)] bg-[var(--display-surface)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement(
                 'span',
                 {
                   className: `font-bold mr-1.5 ${
-                    isSelected ? 'text-[var(--label-shift)]' : 'text-[var(--display-text)]/75'
+                    isSelected ? 'text-[var(--ui-accent)]' : 'text-[var(--display-muted)]'
                   }`,
                 },
                 `${item.num}:`
@@ -700,7 +700,7 @@ export const ineqModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, 'Press [1] ~ [4] or [=]'),
           React.createElement('span', null, '[AC]: Back')
@@ -726,43 +726,43 @@ export const ineqModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', { className: 'truncate pr-1' }, polyTitle),
           React.createElement(
             'div',
-            { className: 'flex items-center gap-1.5 text-[9.5px] shrink-0' },
+            { className: 'flex items-center gap-1.5 text-[10px] shrink-0' },
             parts.length > 1
               ? React.createElement(
                   'span',
                   {
                     className:
-                      'px-1 py-0.2 rounded bg-[var(--label-shift)]/20 text-[var(--label-shift)] font-semibold',
+                      'px-1.5 py-0.5 rounded bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-semibold',
                   },
                   `${curPartIdx + 1}/${parts.length}`
                 )
               : null,
             React.createElement(
               'span',
-              { className: 'text-[var(--label-shift)] font-bold' },
+              { className: 'text-[var(--display-muted)] font-normal' },
               'INEQ'
             )
           )
         ),
         React.createElement(
           'div',
-          { className: 'my-auto py-2 text-center flex flex-col items-center justify-center' },
+          { className: 'my-auto py-1 text-right flex flex-col items-end justify-center' },
           React.createElement(
             'div',
             {
               className:
-                'text-base sm:text-lg font-bold tracking-wider text-[var(--display-text)] select-text px-1 break-words',
+                'text-2xl sm:text-3xl font-light tracking-tight text-[var(--display-text)] select-text break-words max-w-full',
             },
             sol
           ),
@@ -771,7 +771,7 @@ export const ineqModeModule: ModeModule = {
                 'div',
                 {
                   className:
-                    'mt-2 text-xs font-semibold px-2 py-0.5 rounded border border-[var(--label-shift)]/40 bg-[var(--label-shift)]/10 text-[var(--label-shift)]',
+                    'mt-2 text-xs font-semibold px-2.5 py-0.5 rounded-lg border border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)]',
                 },
                 `Interval [${curPartIdx + 1}]: ${parts[curPartIdx]}`
               )
@@ -781,7 +781,7 @@ export const ineqModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between items-center',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between items-center',
           },
           React.createElement(
             'span',
@@ -822,18 +822,18 @@ export const ineqModeModule: ModeModule = {
       'div',
       {
         className:
-          'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+          'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
       },
       React.createElement(
         'div',
         {
           className:
-            'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+            'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
         },
         React.createElement('span', null, polyHeader),
         React.createElement(
           'span',
-          { className: 'text-[10px] text-[var(--label-shift)]' },
+          { className: 'text-[10px] font-normal text-[var(--display-muted)]' },
           `Deg ${degree}`
         )
       ),
@@ -844,7 +844,7 @@ export const ineqModeModule: ModeModule = {
         {
           className: `grid ${
             degree === 2 ? 'grid-cols-3' : degree === 3 ? 'grid-cols-4' : 'grid-cols-5'
-          } gap-1 my-auto w-full px-0.5`,
+          } gap-1 my-auto w-full`,
         },
         labels.map((label, idx) => {
           const isSelected = idx === curIdx;
@@ -857,15 +857,15 @@ export const ineqModeModule: ModeModule = {
             'div',
             {
               key: label,
-              className: `py-1 px-0.5 border rounded text-center min-w-0 flex flex-col justify-between ${
+              className: `py-1 px-0.5 border rounded-xl text-center min-w-0 flex flex-col justify-between ${
                 isSelected
-                  ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold'
-                  : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                  ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
+                  : 'border-[var(--display-divider)] bg-[var(--display-surface)] text-[var(--display-text)]'
               }`,
             },
             React.createElement(
               'span',
-              { className: 'text-[9px] uppercase leading-none opacity-80' },
+              { className: 'text-[9px] uppercase leading-none text-[var(--display-muted)]' },
               `${label}=`
             ),
             React.createElement(
@@ -889,9 +889,9 @@ export const ineqModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-xs font-bold text-[var(--display-text)] flex items-center justify-between px-1 bg-[var(--display-text)]/5 py-0.5 rounded border border-[var(--display-text)]/15',
+              'text-xs font-bold text-[var(--display-text)] flex items-center justify-between px-2 bg-[var(--display-surface)] py-0.5 rounded-lg border border-[var(--display-divider)]',
           },
-          React.createElement('span', { className: 'text-[var(--label-shift)]' }, `${activeLabel} =`),
+          React.createElement('span', { className: 'text-[var(--ui-accent)]' }, `${activeLabel} =`),
           React.createElement(
             'span',
             { className: 'truncate max-w-[200px] text-right font-sans' },
@@ -902,7 +902,7 @@ export const ineqModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-0.5 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, '[=]: Confirm/Solve'),
           React.createElement('span', null, '◄ ►: Move  [AC]: Clear')

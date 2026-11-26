@@ -883,34 +883,34 @@ export const eqnModeModule: ModeModule = {
     if (modeState.screen === 'SELECT_TYPE') {
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between' },
+          { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center' },
           React.createElement('span', null, 'Equation/Func'),
-          React.createElement('span', { className: 'text-[9.5px] opacity-70 font-normal' }, 'EQN')
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, 'EQN')
         ),
         React.createElement(
           'div',
           { className: 'space-y-1.5 text-xs my-auto' },
           React.createElement(
             'div',
-            { className: 'flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--display-text)]/10 border border-[var(--display-text)]/20' },
-            React.createElement('span', { className: 'font-bold px-1.5 py-0.5 rounded bg-[var(--display-text)]/20 text-[var(--label-shift)] text-[10px]' }, '1:'),
+            { className: 'flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' },
+            React.createElement('span', { className: 'font-bold px-1.5 py-0.5 rounded bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] text-[10px]' }, '1:'),
             React.createElement('span', { className: 'font-semibold' }, 'Simul Equation'),
-            React.createElement('span', { className: 'text-[9.5px] opacity-70 ml-auto' }, '2 ~ 4 Unknowns')
+            React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] ml-auto' }, '2 ~ 4 Unknowns')
           ),
           React.createElement(
             'div',
-            { className: 'flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--display-text)]/5 border border-[var(--display-text)]/20' },
-            React.createElement('span', { className: 'font-bold px-1.5 py-0.5 rounded bg-[var(--display-text)]/20 text-[var(--label-shift)] text-[10px]' }, '2:'),
+            { className: 'flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' },
+            React.createElement('span', { className: 'font-bold px-1.5 py-0.5 rounded bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] text-[10px]' }, '2:'),
             React.createElement('span', { className: 'font-semibold' }, 'Polynomial'),
-            React.createElement('span', { className: 'text-[9.5px] opacity-70 ml-auto' }, 'Degree 2 ~ 3')
+            React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] ml-auto' }, 'Degree 2 ~ 3')
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' },
+          { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' },
           'Press [1] or [2]'
         )
       );
@@ -921,12 +921,12 @@ export const eqnModeModule: ModeModule = {
       const cur = modeState.data.unknownsCursor || 2;
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between' },
+          { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center' },
           React.createElement('span', null, 'Simul Equation'),
-          React.createElement('span', { className: 'text-[9.5px] opacity-70 font-normal' }, 'Unknowns? 2~4')
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, 'Unknowns? 2~4')
         ),
         React.createElement(
           'div',
@@ -941,10 +941,10 @@ export const eqnModeModule: ModeModule = {
               'div',
               {
                 key: item.num,
-                className: `flex items-center justify-between px-2 py-1 rounded transition-colors border ${
+                className: `flex items-center justify-between px-2.5 py-1.5 rounded-xl transition-colors border ${
                   isSelected
-                    ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold'
-                    : 'border-[var(--display-text)]/20 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                    ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
+                    : 'border-[var(--display-divider)] bg-[var(--display-surface)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement('span', { className: 'font-bold mr-2' }, `${item.num}:`),
@@ -955,7 +955,7 @@ export const eqnModeModule: ModeModule = {
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between' },
+          { className: 'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between' },
           React.createElement('span', null, '[AC] Back'),
           React.createElement('span', null, '[▲▼] Select  [=] Confirm')
         )
@@ -981,13 +981,13 @@ export const eqnModeModule: ModeModule = {
 
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-1.5 font-sans select-none text-[var(--display-text)]' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]' },
         // Top status
         React.createElement(
           'div',
-          { className: 'text-[11px] font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center' },
+          { className: 'text-[11px] font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center' },
           React.createElement('span', { className: 'truncate' }, formula),
-          React.createElement('span', { className: 'text-[9px] text-[var(--display-text)]/70 font-normal shrink-0 ml-1' }, `${u} Unknowns`)
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal shrink-0 ml-1' }, `${u} Unknowns`)
         ),
         // Grid Table
         React.createElement(
@@ -999,12 +999,12 @@ export const eqnModeModule: ModeModule = {
             // Column Headers
             React.createElement(
               'div',
-              { className: 'flex items-center gap-1 pb-1 border-b border-[var(--display-text)]/15 text-[10px] text-[var(--display-text)]/75' },
+              { className: 'flex items-center gap-1 pb-1 border-b border-[var(--display-divider)] text-[10px] text-[var(--display-muted)]' },
               React.createElement('div', { className: 'w-5 shrink-0' }, '#'),
               colLabels.map((lbl, idx) =>
                 React.createElement(
                   'div',
-                  { key: idx, className: `flex-1 min-w-[34px] font-bold ${idx === c ? 'text-[var(--label-shift)]' : ''}` },
+                  { key: idx, className: `flex-1 min-w-[34px] font-bold ${idx === c ? 'text-[var(--ui-accent)]' : ''}` },
                   lbl
                 )
               )
@@ -1016,9 +1016,9 @@ export const eqnModeModule: ModeModule = {
                 'div',
                 {
                   key: rowIdx,
-                  className: `flex items-center gap-1 py-0.5 ${isCurrentRow ? 'bg-[var(--display-text)]/5 rounded' : ''}`,
+                  className: `flex items-center gap-1 py-0.5 ${isCurrentRow ? 'bg-[var(--display-surface)] rounded-lg' : ''}`,
                 },
-                React.createElement('div', { className: `w-5 shrink-0 text-[10px] font-bold ${isCurrentRow ? 'text-[var(--label-shift)]' : 'opacity-60'}` }, `${rowIdx + 1}:`),
+                React.createElement('div', { className: `w-5 shrink-0 text-[10px] font-bold ${isCurrentRow ? 'text-[var(--ui-accent)]' : 'text-[var(--display-muted)]'}` }, `${rowIdx + 1}:`),
                 row.map((cell, colIdx) => {
                   const isSelected = isCurrentRow && colIdx === c;
                   const displayStr = isSelected && buf !== '' ? buf : cell?.raw ?? cell?.val ?? '0';
@@ -1028,8 +1028,8 @@ export const eqnModeModule: ModeModule = {
                       key: colIdx,
                       className: `flex-1 min-w-[34px] px-1 py-0.5 rounded text-[11px] truncate border ${
                         isSelected
-                          ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)] font-bold shadow-sm'
-                          : 'border-[var(--display-text)]/20 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                          ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
+                          : 'border-[var(--display-divider)] bg-[var(--display-surface)] text-[var(--display-text)]'
                       }`,
                     },
                     displayStr
@@ -1042,9 +1042,9 @@ export const eqnModeModule: ModeModule = {
         // Cell preview & instructions
         React.createElement(
           'div',
-          { className: 'text-[9.5px] border-t border-[var(--display-text)]/20 pt-0.5 flex justify-between items-center text-[var(--display-text)]/80' },
-          React.createElement('span', null, `Cell [${r + 1}, ${colLabels[c]}]: `, React.createElement('strong', { className: 'text-[var(--label-shift)]' }, buf !== '' ? buf : activeCellVal)),
-          React.createElement('span', { className: 'text-[9px] opacity-70' }, '[▲▼◄►] [=]')
+          { className: 'text-[10px] border-t border-[var(--display-divider)] pt-1 flex justify-between items-center text-[var(--display-muted)]' },
+          React.createElement('span', null, `Cell [${r + 1}, ${colLabels[c]}]: `, React.createElement('strong', { className: 'text-[var(--ui-accent)]' }, buf !== '' ? buf : activeCellVal)),
+          React.createElement('span', { className: 'text-[10px]' }, '[▲▼◄►] [=]')
         )
       );
     }
@@ -1060,15 +1060,15 @@ export const eqnModeModule: ModeModule = {
       if (err || sols.length === 0) {
         return React.createElement(
           'div',
-          { className: 'flex flex-col h-full justify-between p-3 font-sans text-[var(--display-text)] select-none text-center' },
-          React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Simul Equation'),
+          { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none text-center' },
+          React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)]' }, 'Simul Equation'),
           React.createElement(
             'div',
             { className: 'my-auto space-y-1' },
-            React.createElement('div', { className: 'text-base font-bold text-rose-400 tracking-wider animate-pulse' }, 'Math ERROR'),
-            React.createElement('div', { className: 'text-xs text-[var(--display-text)]/80' }, 'No Unique Solution')
+            React.createElement('div', { className: 'text-base font-bold text-[var(--ui-danger)] tracking-wider' }, 'Math ERROR'),
+            React.createElement('div', { className: 'text-xs text-[var(--display-muted)]' }, 'No Unique Solution')
           ),
-          React.createElement('div', { className: 'text-[10px] text-[var(--display-text)]/60 border-t border-[var(--display-text)]/20 pt-1' }, 'Press [AC] to edit coefficients')
+          React.createElement('div', { className: 'text-[10px] text-[var(--display-muted)] border-t border-[var(--display-divider)] pt-1' }, 'Press [AC] to edit coefficients')
         );
       }
 
@@ -1076,29 +1076,29 @@ export const eqnModeModule: ModeModule = {
 
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         // Top Status
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center' },
+          { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center' },
           React.createElement('span', null, `Simul Eqn (${u} Unknowns)`),
-          React.createElement('span', { className: 'text-[9px] text-[var(--display-text)]/70 font-normal' }, '[S⇔D] Fraction/Dec')
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, '[S⇔D] Fraction/Dec')
         ),
         // Active Variable Display
         React.createElement(
           'div',
-          { className: 'my-auto text-center py-2' },
-          React.createElement('div', { className: 'text-sm font-bold text-[var(--label-shift)] mb-1' }, `${activeSol.varName} =`),
+          { className: 'my-auto text-right py-1' },
+          React.createElement('div', { className: 'text-xs font-semibold text-[var(--display-muted)] mb-0.5' }, `${activeSol.varName} =`),
           React.createElement(
             'div',
-            { className: 'text-2xl sm:text-3xl font-extrabold tracking-wider text-[var(--display-text)] px-2 py-1 rounded bg-[var(--display-text)]/10 border border-[var(--display-text)]/20 inline-block min-w-[120px]' },
+            { className: 'text-3xl sm:text-4xl font-light tracking-tight text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap' },
             displayVal
           )
         ),
         // Variable Selectors & Navigation footer
         React.createElement(
           'div',
-          { className: 'space-y-1 border-t border-[var(--display-text)]/20 pt-1' },
+          { className: 'space-y-1 border-t border-[var(--display-divider)] pt-1' },
           React.createElement(
             'div',
             { className: 'flex justify-center gap-1.5 text-xs' },
@@ -1107,10 +1107,10 @@ export const eqnModeModule: ModeModule = {
                 'div',
                 {
                   key: s.varName,
-                  className: `px-2 py-0.5 rounded text-[11px] font-bold ${
+                  className: `px-2.5 py-0.5 rounded-lg text-[11px] font-bold ${
                     idx === curIdx
-                      ? 'bg-[var(--label-shift)] text-[var(--display-bg)]'
-                      : 'bg-[var(--display-text)]/10 text-[var(--display-text)]'
+                      ? 'bg-[var(--ui-accent)] text-[var(--display-bg)]'
+                      : 'bg-[var(--display-surface)] border border-[var(--display-divider)] text-[var(--display-muted)]'
                   }`,
                 },
                 s.varName
@@ -1119,7 +1119,7 @@ export const eqnModeModule: ModeModule = {
           ),
           React.createElement(
             'div',
-            { className: 'text-[9px] text-[var(--display-text)]/60 flex justify-between items-center' },
+            { className: 'text-[10px] text-[var(--display-muted)] flex justify-between items-center' },
             React.createElement('span', null, '[AC] Edit Coeffs'),
             React.createElement('span', null, '[▲▼] [=] Next Root')
           )
@@ -1132,12 +1132,12 @@ export const eqnModeModule: ModeModule = {
       const cur = modeState.data.polyDegreeCursor || 2;
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between' },
+          { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center' },
           React.createElement('span', null, 'Polynomial Degree?'),
-          React.createElement('span', { className: 'text-[9.5px] opacity-70 font-normal' }, '2 ~ 3')
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, '2 ~ 3')
         ),
         React.createElement(
           'div',
@@ -1151,10 +1151,10 @@ export const eqnModeModule: ModeModule = {
               'div',
               {
                 key: item.deg,
-                className: `flex items-center justify-between px-2 py-1 rounded border transition-colors ${
+                className: `flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-colors ${
                   isSelected
-                    ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold'
-                    : 'border-[var(--display-text)]/20 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                    ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
+                    : 'border-[var(--display-divider)] bg-[var(--display-surface)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement('span', { className: 'font-bold mr-2' }, `${item.deg}:`),
@@ -1165,7 +1165,7 @@ export const eqnModeModule: ModeModule = {
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20 flex justify-between' },
+          { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)] flex justify-between' },
           React.createElement('span', null, '[AC] Back'),
           React.createElement('span', null, '[▲▼] Select  [=] Confirm')
         )
@@ -1178,35 +1178,35 @@ export const eqnModeModule: ModeModule = {
       const degree = modeState.data.degree || 2;
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between items-center' },
+          { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center' },
           React.createElement('span', null, `Poly Degree ${degree} Solutions:`),
-          React.createElement('span', { className: 'text-[9px] text-[var(--display-text)]/70 font-normal' }, '▲▼ [=]')
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, '▲▼ [=]')
         ),
         React.createElement(
           'div',
-          { className: 'space-y-1 my-auto overflow-y-auto no-scrollbar font-bold text-sm sm:text-base tracking-wider' },
+          { className: 'space-y-1 my-auto overflow-y-auto no-scrollbar font-normal text-base tracking-wide' },
           sols.map((s: string, idx: number) =>
             React.createElement(
               'div',
               {
                 key: idx,
-                className: `px-2 py-0.5 rounded transition-colors flex items-center justify-between ${
+                className: `px-2.5 py-1 rounded-xl transition-colors flex items-center justify-between border ${
                   idx === (modeState.data.polySolIndex || 0)
-                    ? 'bg-[var(--display-text)]/20 text-[var(--display-text)] border border-[var(--display-text)]/40'
-                    : 'text-[var(--display-text)]/85'
+                    ? 'bg-[var(--ui-accent-tonal)] text-[var(--display-text)] border-[var(--ui-accent)] font-semibold'
+                    : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-muted)]'
                 }`,
               },
               React.createElement('span', null, s),
-              idx === (modeState.data.polySolIndex || 0) && React.createElement('span', { className: 'text-[10px] text-[var(--label-shift)]' }, '◄')
+              idx === (modeState.data.polySolIndex || 0) && React.createElement('span', { className: 'text-[10px] text-[var(--ui-accent)]' }, '◄')
             )
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between' },
+          { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)] flex justify-between' },
           React.createElement('span', null, '[AC] Edit Coeffs'),
           React.createElement('span', null, '[▲▼] Next Root')
         )
@@ -1224,12 +1224,12 @@ export const eqnModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)]' },
+      { className: 'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]' },
       React.createElement(
         'div',
-        { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)] flex justify-between' },
+        { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center' },
         React.createElement('span', null, formula),
-        React.createElement('span', { className: 'text-[9px] text-[var(--display-text)]/70 font-normal' }, `Deg ${degree}`)
+        React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, `Deg ${degree}`)
       ),
       React.createElement(
         'div',
@@ -1241,20 +1241,20 @@ export const eqnModeModule: ModeModule = {
             'div',
             {
               key: idx,
-              className: `flex-1 min-w-[50px] max-w-[80px] px-1.5 py-1 border rounded text-center ${
+              className: `flex-1 min-w-[50px] max-w-[80px] px-1.5 py-1.5 border rounded-xl text-center ${
                 isSelected
-                  ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 font-bold text-[var(--label-shift)] shadow-[0_0_6px_rgba(229,169,60,0.25)]'
-                  : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                  ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] font-bold text-[var(--ui-accent)]'
+                  : 'border-[var(--display-divider)] bg-[var(--display-surface)] text-[var(--display-text)]'
               }`,
             },
-            React.createElement('div', { className: 'text-[9.5px] opacity-75' }, `${label}=`),
+            React.createElement('div', { className: 'text-[10px] text-[var(--display-muted)]' }, `${label}=`),
             React.createElement('div', { className: 'text-xs sm:text-sm font-semibold truncate' }, displayVal)
           );
         })
       ),
       React.createElement(
         'div',
-        { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between' },
+        { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)] flex justify-between' },
         React.createElement('span', null, '[◄►] Move  [DEL] Clear'),
         React.createElement('span', null, 'Type value, press [=]')
       )

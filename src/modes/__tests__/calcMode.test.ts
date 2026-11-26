@@ -6,7 +6,8 @@
  * 2. Stored Ans and post-calculation continuity:
  *    - 2+3= then +4 → 9
  *    - 5= then x² → 25
- *    - 5= then sin( → fresh input (not Ans×sin or error)
+ *    - 5= then sin(30)= → Ans×sin(30) (2.5)
+ *    - 5= then 3 → fresh input (digits start fresh)
  *    - AC clears expression but preserves Ans
  *    - 5= then x⁻¹ → 1/5 (0.2)
  *    - 5= then nPr 2 → 20
@@ -70,19 +71,25 @@ export function runCalcModeTests(): { name: string; passed: boolean; details?: s
       },
     },
 
-    // User test 3: 5= then sin( → fresh input
+    // User test 3: 5= then sin(30)= → Ans×sin(30) = 2.5
     {
-      name: 'User test 3: 5= then sin( → fresh input',
+      name: 'User test 3: 5= then sin(30) → continues from Ans (2.5)',
       test: () => {
         // First expression: 5=
         const r1 = evaluateMathExpression('5', 'DEG', {}, 0);
         if (!r1.success || r1.result !== 5) return false;
         const storedAns = r1.result;
 
-        // Next key is function key 'sin(': starts a FRESH expression (not Ans×sin(30))
-        // Evaluates sin(30) with storedAns = 5
-        const r2 = evaluateMathExpression('sin(30)', 'DEG', {}, storedAns);
-        return r2.success && Math.abs(r2.result! - 0.5) < 1e-9;
+        // Next key is function key 'sin(': continues from Ans
+        const ast = insertToken(
+          insertToken(
+            insertToken(parseStringToAst('Ans'), 'sin('),
+            '30'
+          ),
+          ')'
+        );
+        const r2 = evaluateMathExpression(astToExpression(ast.root), 'DEG', {}, storedAns);
+        return r2.success && Math.abs(r2.result! - 2.5) < 1e-9;
       },
     },
 
@@ -148,21 +155,22 @@ export function runCalcModeTests(): { name: string; passed: boolean; details?: s
       },
     },
 
-    // AST transition simulation: function key after calculated result starts fresh input
+    // AST transition simulation: function key after calculated result continues from Ans
     {
-      name: 'AST transition: function key after equals starts fresh input',
+      name: 'AST transition: function key after equals continues from Ans',
       test: () => {
         let isCalculated = true;
         let ast = parseStringToAst('5'); // previous calculated expression
 
-        const tokenVal = 'sin(';
+        const tokenVal: string = 'sin(';
         const isBinaryOrPostfix = [
           '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
           'P', 'C', 'nPr', 'nCr'
         ].includes(tokenVal);
+        const isFunctionCall = tokenVal.endsWith('(') && tokenVal !== '(' && tokenVal !== '(-';
 
         if (isCalculated) {
-          if (isBinaryOrPostfix) {
+          if (isBinaryOrPostfix || isFunctionCall) {
             ast = parseStringToAst('Ans');
           } else {
             ast = createInitialAstState();
@@ -174,7 +182,32 @@ export function runCalcModeTests(): { name: string; passed: boolean; details?: s
         ast = insertToken(ast, '30');
         ast = insertToken(ast, ')');
         const expr = astToExpression(ast.root);
-        return expr === 'sin(30)';
+        return expr === 'Anssin(30)';
+      },
+    },
+
+    // AST transition simulation: digit after calculated result starts fresh
+    {
+      name: 'AST transition: digit key after equals starts fresh input',
+      test: () => {
+        let isCalculated = true;
+        let ast = parseStringToAst('5');
+
+        const tokenVal: string = '3';
+        const isBinaryOrPostfix = [
+          '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
+          'P', 'C', 'nPr', 'nCr'
+        ].includes(tokenVal);
+        const isFunctionCall = tokenVal.endsWith('(') && tokenVal !== '(' && tokenVal !== '(-';
+
+        if (isCalculated) {
+          ast = isBinaryOrPostfix || isFunctionCall ? parseStringToAst('Ans') : createInitialAstState();
+          isCalculated = false;
+        }
+
+        ast = insertToken(ast, tokenVal);
+        const expr = astToExpression(ast.root);
+        return expr === '3';
       },
     },
 

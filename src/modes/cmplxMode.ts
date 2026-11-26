@@ -239,19 +239,19 @@ export const cmplxModeModule: ModeModule = {
 
   renderDisplay: (ctx: ModeContext) => {
     const { modeState } = ctx;
-    
+
     // Submenu screen
     if (modeState.screen === 'SUBMENU') {
       const pageIdx = modeState.data.subMenuPage || 0;
       const page = CMPLX_SUBMENU_PAGES[pageIdx];
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'flex justify-between items-center border-b border-[var(--display-text)]/20 pb-1 text-xs font-bold text-[var(--label-shift)]' },
+          { className: 'flex justify-between items-center border-b border-[var(--display-divider)] pb-1 text-xs font-bold text-[var(--ui-accent)]' },
           React.createElement('span', null, page.title || 'Complex Menu'),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70 font-normal' }, `Page ${pageIdx + 1}/${CMPLX_SUBMENU_PAGES.length} ▲▼`)
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, `Page ${pageIdx + 1}/${CMPLX_SUBMENU_PAGES.length} ▲▼`)
         ),
         React.createElement(
           'div',
@@ -259,38 +259,46 @@ export const cmplxModeModule: ModeModule = {
           page.items.map((it) =>
             React.createElement(
               'div',
-              { key: it.id, className: 'flex items-center space-x-1.5' },
-              React.createElement('span', { className: 'bg-[var(--display-text)]/15 text-[var(--label-shift)] border border-[var(--display-text)]/30 rounded px-1.5 py-0.5 text-[10px] font-bold' }, it.key),
-              React.createElement('span', { className: 'font-semibold text-[var(--display-text)]' }, it.name)
+              { key: it.id, className: 'flex items-center space-x-1.5 px-2 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' },
+              React.createElement('span', { className: 'text-[var(--ui-accent)] text-[10px] font-bold' }, `${it.key}:`),
+              React.createElement('span', { className: 'font-semibold text-[var(--display-text)] truncate' }, it.name)
             )
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' },
+          { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' },
           '[▲/▼] Page  [AC] Return'
         )
       );
     }
 
-    // Main complex display
+    // Main complex display (ColorOS State 1/2 layout)
     const expr = modeState.data.expression || '';
     const res = modeState.data.result || '0';
+    const isCalc = Boolean(modeState.data.isCalculated);
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+      { className: 'flex flex-col h-full justify-center items-end py-2 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none gap-1' },
       React.createElement(
         'div',
-        { className: 'text-sm text-[var(--display-text)] min-h-[1.5rem] break-all tracking-wide' },
-        expr || React.createElement('span', { className: 'text-[var(--display-text)]/40' }, '0')
-      ),
-      React.createElement(
-        'div',
-        { 
-          className: 'flex-1 text-right font-sans text-xl sm:text-2xl font-bold tracking-wider text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2 flex items-end justify-end'
+        {
+          className: `w-full text-right break-all tracking-tight transition-colors ${
+            isCalc
+              ? 'text-xl text-[var(--display-muted)] font-normal'
+              : 'text-3xl sm:text-4xl text-[var(--display-text)] font-light'
+          }`,
         },
-        res
-      )
+        expr || React.createElement('span', { className: isCalc ? 'text-[var(--display-muted-pale)]' : 'text-[var(--display-text)]' }, '0')
+      ),
+      isCalc &&
+        React.createElement(
+          'div',
+          {
+            className: 'w-full text-right font-sans text-3xl sm:text-4xl font-light tracking-tight text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap'
+          },
+          res
+        )
     );
   },
 };

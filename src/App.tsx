@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Power, Sparkles
 } from 'lucide-react';
@@ -31,15 +31,27 @@ import {
   MathAstState, MathNode, createInitialAstState,
   insertToken, insertValueNode, insertFraction, insertIntegral, insertDerivative, insertSqrt,
   insertPower, insertConstantPower, insertScientificTenPower, insertPostfix, PostfixOp, insertLogBase, navigateAst, deleteAst,
-  astToExpression, astToDisplayText, parseStringToAst, TokenType
+  astToExpression, astToDisplayText, parseStringToAst, resolveAnsInAst,
+  isAstCompleteForPreview, hasComputableOperation, TokenType
 } from './mathAst';
-import { NaturalDisplay } from './components/NaturalDisplay';
+import { NaturalDisplay, placeCursorAtClientPoint } from './components/NaturalDisplay';
+import { formatDisplayNumberWithCommas, formatHistoryLine } from './displayFormat';
 import {
   IntegralSvg, SigmaSvg, HollowBoxSvg, FractionKeySvg, SqrtKeySvg,
   CubeRootShiftSvg, NthRootShiftSvg, DoubleArrowSvg, OperatorSvg,
-  DpadArrowSvg, HeaderGearSvg, HeaderScrollArrowsSvg
+  DpadArrowSvg
 } from './components/MathGlyphs';
 import { HistorySheet } from './components/HistorySheet';
+import {
+  HistoryContextMenu,
+  HistoryUndoSnackbar,
+  ExpressionCopyMenu,
+  CopiedToast,
+} from './components/HistoryOverlays';
+import {
+  MergedHistoryEntry,
+  mergeConsecutiveHistory,
+} from './historyUtils';
 import { ClassWizQrModal } from './components/ClassWizQrModal';
 import { SettingsModal, CalculatorMode, CalculatorTheme, EditorMode } from './components/SettingsModal';
 import { CalibrationModal } from './components/CalibrationModal';
@@ -52,13 +64,14 @@ import {
   runInlineFlipExpand,
 } from './motion/useMotionEffects';
 import {
-  animateOpacityPulse,
   animateSpringTransform,
   computeFlipDelta,
   hasActiveSpring,
   prefersReducedMotion,
 } from './motion/spring';
-import { useHistorySheetMotion } from './motion/useHistorySheetMotion';
+import {
+  useHistorySheetMotion,
+} from './motion/useHistorySheetMotion';
 
 function useShrinkFirstFontSize(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -133,12 +146,15 @@ interface DisplayWorkspaceProps {
   setAstState: React.Dispatch<React.SetStateAction<MathAstState>>;
   errorMessage: string | null;
   result: string;
-  onInsertResult: (payload: InsertedResultPayload) => void;
-  editorMode: EditorMode;
-  justCommitted: boolean;
+  isCalculated: boolean;
   livePreviewResult: string;
-  lastValidPreviewResult: string;
   onCursorTouched?: () => void;
+  onSwipeDeleteChar: () => void;
+  onCopyResult: (rawText: string) => void;
+  onCopyExpression: () => void;
+  peekEntries: MergedHistoryEntry[];
+  onInsertHistoryEntryResult: (entry: MergedHistoryEntry) => void;
+  onLongPressHistoryEntry: (entry: MergedHistoryEntry, rect: DOMRect) => void;
 }
 
 const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
@@ -146,121 +162,392 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
   setAstState,
   errorMessage,
   result,
-  onInsertResult,
-  editorMode,
-  justCommitted,
+  isCalculated,
   livePreviewResult,
-  lastValidPreviewResult,
   onCursorTouched,
+  onSwipeDeleteChar,
+  onCopyResult,
+  onCopyExpression,
+  peekEntries,
+  onInsertHistoryEntryResult,
+  onLongPressHistoryEntry,
 }) => {
   const activeInputContainerRef = useRef<HTMLDivElement>(null);
   const activeInputWrapperRef = useRef<HTMLDivElement>(null);
+  const exprScrollRef = useRef<HTMLDivElement>(null);
   const activeResContainerRef = useRef<HTMLDivElement>(null);
   const activeResContentRef = useRef<HTMLDivElement>(null);
-  const resultPulseRef = useRef<HTMLSpanElement>(null);
-  const prevDisplayedResultRef = useRef<string>('');
+  const prevIsCalculatedRef = useRef<boolean>(isCalculated);
 
-  const exprKey = astToDisplayText(astState.root);
+  const [copyMenuAnchorRect, setCopyMenuAnchorRect] = useState<DOMRect | null>(null);
+  const [isExprCopyMenuOpen, setIsExprCopyMenuOpen] = useState(false);
+
+  const exprPointerRef = useRef<{
+    active: boolean;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    lastDeleteX: number;
+    didSwipe: boolean;
+    didLongPress: boolean;
+    timerId: number | null;
+  }>({
+    active: false,
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    lastDeleteX: 0,
+    didSwipe: false,
+    didLongPress: false,
+    timerId: null,
+  });
+
+  const histHoldTimerRef = useRef<number | null>(null);
+  const histPointerStartRef = useRef<{ x: number; y: number; fired: boolean }>({ x: 0, y: 0, fired: false });
+
+  useEffect(() => {
+    return () => {
+      if (exprPointerRef.current.timerId !== null) {
+        window.clearTimeout(exprPointerRef.current.timerId);
+      }
+      if (histHoldTimerRef.current !== null) {
+        window.clearTimeout(histHoldTimerRef.current);
+      }
+    };
+  }, []);
+
+  const exprText = astToDisplayText(astState.root);
+  const exprShrinkDep = `${exprText}|${isCalculated ? '1' : '0'}`;
   const activeExprFontSize = useShrinkFirstFontSize(
     activeInputContainerRef,
     activeInputWrapperRef,
-    exprKey,
-    13.5
+    exprShrinkDep,
+    isCalculated ? 14 : 20
   );
 
-  const previewText = livePreviewResult || lastValidPreviewResult;
-  const activeResultText = errorMessage
+  // State 1 (!isCalculated): live preview only when valid & complete; never show error mid-typing
+  // State 2 (isCalculated || errorMessage): large evaluated result or error
+  const rawActiveResult = errorMessage
     ? `[${errorMessage}]`
-    : editorMode === 'PHONE' && !justCommitted
-    ? previewText
-      ? `= ${previewText}`
-      : ''
-    : result;
+    : isCalculated
+    ? result
+    : livePreviewResult;
 
+  const formattedResult = errorMessage
+    ? `[${errorMessage}]`
+    : rawActiveResult
+    ? formatDisplayNumberWithCommas(rawActiveResult)
+    : '';
+
+  const showResultLine = Boolean(formattedResult);
+
+  const resShrinkDep = `${formattedResult}|${isCalculated ? '1' : '0'}`;
   const activeResFontSize = useShrinkFirstFontSize(
     activeResContainerRef,
     activeResContentRef,
-    activeResultText,
-    16
+    resShrinkDep,
+    isCalculated ? 20 : 15
   );
 
-  // Short opacity-only compositor pulse when result updates
-  useEffect(() => {
-    const el = resultPulseRef.current;
-    if (!activeResultText) {
-      prevDisplayedResultRef.current = '';
+  // ~200ms ease-out swap ("rise") animation on State 1 -> State 2 transition (compositor transform + opacity only)
+  useLayoutEffect(() => {
+    const wasCalc = prevIsCalculatedRef.current;
+    prevIsCalculatedRef.current = isCalculated;
+
+    const exprEl = activeInputContainerRef.current;
+    const resEl = activeResContainerRef.current;
+
+    if (!isCalculated) {
+      exprEl?.getAnimations?.().forEach((a) => a.cancel());
+      resEl?.getAnimations?.().forEach((a) => a.cancel());
       return;
     }
-    if (el && prevDisplayedResultRef.current !== '' && activeResultText !== prevDisplayedResultRef.current) {
-      animateOpacityPulse(el, 0.36, 1);
+
+    if (!wasCalc && isCalculated && !errorMessage && !prefersReducedMotion()) {
+      const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
+      if (exprEl && typeof exprEl.animate === 'function') {
+        exprEl.getAnimations?.().forEach((a) => a.cancel());
+        exprEl.animate(
+          [
+            { transform: 'translate3d(0, 14px, 0) scale(1.16)', opacity: 0.92 },
+            { transform: 'translate3d(0, 0, 0) scale(1)', opacity: 1 },
+          ],
+          { duration: 200, easing, fill: 'none' }
+        );
+      }
+      if (resEl && typeof resEl.animate === 'function') {
+        resEl.getAnimations?.().forEach((a) => a.cancel());
+        resEl.animate(
+          [
+            { transform: 'translate3d(0, 20px, 0) scale(0.74)', opacity: 0.45 },
+            { transform: 'translate3d(0, 0, 0) scale(1)', opacity: 1 },
+          ],
+          { duration: 200, easing, fill: 'none' }
+        );
+      }
     }
-    prevDisplayedResultRef.current = activeResultText;
-  }, [activeResultText]);
+  }, [isCalculated, errorMessage]);
+
+  // Display top 2 history entries oldest-on-top, newest-on-bottom
+  const inlineHistory = useMemo(() => [...peekEntries].reverse(), [peekEntries]);
+
+  const cancelExprTimer = () => {
+    if (exprPointerRef.current.timerId !== null) {
+      window.clearTimeout(exprPointerRef.current.timerId);
+      exprPointerRef.current.timerId = null;
+    }
+  };
+
+  const handleExprPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    cancelExprTimer();
+    const targetRect = e.currentTarget.getBoundingClientRect();
+    exprPointerRef.current = {
+      active: true,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastDeleteX: e.clientX,
+      didSwipe: false,
+      didLongPress: false,
+      timerId: window.setTimeout(() => {
+        if (!exprPointerRef.current.active || exprPointerRef.current.didSwipe) return;
+        exprPointerRef.current.didLongPress = true;
+        triggerHaptic('action');
+        setCopyMenuAnchorRect(targetRect);
+        setIsExprCopyMenuOpen(true);
+      }, 420),
+    };
+  };
+
+  const handleExprPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = exprPointerRef.current;
+    if (!p.active || p.pointerId !== e.pointerId) return;
+    const dx = e.clientX - p.startX;
+    const dy = e.clientY - p.startY;
+
+    if (Math.hypot(dx, dy) > 8) {
+      cancelExprTimer();
+    }
+
+    if (!p.didSwipe && !p.didLongPress) {
+      if (Math.abs(dx) > 16 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+        p.didSwipe = true;
+        p.lastDeleteX = e.clientX;
+        onSwipeDeleteChar();
+      }
+      return;
+    }
+
+    if (p.didSwipe) {
+      const stepDelta = Math.abs(e.clientX - p.lastDeleteX);
+      if (stepDelta >= 28) {
+        p.lastDeleteX = e.clientX;
+        onSwipeDeleteChar();
+      }
+    }
+  };
+
+  const handleExprPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = exprPointerRef.current;
+    if (!p.active || p.pointerId !== e.pointerId) return;
+    cancelExprTimer();
+    const dx = e.clientX - p.startX;
+    const dy = e.clientY - p.startY;
+    const wasTap = !p.didSwipe && !p.didLongPress && Math.hypot(dx, dy) < 10;
+    p.active = false;
+
+    if (wasTap) {
+      onCursorTouched?.();
+      placeCursorAtClientPoint(
+        exprScrollRef.current,
+        astState.root,
+        e.clientX,
+        e.target,
+        (slotId, offset) => {
+          setAstState((prev) => ({
+            ...prev,
+            cursor: { slotId, offset },
+            pendingDeleteTemplateId: null,
+          }));
+        }
+      );
+    }
+  };
+
+  const handleExprPointerCancel = () => {
+    cancelExprTimer();
+    exprPointerRef.current.active = false;
+  };
 
   return (
     <div data-testid="display-workspace" className="display-workspace select-none">
-      {/* Primary User Input Zone */}
-      <div
-        ref={activeInputContainerRef}
-        data-testid="active-input-line"
-        onClick={() => onCursorTouched?.()}
-        className="calc-active-input-line no-scrollbar"
-      >
-        <div ref={activeInputWrapperRef} className="calc-active-input-inner">
-          <NaturalDisplay
-            nodes={astState.root}
-            cursor={astState.cursor}
-            pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
-            fontSize={activeExprFontSize}
-            onSetCursor={(slotId, offset) => {
-              onCursorTouched?.();
-              setAstState((prev) => ({
-                ...prev,
-                cursor: { slotId, offset },
-                pendingDeleteTemplateId: null,
-              }));
+      {/* 1. TOP HISTORY LINES (Last 2 completed calculations, older lines paler, >=48dp tappable) */}
+      {inlineHistory.length > 0 && (
+        <div
+          data-testid="history-peek-zone"
+          className="calc-peek-zone pt-1"
+        >
+          {inlineHistory.map((entry, idx) => {
+            const isOlder = inlineHistory.length > 1 && idx === 0;
+            const lineText = formatHistoryLine(entry.primary.expression, entry.primary.result);
+            return (
+              <button
+                key={entry.key}
+                type="button"
+                data-testid={`inline-history-line-${idx}`}
+                onClick={() => {
+                  if (histPointerStartRef.current.fired) return;
+                  onInsertHistoryEntryResult(entry);
+                }}
+                onPointerDown={(e) => {
+                  histPointerStartRef.current = { x: e.clientX, y: e.clientY, fired: false };
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  if (histHoldTimerRef.current !== null) window.clearTimeout(histHoldTimerRef.current);
+                  histHoldTimerRef.current = window.setTimeout(() => {
+                    histPointerStartRef.current.fired = true;
+                    triggerHaptic('action');
+                    onLongPressHistoryEntry(entry, rect);
+                  }, 450);
+                }}
+                onPointerMove={(e) => {
+                  if (
+                    Math.hypot(
+                      e.clientX - histPointerStartRef.current.x,
+                      e.clientY - histPointerStartRef.current.y
+                    ) > 8 &&
+                    histHoldTimerRef.current !== null
+                  ) {
+                    window.clearTimeout(histHoldTimerRef.current);
+                    histHoldTimerRef.current = null;
+                  }
+                }}
+                onPointerUp={() => {
+                  if (histHoldTimerRef.current !== null) {
+                    window.clearTimeout(histHoldTimerRef.current);
+                    histHoldTimerRef.current = null;
+                  }
+                }}
+                onPointerCancel={() => {
+                  if (histHoldTimerRef.current !== null) {
+                    window.clearTimeout(histHoldTimerRef.current);
+                    histHoldTimerRef.current = null;
+                  }
+                }}
+                title="Tap to insert result · Hold for options"
+                className={`w-full min-h-[48px] px-1 flex items-center justify-end text-right rounded-lg cursor-pointer transition-opacity active:opacity-60 ${
+                  isOlder ? 'text-[var(--display-muted-pale)]' : 'text-[var(--display-muted)]'
+                }`}
+              >
+                <span className="w-full truncate text-right text-[14px] font-medium tabular-nums">
+                  {lineText}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 2. CENTERED COLOROS MAIN STAGE: State 1 (Big White Expr + Small Grey Preview) / State 2 (Small Grey Expr + Big White Result) */}
+      <div className="calc-main-stage">
+        <div
+          data-testid="current-line-dock"
+          className="calc-current-line-dock"
+        >
+          <div
+            ref={activeInputContainerRef}
+            data-testid="active-input-line"
+            onPointerDown={handleExprPointerDown}
+            onPointerMove={handleExprPointerMove}
+            onPointerUp={handleExprPointerUp}
+            onPointerCancel={handleExprPointerCancel}
+            style={{
+              fontSize: isCalculated ? 'var(--fs-display-small)' : 'var(--fs-display-large)',
+              transformOrigin: 'right center',
             }}
-          />
+            className="calc-active-input-line no-scrollbar touch-none"
+          >
+            <div ref={activeInputWrapperRef} className="calc-active-input-inner">
+              <NaturalDisplay
+                displayRef={exprScrollRef}
+                deferTapCursor={true}
+                nodes={astState.root}
+                cursor={isCalculated ? undefined : astState.cursor}
+                pendingDeleteTemplateId={astState.pendingDeleteTemplateId}
+                fontSize={activeExprFontSize}
+                align="right"
+                inheritColor={true}
+                className={
+                  isCalculated
+                    ? 'text-[var(--display-muted)] font-normal'
+                    : 'text-[var(--display-text)] font-light'
+                }
+                onSetCursor={(slotId, offset) => {
+                  onCursorTouched?.();
+                  setAstState((prev) => ({
+                    ...prev,
+                    cursor: { slotId, offset },
+                    pendingDeleteTemplateId: null,
+                  }));
+                }}
+              />
+            </div>
+          </div>
+
+          {showResultLine && (
+            <div
+              ref={activeResContainerRef}
+              data-testid="active-result-line"
+              style={{
+                fontSize: isCalculated ? 'var(--fs-display-large)' : 'var(--fs-display-small)',
+                transformOrigin: 'right center',
+              }}
+              className="calc-active-result-line no-scrollbar"
+            >
+              <div ref={activeResContentRef} className="w-full flex items-center justify-end whitespace-nowrap">
+                {errorMessage ? (
+                  <span className="min-h-[48px] flex items-center justify-end text-[var(--ui-danger)] font-semibold text-base tracking-wide">
+                    [{errorMessage}]
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    data-testid="active-result-copy-btn"
+                    onClick={() => {
+                      if (!rawActiveResult) return;
+                      playKeyClick('action');
+                      triggerHaptic('action');
+                      onCopyResult(rawActiveResult);
+                    }}
+                    title="Tap to copy result"
+                    style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
+                    className={`w-full min-h-[48px] flex items-center justify-end text-right cursor-pointer select-text transition-opacity active:opacity-70 ${
+                      isCalculated
+                        ? 'text-[var(--display-text)] font-light'
+                        : 'text-[var(--display-muted)] font-normal'
+                    }`}
+                  >
+                    {formattedResult}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Anchored Bottom-Right Answer Zone */}
-      <div
-        ref={activeResContainerRef}
-        data-testid="active-result-line"
-        className="calc-active-result-line no-scrollbar"
-      >
-        <div ref={activeResContentRef} className="inline-flex items-center justify-end whitespace-nowrap">
-          {errorMessage ? (
-            <span
-              ref={resultPulseRef}
-              className="text-[var(--ui-danger)] font-bold text-sm tracking-wider"
-            >
-              [{errorMessage}]
-            </span>
-          ) : editorMode === 'PHONE' && !justCommitted ? (
-            previewText ? (
-              <span
-                ref={resultPulseRef}
-                style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
-                className="opacity-55 text-[var(--display-text)] font-semibold"
-              >
-                = {previewText}
-              </span>
-            ) : null
-          ) : result ? (
-            <span
-              ref={resultPulseRef}
-              onClick={() => onInsertResult({ numericVal: NaN, display: result })}
-              title="Tap to insert result"
-              style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
-              className="text-[var(--display-text)] cursor-pointer select-text"
-            >
-              {result}
-            </span>
-          ) : null}
-        </div>
-      </div>
+      {/* Long-press Expression Copy Menu */}
+      <ExpressionCopyMenu
+        isOpen={isExprCopyMenuOpen}
+        expressionText={exprText}
+        resultText={rawActiveResult}
+        anchorRect={copyMenuAnchorRect}
+        onClose={() => setIsExprCopyMenuOpen(false)}
+        onCopyExpression={onCopyExpression}
+        onCopyResult={() => {
+          if (rawActiveResult) onCopyResult(rawActiveResult);
+        }}
+      />
     </div>
   );
 });
@@ -325,7 +612,7 @@ export const SETUP_PAGES: SetupListItem[][] = [
     { id: 13, key: '1', title: 'MultiLine Font' },
     { id: 14, key: '2', title: 'QR Code' },
     { id: 15, key: '3', title: 'Contrast' },
-    { id: 16, key: '4', title: 'Auto Power Off' },
+    { id: 16, key: '4', title: 'App Settings' },
   ],
 ];
 
@@ -402,8 +689,8 @@ export default function App() {
   // Key-Path Trainer message
   const [trainerRoute, setTrainerRoute] = useState<string | null>(null);
 
-  // Calculator Output State
-  const [result, setResult] = useState('0');
+  // Calculator Output State (empty string when idle so empty screen shows single '0')
+  const [result, setResult] = useState('');
   const [rawNumericVal, setRawNumericVal] = useState<number>(0);
   const [isCalculated, setIsCalculated] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -450,7 +737,6 @@ export default function App() {
   }, [modeState.mode]);
 
   const currentModeModule = getModeModule(modeState.mode);
-  const modeIndicator = currentModeModule.getIndicator(modeState);
 
   // In-Display Menus (RULE: Everything renders inside display, key block never shifts)
   const [displayMenu, setDisplayMenu] = useState<DisplayMenuType>('NONE');
@@ -493,7 +779,7 @@ export default function App() {
     menuCloseTokenRef.current++;
     setModeState(mod.getInitialState());
     setAstState(createInitialAstState());
-    setResult('0');
+    setResult('');
     setIsCalculated(false);
     setDisplayMenu('NONE');
     setShiftActive(false);
@@ -578,7 +864,8 @@ export default function App() {
 
   const [justCommitted, setJustCommitted] = useState<boolean>(false);
   const [livePreviewResult, setLivePreviewResult] = useState<string>('');
-  const [lastValidPreviewResult, setLastValidPreviewResult] = useState<string>('');
+  const [copiedToastVisible, setCopiedToastVisible] = useState<boolean>(false);
+  const copiedToastTimerRef = useRef<number | null>(null);
 
   // Calculation History Log (persisted in localStorage for full history view)
   const [history, setHistory] = useState<HistoryItem[]>(() => {
@@ -598,6 +885,64 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [history]);
 
+  // Undo snackbar & Long-Press context menu state
+  const [undoNotice, setUndoNotice] = useState<{
+    message: string;
+    previousHistory: HistoryItem[];
+  } | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
+  const [contextMenuEntry, setContextMenuEntry] = useState<{
+    entry: MergedHistoryEntry;
+    rect: DOMRect;
+  } | null>(null);
+
+  const showUndoSnackbar = useCallback((message: string, previousHistory: HistoryItem[]) => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    setUndoNotice({ message, previousHistory });
+    undoTimerRef.current = window.setTimeout(() => {
+      setUndoNotice(null);
+      undoTimerRef.current = null;
+    }, 5000);
+  }, []);
+
+  const handleUndoHistoryAction = useCallback(() => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    if (undoNotice) {
+      setHistory(undoNotice.previousHistory);
+      setUndoNotice(null);
+    }
+  }, [undoNotice]);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current !== null) {
+        window.clearTimeout(undoTimerRef.current);
+      }
+      if (copiedToastTimerRef.current !== null) {
+        window.clearTimeout(copiedToastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const mergedHistory = useMemo(() => mergeConsecutiveHistory(history), [history]);
+  const peekEntries = useMemo(() => mergedHistory.slice(0, 2), [mergedHistory]);
+
+  const triggerCopiedToast = useCallback(() => {
+    if (copiedToastTimerRef.current !== null) {
+      window.clearTimeout(copiedToastTimerRef.current);
+    }
+    setCopiedToastVisible(true);
+    copiedToastTimerRef.current = window.setTimeout(() => {
+      setCopiedToastVisible(false);
+      copiedToastTimerRef.current = null;
+    }, 1600);
+  }, []);
+
   const handleLoadHistoryCard = useCallback((item: HistoryItem) => {
     playKeyClick('num');
     triggerHaptic('num');
@@ -615,26 +960,54 @@ export default function App() {
     setErrorMessage(null);
   }, []);
 
-  const handleTogglePinHistory = useCallback((id: string) => {
-    setHistory((prev) => prev.map((it) => (it.id === id ? { ...it, pinned: !it.pinned } : it)));
+  const handleTogglePinEntry = useCallback((entry: MergedHistoryEntry) => {
+    const idSet = new Set(entry.sourceIds);
+    const nextPinned = !entry.pinned;
+    setHistory((prev) =>
+      prev.map((it) => (idSet.has(it.id) ? { ...it, pinned: nextPinned } : it))
+    );
   }, []);
 
-  const handleDeleteHistoryItem = useCallback((id: string) => {
-    setHistory((prev) => prev.filter((it) => it.id !== id));
-  }, []);
+  const handleDeleteEntry = useCallback(
+    (entry: MergedHistoryEntry) => {
+      const idSet = new Set(entry.sourceIds);
+      setHistory((prev) => {
+        showUndoSnackbar('Deleted from history', prev);
+        return prev.filter((it) => !idSet.has(it.id));
+      });
+    },
+    [showUndoSnackbar]
+  );
 
   const handleClearHistory = useCallback(() => {
-    setHistory([]);
-  }, []);
+    setHistory((prev) => {
+      if (prev.length === 0) return prev;
+      showUndoSnackbar('History cleared', prev);
+      return [];
+    });
+  }, [showUndoSnackbar]);
 
-  // Live preview calculation for Phone Edit mode
+  const handleCopyEntryText = useCallback(async (text: string, showToast = false) => {
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {}
+    if (showToast) {
+      triggerCopiedToast();
+    }
+  }, [triggerCopiedToast]);
+
+  // Live preview calculation while typing (State 1): only shown when expression is complete & valid
   useEffect(() => {
-    if (editorMode !== 'PHONE') return;
-    if (justCommitted) return;
+    if (isCalculated || justCommitted || errorMessage || modeState.mode !== 'CALC') {
+      return;
+    }
 
-    if (astState.root.length === 0) {
+    if (
+      astState.root.length === 0 ||
+      !isAstCompleteForPreview(astState.root) ||
+      !hasComputableOperation(astState.root)
+    ) {
       setLivePreviewResult('');
-      setLastValidPreviewResult('');
       return;
     }
 
@@ -648,13 +1021,25 @@ export default function App() {
           formatted = formatResult(evalResult.result, displayFormat, fixDigits, sciDigits, 0);
         }
         setLivePreviewResult(formatted);
-        setLastValidPreviewResult(formatted);
+      } else {
+        setLivePreviewResult('');
       }
-      // If expression is incomplete or invalid, keep lastValidPreviewResult and show no error
     } catch {
-      // Keep lastValidPreviewResult
+      setLivePreviewResult('');
     }
-  }, [astState.root, editorMode, justCommitted, angleMode, variables, lastAns, displayFormat, fixDigits, sciDigits]);
+  }, [
+    astState.root,
+    isCalculated,
+    justCommitted,
+    errorMessage,
+    modeState.mode,
+    angleMode,
+    variables,
+    lastAns,
+    displayFormat,
+    fixDigits,
+    sciDigits,
+  ]);
 
   const handleInsertHistoryResult = useCallback((payload: InsertedResultPayload) => {
     playKeyClick('num');
@@ -725,14 +1110,11 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null);
   const displayRef = useRef<HTMLDivElement>(null);
   const keyBlockRef = useRef<HTMLDivElement>(null);
-  const settingsGearRef = useRef<HTMLButtonElement>(null);
   const menuKeyRef = useRef<HTMLButtonElement>(null);
-  const historyGrabRef = useRef<HTMLButtonElement>(null);
   const historySheetRef = useRef<HTMLDivElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
   const modeContainerRef = useRef<HTMLDivElement>(null);
 
-  const [settingsOriginRect, setSettingsOriginRect] = useState<CachedRect | null>(null);
   const menuKeyRectRef = useRef<CachedRect | null>(null);
   const menuCardRectsRef = useRef<Record<string, CachedRect>>({});
   const pendingMenuFlipOriginRef = useRef<CachedRect | null>(null);
@@ -745,15 +1127,14 @@ export default function App() {
 
   const {
     isExpanded: isHistorySheetExpanded,
-    snapToExpanded: setHistorySheetExpanded,
+    snapToDetent: setHistoryDetent,
     handleDragStart: handleHistoryDragStart,
     handleDragMove: handleHistoryDragMove,
     handleDragEnd: handleHistoryDragEnd,
-    wasRecentPointerTap: wasHistoryPointerTap,
   } = useHistorySheetMotion({
     enabled: !isPoweredOff && modeState.mode === 'CALC' && displayMenu === 'NONE',
     mainRef,
-    historySheetRef,
+    fullSheetRef: historySheetRef,
   });
 
   const {
@@ -765,17 +1146,6 @@ export default function App() {
   // Precompute cached element rects for FLIP overlays (zero layout reads during pointerdown/click)
   useLayoutEffect(() => {
     const refreshOverlayOrigins = () => {
-      if (settingsGearRef.current) {
-        const next = toCachedRect(settingsGearRef.current.getBoundingClientRect());
-        setSettingsOriginRect((prev) =>
-          prev &&
-          Math.abs(prev.left - next.left) < 0.5 &&
-          Math.abs(prev.top - next.top) < 0.5 &&
-          Math.abs(prev.width - next.width) < 0.5
-            ? prev
-            : next
-        );
-      }
       if (menuKeyRef.current) {
         menuKeyRectRef.current = toCachedRect(menuKeyRef.current.getBoundingClientRect());
       }
@@ -1041,7 +1411,7 @@ export default function App() {
       return;
     }
     setAstState(createInitialAstState());
-    setResult('0');
+    setResult('');
     setIsCalculated(false);
     setShiftActive(false);
     setAlphaActive(false);
@@ -1090,11 +1460,10 @@ export default function App() {
 
     commitPendingHistory();
     setAstState(createInitialAstState());
-    setResult('0');
+    setResult('');
     setIsCalculated(false);
     setJustCommitted(false);
     setLivePreviewResult('');
-    setLastValidPreviewResult('');
     setShiftActive(false);
     setAlphaActive(false);
     setIsStoreMode(false);
@@ -1122,7 +1491,10 @@ export default function App() {
       const pageItems = SETUP_PAGES[setupPageIndex];
       const item = pageItems[num - 1];
       if (item) {
-        if (item.targetMenu) {
+        if (item.id === 16) {
+          setDisplayMenu('NONE');
+          setIsSettingsModalOpen(true);
+        } else if (item.targetMenu) {
           setDisplayMenu(item.targetMenu);
         } else {
           setDisplayMenu('NONE');
@@ -1330,21 +1702,21 @@ export default function App() {
     pushUndoState(astState);
 
     let currentState = astState;
+    const isBinaryOrPostfix =
+      [
+        '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
+        'P', 'C', 'nPr', 'nCr'
+      ].includes(tokenVal) ||
+      tokenType === 'OP_NPR' ||
+      tokenType === 'OP_NCR';
+    const isFunctionCall = tokenVal.endsWith('(') && tokenVal !== '(' && tokenVal !== '(-';
+
     if (editorMode === 'PHONE') {
       if (justCommitted) {
-        // Binary and postfix operators start new expression with "Ans"
-        // (+ - × ÷ x² x⁻¹ x^□ nPr nCr etc.)
-        const isBinaryOrPostfix = [
-          '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
-          'P', 'C', 'nPr', 'nCr'
-        ].includes(tokenVal) || tokenType === 'OP_NPR' || tokenType === 'OP_NCR';
-
-        if (isBinaryOrPostfix) {
-          currentState = parseStringToAst('Ans');
-        } else {
-          // Digits, '(', functions, etc. start a fresh input
-          currentState = createInitialAstState();
-        }
+        currentState =
+          isBinaryOrPostfix || isFunctionCall
+            ? parseStringToAst('Ans')
+            : createInitialAstState();
         setJustCommitted(false);
         setIsCalculated(false);
         setSdCycleState(0);
@@ -1352,19 +1724,10 @@ export default function App() {
       }
     } else if (isCalculated) {
       commitPendingHistory();
-      // Binary and postfix operators start new expression with "Ans"
-      // (+ - × ÷ x² x⁻¹ x^□ nPr nCr etc.)
-      const isBinaryOrPostfix = [
-        '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
-        'P', 'C', 'nPr', 'nCr'
-      ].includes(tokenVal) || tokenType === 'OP_NPR' || tokenType === 'OP_NCR';
-
-      if (isBinaryOrPostfix) {
-        currentState = parseStringToAst('Ans');
-      } else {
-        // Digits, '(', functions, etc. start a fresh input
-        currentState = createInitialAstState();
-      }
+      currentState =
+        isBinaryOrPostfix || isFunctionCall
+          ? parseStringToAst('Ans')
+          : createInitialAstState();
       setIsCalculated(false);
       setSdCycleState(0);
       setEngStep(0);
@@ -1422,13 +1785,13 @@ export default function App() {
     let currentState = astState;
     if (editorMode === 'PHONE') {
       if (justCommitted) {
-        currentState = createInitialAstState();
+        currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
       }
     } else if (isCalculated) {
       commitPendingHistory();
-      currentState = createInitialAstState();
+      currentState = parseStringToAst('Ans');
       setIsCalculated(false);
     }
 
@@ -1448,13 +1811,13 @@ export default function App() {
     let currentState = astState;
     if (editorMode === 'PHONE') {
       if (justCommitted) {
-        currentState = createInitialAstState();
+        currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
       }
     } else if (isCalculated) {
       commitPendingHistory();
-      currentState = createInitialAstState();
+      currentState = parseStringToAst('Ans');
       setIsCalculated(false);
     }
 
@@ -1480,13 +1843,13 @@ export default function App() {
     let currentState = astState;
     if (editorMode === 'PHONE') {
       if (justCommitted) {
-        currentState = createInitialAstState();
+        currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
       }
     } else if (isCalculated) {
       commitPendingHistory();
-      currentState = createInitialAstState();
+      currentState = parseStringToAst('Ans');
       setIsCalculated(false);
     }
 
@@ -1549,13 +1912,13 @@ export default function App() {
     let currentState = astState;
     if (editorMode === 'PHONE') {
       if (justCommitted) {
-        currentState = createInitialAstState();
+        currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
       }
     } else if (isCalculated) {
       commitPendingHistory();
-      currentState = createInitialAstState();
+      currentState = parseStringToAst('Ans');
       setIsCalculated(false);
     }
 
@@ -1643,13 +2006,13 @@ export default function App() {
     let currentState = astState;
     if (editorMode === 'PHONE') {
       if (justCommitted) {
-        currentState = createInitialAstState();
+        currentState = parseStringToAst('Ans');
         setJustCommitted(false);
         setIsCalculated(false);
       }
     } else if (isCalculated) {
       commitPendingHistory();
-      currentState = createInitialAstState();
+      currentState = parseStringToAst('Ans');
       setIsCalculated(false);
     }
 
@@ -1797,7 +2160,7 @@ export default function App() {
         if (nextIdx < 0) {
           setHistoryIndex(-1);
           setAstState(createInitialAstState());
-          setResult('0');
+          setResult('');
           setIsCalculated(false);
         } else {
           setHistoryIndex(nextIdx);
@@ -1840,7 +2203,10 @@ export default function App() {
     if (displayMenu === 'SETUP') {
       const pageItems = SETUP_PAGES[setupPageIndex];
       const item = pageItems[setupRowIndex];
-      if (item?.targetMenu) {
+      if (item?.id === 16) {
+        setDisplayMenu('NONE');
+        setIsSettingsModalOpen(true);
+      } else if (item?.targetMenu) {
         setDisplayMenu(item.targetMenu);
       } else {
         setDisplayMenu('NONE');
@@ -1858,7 +2224,7 @@ export default function App() {
       setAngleMode('DEG');
       handleSelectMode('CALC');
       setAstState(createInitialAstState());
-      setResult('0');
+      setResult('');
       setHistory([]);
       setDisplayMenu('NONE');
       return;
@@ -1902,8 +2268,15 @@ export default function App() {
 
       setResult(formattedOutput);
 
-      const completedExpr = astToDisplayText(astState.root);
-      const completedAstRoot = JSON.parse(JSON.stringify(astState.root));
+      // Resolve any Ans tokens in AST so history never shows a bare "Ans" expression
+      const prevHist = history[0];
+      const ansDisplay =
+        prevHist?.result ?? formatResult(lastAns, displayFormat, fixDigits, sciDigits, 0);
+      const ansExact =
+        prevHist?.result === prevHist?.exactResult ? prevHist?.exactResult : undefined;
+      const resolvedAstRoot = resolveAnsInAst(astState.root, lastAns, ansDisplay, ansExact);
+      const completedExpr = astToDisplayText(resolvedAstRoot);
+      const completedAstRoot = JSON.parse(JSON.stringify(resolvedAstRoot));
 
       const newHistoryItem: HistoryItem = {
         id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
@@ -1913,15 +2286,31 @@ export default function App() {
         numericVal: numVal,
         timestamp: Date.now(),
         astRoot: completedAstRoot,
+        count: 1,
       };
 
+      setLivePreviewResult('');
       if (editorMode === 'PHONE') {
         setJustCommitted(true);
-        setLivePreviewResult(formattedOutput);
-        setLastValidPreviewResult(formattedOutput);
       }
 
-      setHistory((prev) => [newHistoryItem, ...prev.slice(0, 49)]);
+      setHistory((prev) => {
+        const top = prev[0];
+        if (
+          top &&
+          !top.pinned &&
+          top.expression === newHistoryItem.expression &&
+          top.result === newHistoryItem.result
+        ) {
+          const updatedTop: HistoryItem = {
+            ...top,
+            timestamp: newHistoryItem.timestamp,
+            count: (top.count || 1) + 1,
+          };
+          return [updatedTop, ...prev.slice(1, 999)];
+        }
+        return [newHistoryItem, ...prev.slice(0, 999)];
+      });
       setHistoryIndex(-1);
     } else {
       setErrorMessage(evalResult.error || 'Syntax ERROR');
@@ -2077,121 +2466,33 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. MINIMALIST HIGH-CONTRAST LCD DISPLAY SCREEN */}
-        {/* Shared 16px (8px-grid) left/right margin matching keypad below */}
+        {/* 2. BORDERLESS COLOROS DISPLAY AREA (No card, no border, no header) */}
         <div
           ref={displayRef}
           data-testid="display-screen"
+          onPointerDown={(e) => handleHistoryDragStart(e, 'display')}
+          onPointerMove={handleHistoryDragMove}
+          onPointerUp={handleHistoryDragEnd}
+          onPointerCancel={handleHistoryDragEnd}
           style={{
             paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
             paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
             paddingTop: 'max(8px, env(safe-area-inset-top, 8px))',
-            paddingBottom: '10px',
+            paddingBottom: '6px',
           }}
-          className={`flex-1 w-full min-h-[160px] rounded-[20px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] flex flex-col justify-between relative select-none ${
-            isPoweredOff ? 'bg-[var(--display-bg)]' : 'lcd-screen-bg'
-          }`}
+          className="flex-1 w-full min-h-[160px] lcd-screen-bg flex flex-col justify-between relative select-none"
         >
+          <CopiedToast visible={copiedToastVisible} />
+
           {isPoweredOff ? (
             /* Power-Off Standby Display */
-            <div className="h-full flex flex-col items-center justify-center text-[var(--display-text)]/40 font-sans select-none">
-              <Power className="w-5 h-5 mb-1 opacity-40" />
-              <span className="text-[10px] tracking-widest opacity-45">CASIO CLASSWIZ [STANDBY]</span>
-              <span className="text-[9px] opacity-35 mt-0.5">Press ON to power up</span>
+            <div className="h-full flex flex-col items-center justify-center text-[var(--display-muted)] font-sans select-none">
+              <Power className="w-5 h-5 mb-1 opacity-50" />
+              <span className="text-[10px] tracking-widest opacity-60">CASIO CLASSWIZ [STANDBY]</span>
+              <span className="text-[9px] opacity-45 mt-0.5">Press ON to power up</span>
             </div>
           ) : (
-            <>
-              {/* TOP NOTIFICATION-CENTER GRAB HANDLE + SLIM STATUS INDICATOR HEADER */}
-              <div
-                onPointerDown={(e) => handleHistoryDragStart(e, 'top')}
-                onPointerMove={handleHistoryDragMove}
-                onPointerUp={handleHistoryDragEnd}
-                onPointerCancel={handleHistoryDragEnd}
-                className="w-full shrink-0 flex flex-col items-center pb-1.5 touch-none"
-              >
-                {modeState.mode === 'CALC' && displayMenu === 'NONE' && (
-                  <button
-                    ref={historyGrabRef}
-                    type="button"
-                    data-testid="history-grab-handle"
-                    aria-label="Open calculation history sheet"
-                    title="Swipe down or tap for History"
-                    onClick={() => {
-                      if (wasHistoryPointerTap()) return;
-                      playKeyClick('action');
-                      setHistorySheetExpanded(true);
-                    }}
-                    className="w-32 h-6 -mt-0.5 flex items-center justify-center cursor-pointer touch-none group"
-                  >
-                    <span className="w-11 h-1 rounded-full bg-[var(--display-text)]/40 group-hover:bg-[var(--display-text)]/75" />
-                  </button>
-                )}
-
-                <div className="flex items-center justify-between text-[11px] font-sans tabular-nums tracking-wider select-none text-[var(--display-text)]/70 w-full">
-                  <div className="flex items-center gap-1.5">
-                    {/* [S] Indicator: Shown ONLY when active */}
-                    {shiftActive && (
-                      <span className="px-1 rounded text-[9px] font-bold bg-[var(--label-shift)] text-[var(--ui-accent-text)]">
-                        S
-                      </span>
-                    )}
-                    {/* [A] Indicator: Shown ONLY when active */}
-                    {alphaActive && (
-                      <span className="px-1 rounded text-[9px] font-bold bg-[var(--label-alpha)] text-[var(--key-accent-text)]">
-                        A
-                      </span>
-                    )}
-                    {/* Angle Unit Indicator (D, R, G) */}
-                    <span className="font-bold text-[var(--display-text)] text-[10.5px]">
-                      {angleMode === 'DEG' ? 'D' : angleMode === 'RAD' ? 'R' : 'G'}
-                    </span>
-                    {/* Precision Format Mode */}
-                    <span className="text-[9.5px] text-[var(--display-text)]/75">
-                      {displayFormat === 'NORM1' ? 'Norm1' : displayFormat === 'NORM2' ? 'Norm2' : displayFormat === 'FIX' ? `Fix${fixDigits}` : `Sci${sciDigits}`}
-                    </span>
-                    {/* Mode Indicator: dynamic based on active mode */}
-                    {modeIndicator && (
-                      <span className="px-1 rounded text-[8.5px] font-bold border border-[var(--display-text)]/30 text-[var(--display-text)]">
-                        {modeIndicator}
-                      </span>
-                    )}
-                    {/* [STO] Indicator */}
-                    {isStoreMode && (
-                      <span className="px-1 rounded text-[8.5px] font-bold bg-[var(--label-base)] text-[var(--ui-accent-text)]">
-                        STO
-                      </span>
-                    )}
-                    {/* [M] Indicator */}
-                    {memoryM !== 0 && (
-                      <span className="px-1 rounded text-[8.5px] font-bold bg-[var(--display-text)] text-[var(--display-bg)]">
-                        M
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-[var(--display-text)]/85 text-[10.5px] font-math-serif italic">Math</span>
-                    <span className="text-[var(--display-text)]/75 inline-flex items-center">
-                      <HeaderScrollArrowsSvg className="w-[18px] h-[9px]" />
-                    </span>
-                    <button
-                      ref={settingsGearRef}
-                      onClick={() => {
-                        playKeyClick('action');
-                        setIsSettingsModalOpen(true);
-                      }}
-                      aria-label="Settings and Modes"
-                      title="Settings & Modes"
-                      className="p-1 -mr-1 rounded hover:text-[var(--display-text)] opacity-75 hover:opacity-100 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
-                    >
-                      <HeaderGearSvg className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* IN-DISPLAY CONTENT ROUTER: Swaps between Natural Expression, Mode Screens, and In-Display Menus */}
-              <div className="flex-1 w-full min-h-0 flex flex-col justify-between relative">
+            <div className="flex-1 w-full min-h-0 flex flex-col justify-between relative">
               {displayMenu === 'NONE' || (displayMenu === 'MENU' || isMenuClosing) ? (
                 <>
                   {displayMenu !== 'MENU' && (
@@ -2216,14 +2517,28 @@ export default function App() {
                           setAstState={setAstState}
                           errorMessage={errorMessage}
                           result={result}
-                          onInsertResult={handleInsertHistoryResult}
-                          editorMode={editorMode}
-                          justCommitted={justCommitted}
+                          isCalculated={isCalculated}
                           livePreviewResult={livePreviewResult}
-                          lastValidPreviewResult={lastValidPreviewResult}
                           onCursorTouched={() => {
                             setJustCommitted(false);
                             setIsCalculated(false);
+                          }}
+                          onSwipeDeleteChar={handleDelete}
+                          onCopyResult={(rawText) => handleCopyEntryText(rawText, true)}
+                          onCopyExpression={() => handleCopyEntryText(astToDisplayText(astState.root), true)}
+                          peekEntries={peekEntries}
+                          onInsertHistoryEntryResult={(entry) => {
+                            handleInsertHistoryResult({
+                              numericVal: entry.primary.numericVal,
+                              display: entry.primary.result,
+                              exactResult:
+                                entry.primary.result === entry.primary.exactResult
+                                  ? entry.primary.exactResult
+                                  : undefined,
+                            });
+                          }}
+                          onLongPressHistoryEntry={(entry, rect) => {
+                            setContextMenuEntry({ entry, rect });
                           }}
                         />
                       </div>
@@ -2253,14 +2568,14 @@ export default function App() {
                                 setMenuHighlightIndex(absoluteIndex);
                                 handleSelectMode(item.code);
                               }}
-                              className={`flex flex-col items-start justify-center px-2 py-1.5 rounded-lg text-left border cursor-pointer overflow-hidden ${
+                              className={`min-h-[48px] flex flex-col items-start justify-center px-2.5 py-1.5 rounded-xl text-left border cursor-pointer overflow-hidden ${
                                 isSelected
                                   ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold border-[var(--display-text)] static-glow-card'
-                                  : 'bg-[var(--menu-card-bg)] text-[var(--display-text)] border-[var(--m3-outline-variant)]'
+                                  : 'bg-[var(--display-surface)] text-[var(--display-text)] border-[var(--display-divider)]'
                               }`}
                             >
                               <span className={`text-[clamp(9.5px,min(2.4cqw,1.5cqh),11px)] font-extrabold leading-none mb-0.5 ${
-                                isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--label-shift)]'
+                                isSelected ? 'text-[var(--display-bg)]' : 'text-[var(--ui-accent)]'
                               }`}>
                                 {item.key}:
                               </span>
@@ -2278,9 +2593,9 @@ export default function App() {
                         })}
                       </div>
                       {/* Page indicator and helper footer */}
-                      <div className="flex items-center justify-between text-[9px] text-[var(--display-text)]/75 pt-1 border-t border-[var(--m3-outline-variant)]">
+                      <div className="flex items-center justify-between text-[10px] text-[var(--display-muted)] pt-1.5 border-t border-[var(--display-divider)]">
                         <span>Use [▲▼◄►] to move, [=] to select</span>
-                        <span className="font-bold text-[var(--label-shift)]">Page {menuPage + 1}/2 ▲▼</span>
+                        <span className="font-bold text-[var(--ui-accent)]">Page {menuPage + 1}/2 ▲▼</span>
                       </div>
                     </div>
                   )}
@@ -2288,8 +2603,8 @@ export default function App() {
               ) : displayMenu === 'SETUP' ? (
                 /* 2. IN-DISPLAY SETUP LIST: Scrollable list of 4 items per page */
                 <div className="flex-1 flex flex-col justify-between py-1 overflow-hidden font-sans">
-                  <div className="space-y-1 flex-1">
-                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5 mb-1 flex justify-between">
+                  <div className="space-y-1 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+                    <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1 mb-1 flex justify-between">
                       <span>SETUP MENU</span>
                       <span>Page {setupPageIndex + 1}/{SETUP_PAGES.length} ▲▼</span>
                     </div>
@@ -2300,12 +2615,17 @@ export default function App() {
                           key={item.id}
                           onClick={() => {
                             setSetupRowIndex(idx);
-                            if (item.targetMenu) setDisplayMenu(item.targetMenu);
+                            if (item.id === 16) {
+                              setDisplayMenu('NONE');
+                              setIsSettingsModalOpen(true);
+                            } else if (item.targetMenu) {
+                              setDisplayMenu(item.targetMenu);
+                            }
                           }}
-                          className={`w-full flex items-center justify-between px-2 py-0.5 rounded text-left text-xs ${
+                          className={`w-full min-h-[48px] flex items-center justify-between px-3 py-1 rounded-xl text-left text-xs cursor-pointer ${
                             isSelected
-                              ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold shadow-sm'
-                              : 'text-[var(--display-text)] hover:bg-[var(--display-text)]/20'
+                              ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold'
+                              : 'text-[var(--display-text)] hover:bg-[var(--display-surface)]'
                           }`}
                         >
                           <span>{item.key}:{item.title}</span>
@@ -2314,7 +2634,7 @@ export default function App() {
                       );
                     })}
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1~4 to select</span>
                     <span>[AC] :Exit</span>
                   </div>
@@ -2323,7 +2643,7 @@ export default function App() {
                 /* Angle Unit Sub-menu */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">ANGLE UNIT</div>
+                    <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1">ANGLE UNIT</div>
                     {[
                       { key: '1', name: 'Degree (D)', mode: 'DEG' as AngleMode },
                       { key: '2', name: 'Radian (R)', mode: 'RAD' as AngleMode },
@@ -2335,8 +2655,8 @@ export default function App() {
                           setAngleMode(m.mode);
                           setDisplayMenu('NONE');
                         }}
-                        className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
-                          angleMode === m.mode ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)] hover:bg-[var(--display-text)]/20'
+                        className={`w-full min-h-[48px] flex items-center justify-between px-3 py-1 rounded-xl text-xs cursor-pointer ${
+                          angleMode === m.mode ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)] hover:bg-[var(--display-surface)]'
                         }`}
                       >
                         <span>{m.key}:{m.name}</span>
@@ -2344,7 +2664,7 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1~3 to set</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -2353,7 +2673,7 @@ export default function App() {
                 /* Number Format Sub-menu */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">NUMBER FORMAT</div>
+                    <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1">NUMBER FORMAT</div>
                     {[
                       { key: '1', name: 'Fix (Fixed decimal places)', menu: 'SETUP_FIX' as DisplayMenuType },
                       { key: '2', name: 'Sci (Significant figures)', menu: 'SETUP_SCI' as DisplayMenuType },
@@ -2362,14 +2682,14 @@ export default function App() {
                       <button
                         key={f.key}
                         onClick={() => setDisplayMenu(f.menu)}
-                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[var(--display-text)] hover:bg-[var(--display-text)]/20"
+                        className="w-full min-h-[48px] flex items-center justify-between px-3 py-1 rounded-xl text-xs text-[var(--display-text)] hover:bg-[var(--display-surface)] cursor-pointer"
                       >
                         <span>{f.key}:{f.name}</span>
                         <span className="text-[10px] opacity-70">➔</span>
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1~3 to choose</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -2379,9 +2699,9 @@ export default function App() {
                 <div className="flex-1 flex flex-col justify-between py-2 font-sans text-center">
                   <div className="py-2">
                     <div className="text-sm font-bold text-[var(--display-text)]">Fix 0~9?</div>
-                    <p className="text-[10px] text-[var(--display-text)]/70 mt-1">Specify number of decimal places (e.g. press 2 for Fix2)</p>
+                    <p className="text-[11px] text-[var(--display-muted)] mt-1">Specify number of decimal places (e.g. press 2 for Fix2)</p>
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press [0] ~ [9]</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -2391,9 +2711,9 @@ export default function App() {
                 <div className="flex-1 flex flex-col justify-between py-2 font-sans text-center">
                   <div className="py-2">
                     <div className="text-sm font-bold text-[var(--display-text)]">Sci 0~9?</div>
-                    <p className="text-[10px] text-[var(--display-text)]/70 mt-1">Specify significant figures (0 = 10 digits)</p>
+                    <p className="text-[11px] text-[var(--display-muted)] mt-1">Specify significant figures (0 = 10 digits)</p>
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press [0] ~ [9]</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -2402,14 +2722,14 @@ export default function App() {
                 /* Norm1 / Norm2 Selection */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">NORM FORMAT</div>
+                    <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1">NORM FORMAT</div>
                     <button
                       onClick={() => {
                         setDisplayFormat('NORM1');
                         setDisplayMenu('NONE');
                       }}
-                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
-                        displayFormat === 'NORM1' ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)]'
+                      className={`w-full min-h-[48px] flex items-center justify-between px-3 py-1 rounded-xl text-xs cursor-pointer ${
+                        displayFormat === 'NORM1' ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)] hover:bg-[var(--display-surface)]'
                       }`}
                     >
                       <span>1:Norm1 (10⁻² ~ 10¹⁰)</span>
@@ -2420,15 +2740,15 @@ export default function App() {
                         setDisplayFormat('NORM2');
                         setDisplayMenu('NONE');
                       }}
-                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs ${
-                        displayFormat === 'NORM2' ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)]'
+                      className={`w-full min-h-[48px] flex items-center justify-between px-3 py-1 rounded-xl text-xs cursor-pointer ${
+                        displayFormat === 'NORM2' ? 'bg-[var(--display-text)] text-[var(--display-bg)] font-bold' : 'text-[var(--display-text)] hover:bg-[var(--display-surface)]'
                       }`}
                     >
                       <span>2:Norm2 (10⁻⁹ ~ 10¹⁰)</span>
                       {displayFormat === 'NORM2' && <span>✓</span>}
                     </button>
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1 or 2</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -2437,7 +2757,7 @@ export default function App() {
                 /* 3. OPTN MENU */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">OPTIONS (OPTN)</div>
+                    <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1">OPTIONS (OPTN)</div>
                     {[
                       { key: '1', name: 'Hyperbolic / Trig', menu: 'OPTN_HYP' as DisplayMenuType },
                       { key: '2', name: 'Angle Unit (° / r / g)', menu: 'OPTN_ANGLE' as DisplayMenuType },
@@ -2446,14 +2766,14 @@ export default function App() {
                       <button
                         key={opt.key}
                         onClick={() => setDisplayMenu(opt.menu)}
-                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[var(--display-text)] hover:bg-[var(--display-text)]/20"
+                        className="w-full min-h-[48px] flex items-center justify-between px-3 py-1 rounded-xl text-xs text-[var(--display-text)] hover:bg-[var(--display-surface)] cursor-pointer"
                       >
                         <span>{opt.key}:{opt.name}</span>
                         <span className="text-[10px] opacity-70">➔</span>
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1~3</span>
                     <span>[AC] :Exit</span>
                   </div>
@@ -2461,9 +2781,9 @@ export default function App() {
               ) : displayMenu === 'CONST_CAT' ? (
                 /* 4. SCIENTIFIC CONSTANTS CATEGORIES */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
-                  <div className="space-y-0.5">
-                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">SCIENTIFIC CONSTANTS</div>
-                    <div className="grid grid-cols-2 gap-1 text-[11px]">
+                  <div className="space-y-1 min-h-0 overflow-y-auto no-scrollbar">
+                    <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1">SCIENTIFIC CONSTANTS</div>
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                       {CONST_CATEGORIES.map((cat) => (
                         <button
                           key={cat.id}
@@ -2471,15 +2791,15 @@ export default function App() {
                             setConstCatIndex(cat.id - 1);
                             setDisplayMenu('CONST_LIST');
                           }}
-                          className="flex items-center px-1.5 py-0.5 rounded text-left text-[var(--display-text)] hover:bg-[var(--display-text)]/20 border border-[var(--display-text)]/30"
+                          className="min-h-[48px] flex items-center px-2.5 py-1 rounded-xl text-left text-[var(--display-text)] bg-[var(--display-surface)] hover:bg-[var(--ui-accent-tonal)] border border-[var(--display-divider)] cursor-pointer"
                         >
-                          <span className="font-bold text-[var(--label-shift)] mr-1">{cat.key}:</span>
+                          <span className="font-bold text-[var(--ui-accent)] mr-1">{cat.key}:</span>
                           <span className="truncate">{cat.name}</span>
                         </button>
                       ))}
                     </div>
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1~6</span>
                     <span>[AC] :Exit</span>
                   </div>
@@ -2487,24 +2807,24 @@ export default function App() {
               ) : displayMenu === 'CONST_LIST' ? (
                 /* Constants List */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
-                  <div className="space-y-0.5">
-                    <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5">
+                  <div className="space-y-1 min-h-0 overflow-y-auto no-scrollbar">
+                    <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1">
                       {CONST_CATEGORIES[constCatIndex]?.name.toUpperCase()} CONSTANTS
                     </div>
-                    <div className="grid grid-cols-2 gap-1 text-[11px]">
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                       {CONST_CATEGORIES[constCatIndex]?.items.map((sym, idx) => (
                         <button
                           key={sym}
                           onClick={() => handleMenuNumberSelect((idx + 1).toString())}
-                          className="flex items-center justify-between px-1.5 py-0.5 rounded text-left text-[var(--display-text)] hover:bg-[var(--display-text)]/20 border border-[var(--display-text)]/30"
+                          className="min-h-[48px] flex items-center justify-between px-2.5 py-1 rounded-xl text-left text-[var(--display-text)] bg-[var(--display-surface)] hover:bg-[var(--ui-accent-tonal)] border border-[var(--display-divider)] cursor-pointer"
                         >
-                          <span><strong className="text-[var(--label-shift)] mr-1">{idx + 1}:</strong>{sym}</span>
-                          <span className="text-[9px] opacity-60">insert</span>
+                          <span><strong className="text-[var(--ui-accent)] mr-1">{idx + 1}:</strong>{sym}</span>
+                          <span className="text-[9px] text-[var(--display-muted)]">insert</span>
                         </button>
                       ))}
                     </div>
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press key to insert</span>
                     <span>[AC] :Back</span>
                   </div>
@@ -2513,7 +2833,7 @@ export default function App() {
                 /* 5. RESET MENU */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-[var(--ui-danger)] border-b border-[var(--display-text)]/20 pb-0.5">RESET ?</div>
+                    <div className="text-[10px] font-bold text-[var(--ui-danger)] border-b border-[var(--display-divider)] pb-1">RESET ?</div>
                     {[
                       { key: '1', name: 'Setup Data' },
                       { key: '2', name: 'Memory' },
@@ -2525,14 +2845,14 @@ export default function App() {
                           setResetIndex(parseInt(item.key, 10) - 1);
                           setDisplayMenu('RESET_CONFIRM');
                         }}
-                        className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[var(--display-text)] hover:bg-[var(--display-text)]/20"
+                        className="w-full min-h-[48px] flex items-center justify-between px-3 py-1 rounded-xl text-xs text-[var(--display-text)] hover:bg-[var(--display-surface)] cursor-pointer"
                       >
                         <span>{item.key}:{item.name}</span>
                         <span className="text-[10px] opacity-70">➔</span>
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1~3</span>
                     <span>[AC] :Cancel</span>
                   </div>
@@ -2541,12 +2861,12 @@ export default function App() {
                 /* Reset Confirmation */
                 <div className="flex-1 flex flex-col justify-between py-2 font-sans text-center">
                   <div className="py-2">
-                    <div className="text-sm font-bold text-[var(--label-shift)]">Reset All?</div>
+                    <div className="text-sm font-bold text-[var(--ui-accent)]">Reset All?</div>
                     <div className="mt-2 text-xs text-[var(--display-text)]">
                       Yes: [ = ] &nbsp;&nbsp;&nbsp;&nbsp; No: [ AC ]
                     </div>
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press [=] to execute</span>
                     <span>[AC] :Cancel</span>
                   </div>
@@ -2554,28 +2874,27 @@ export default function App() {
               ) : (
                 /* Generic In-Display Sub-menu (CONV, STAT, MATRIX, VECTOR) */
                 <div className="flex-1 flex flex-col justify-between py-1 font-sans">
-                  <div className="text-[10px] font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20 pb-0.5 uppercase">
+                  <div className="text-[10px] font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)] pb-1 uppercase">
                     {displayMenu} MENU
                   </div>
-                  <div className="grid grid-cols-2 gap-1 text-[11px] py-1">
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px] py-1">
                     {['1:Item 1', '2:Item 2', '3:Item 3', '4:Item 4'].map((it, idx) => (
                       <button
                         key={it}
                         onClick={() => handleMenuNumberSelect((idx + 1).toString())}
-                        className="px-1.5 py-0.5 rounded text-left text-[var(--display-text)] hover:bg-[var(--display-text)]/20 border border-[var(--display-text)]/30"
+                        className="min-h-[48px] px-2.5 py-1 rounded-xl text-left text-[var(--display-text)] bg-[var(--display-surface)] hover:bg-[var(--ui-accent-tonal)] border border-[var(--display-divider)] cursor-pointer"
                       >
                         {it}
                       </button>
                     ))}
                   </div>
-                  <div className="text-[9px] text-[var(--display-text)]/70 pt-1 border-t border-[var(--display-text)]/20 flex justify-between">
+                  <div className="text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between">
                     <span>Press 1~4 to select</span>
                     <span>[AC] :Exit</span>
                   </div>
                 </div>
               )}
-              </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -3593,30 +3912,57 @@ export default function App() {
           </div>
         </div>
 
-        {/* NOTIFICATION-CENTER HISTORY SHEET */}
+        {/* FULL HISTORY SCREEN */}
         <HistorySheet
           sheetRef={historySheetRef}
           isExpanded={isHistorySheetExpanded}
-          onClose={() => setHistorySheetExpanded(false)}
-          onHandlePointerDown={(e) => handleHistoryDragStart(e, 'sheet')}
+          onClose={() => setHistoryDetent(0)}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
+          onHandlePointerDown={(e) => handleHistoryDragStart(e, 'full')}
           onHandlePointerMove={handleHistoryDragMove}
           onHandlePointerUp={handleHistoryDragEnd}
           history={history}
-          onLoadCard={(item) => {
-            handleLoadHistoryCard(item);
-            setHistorySheetExpanded(false);
+          onLoadCard={(entry) => {
+            handleLoadHistoryCard(entry.primary);
+            setHistoryDetent(0);
           }}
-          onInsertResult={(item) => {
+          onInsertResult={(entry) => {
             handleInsertHistoryResult({
-              numericVal: item.numericVal,
-              display: item.result,
-              exactResult: item.result === item.exactResult ? item.exactResult : undefined,
+              numericVal: entry.primary.numericVal,
+              display: entry.primary.result,
+              exactResult:
+                entry.primary.result === entry.primary.exactResult
+                  ? entry.primary.exactResult
+                  : undefined,
             });
-            setHistorySheetExpanded(false);
+            setHistoryDetent(0);
           }}
-          onTogglePin={handleTogglePinHistory}
-          onDeleteItem={handleDeleteHistoryItem}
+          onTogglePinEntry={handleTogglePinEntry}
+          onDeleteEntry={handleDeleteEntry}
+          onLongPressEntry={(entry, rect) => {
+            setContextMenuEntry({ entry, rect });
+          }}
           onClearHistory={handleClearHistory}
+        />
+
+        {/* LONG-PRESS CONTEXT MENU & UNDO SNACKBAR */}
+        <HistoryContextMenu
+          entry={contextMenuEntry?.entry || null}
+          anchorRect={contextMenuEntry?.rect || null}
+          onClose={() => setContextMenuEntry(null)}
+          onCopyResult={(entry) => handleCopyEntryText(entry.primary.result, true)}
+          onCopyExpression={(entry) => handleCopyEntryText(entry.primary.expression, true)}
+          onLoadExpression={(entry) => {
+            handleLoadHistoryCard(entry.primary);
+            setHistoryDetent(0);
+          }}
+          onTogglePin={handleTogglePinEntry}
+          onDelete={handleDeleteEntry}
+        />
+        <HistoryUndoSnackbar
+          message={undoNotice?.message || null}
+          onUndo={handleUndoHistoryAction}
+          onDismiss={() => setUndoNotice(null)}
         />
       </main>
 
@@ -3644,7 +3990,6 @@ export default function App() {
           localStorage.setItem('casio_editor_mode', m);
           setJustCommitted(false);
           setLivePreviewResult('');
-          setLastValidPreviewResult('');
         }}
         onSetCalcMode={(mode) => {
           setCalcMode(mode);
@@ -3669,7 +4014,7 @@ export default function App() {
             setResult(formatResult(rawNumericVal, fmt, fixDigits, sciDigits, engStep));
           }
         }}
-        originRect={settingsOriginRect}
+        originRect={null}
         perfOverlayOn={perfOverlayOn}
         onTogglePerfOverlay={() => setPerfOverlayOn((prev) => !prev)}
         onResetCalculator={() => {

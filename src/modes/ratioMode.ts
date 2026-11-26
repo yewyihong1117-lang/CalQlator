@@ -653,34 +653,34 @@ export const ratioModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, 'Ratio Type?'),
           React.createElement(
             'span',
-            { className: 'text-[10px] text-[var(--display-text)]/70 tracking-wider' },
+            { className: 'text-[10px] font-normal text-[var(--display-muted)] tracking-wider' },
             'RATIO'
           )
         ),
         React.createElement(
           'div',
-          { className: 'space-y-2 my-auto pl-1' },
+          { className: 'space-y-2 my-auto' },
           typeOptions.map((opt) => {
             const isSelected = curType === opt.num;
             return React.createElement(
               'div',
               {
                 key: opt.num,
-                className: `flex items-center gap-3 px-2 py-1.5 rounded transition-colors ${
+                className: `flex items-center gap-3 px-2.5 py-1.5 rounded-xl border transition-colors ${
                   isSelected
-                    ? 'bg-[var(--display-text)]/15 text-[var(--label-shift)] font-semibold'
-                    : 'text-[var(--display-text)]'
+                    ? 'bg-[var(--ui-accent-tonal)] border-[var(--ui-accent)] text-[var(--ui-accent)] font-semibold'
+                    : 'bg-[var(--display-surface)] border-[var(--display-divider)] text-[var(--display-text)]'
                 }`,
               },
               React.createElement(
@@ -688,8 +688,8 @@ export const ratioModeModule: ModeModule = {
                 {
                   className: `font-bold px-2 py-0.5 rounded text-xs border ${
                     isSelected
-                      ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/20 text-[var(--label-shift)]'
-                      : 'border-[var(--display-text)]/30 bg-[var(--display-text)]/5 text-[var(--display-text)]/80'
+                      ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)]'
+                      : 'border-[var(--display-divider)] bg-[var(--display-bg)] text-[var(--display-muted)]'
                   }`,
                 },
                 String(opt.num)
@@ -706,7 +706,7 @@ export const ratioModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between',
           },
           React.createElement('span', null, 'Select [1] or [2]'),
           React.createElement('span', null, '[▲▼]: Move  [=]: OK')
@@ -756,18 +756,18 @@ export const ratioModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, headerTitle),
           React.createElement(
             'span',
-            { className: 'text-[10px] text-[var(--label-shift)] tracking-wider' },
+            { className: 'text-[10px] font-normal text-[var(--display-muted)] tracking-wider' },
             'RATIO'
           )
         ),
@@ -775,7 +775,7 @@ export const ratioModeModule: ModeModule = {
         // Authentic Ratio 4-Cell Equation Display (Fits Find X9 20:9 ratio)
         React.createElement(
           'div',
-          { className: 'flex items-center justify-between my-auto w-full px-1 gap-1' },
+          { className: 'flex items-center justify-between my-auto w-full gap-1' },
           items.map((item, idx) => {
             const isSepColons = idx === 0 || idx === 2;
             const isSepEqual = idx === 1;
@@ -788,24 +788,24 @@ export const ratioModeModule: ModeModule = {
                   'div',
                   {
                     className:
-                      'flex-1 py-1 px-1 border-2 border-dashed border-[var(--label-shift)]/60 bg-[var(--label-shift)]/10 rounded text-center min-w-0 flex flex-col justify-between items-center',
+                      'flex-1 py-1.5 px-1 border border-dashed border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] rounded-xl text-center min-w-0 flex flex-col justify-between items-center',
                   },
                   React.createElement(
                     'span',
-                    { className: 'text-[9px] uppercase leading-none text-[var(--label-shift)]/80' },
+                    { className: 'text-[9px] uppercase leading-none text-[var(--ui-accent)]' },
                     'X'
                   ),
                   React.createElement(
                     'span',
-                    { className: 'text-sm font-bold text-[var(--label-shift)] italic leading-tight' },
+                    { className: 'text-sm font-bold text-[var(--ui-accent)] italic leading-tight' },
                     'X'
                   )
                 ),
                 isSepColons
-                  ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-text)]/70 mx-0.5' }, ':')
+                  ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-muted)] mx-0.5' }, ':')
                   : null,
                 isSepEqual
-                  ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-text)]/70 mx-0.5' }, '=')
+                  ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-muted)] mx-0.5' }, '=')
                   : null
               );
             }
@@ -822,15 +822,15 @@ export const ratioModeModule: ModeModule = {
               React.createElement(
                 'div',
                 {
-                  className: `flex-1 py-1 px-1 border rounded text-center min-w-0 flex flex-col justify-between ${
+                  className: `flex-1 py-1.5 px-1 border rounded-xl text-center min-w-0 flex flex-col justify-between ${
                     isSelected
-                      ? 'border-[var(--label-shift)] bg-[var(--label-shift)]/15 text-[var(--label-shift)] font-bold shadow-[0_0_6px_rgba(229,169,60,0.2)]'
-                      : 'border-[var(--display-text)]/25 bg-[var(--display-text)]/5 text-[var(--display-text)]'
+                      ? 'border-[var(--ui-accent)] bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-bold'
+                      : 'border-[var(--display-divider)] bg-[var(--display-surface)] text-[var(--display-text)]'
                   }`,
                 },
                 React.createElement(
                   'span',
-                  { className: 'text-[9px] uppercase leading-none opacity-80' },
+                  { className: 'text-[9px] uppercase leading-none text-[var(--display-muted)]' },
                   `${item.label}=`
                 ),
                 React.createElement(
@@ -844,10 +844,10 @@ export const ratioModeModule: ModeModule = {
                 )
               ),
               isSepColons
-                ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-text)]/70 mx-0.5' }, ':')
+                ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-muted)] mx-0.5' }, ':')
                 : null,
               isSepEqual
-                ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-text)]/70 mx-0.5' }, '=')
+                ? React.createElement('span', { className: 'text-sm font-bold text-[var(--display-muted)] mx-0.5' }, '=')
                 : null
             );
           })
@@ -861,9 +861,9 @@ export const ratioModeModule: ModeModule = {
             'div',
             {
               className:
-                'text-xs font-bold text-[var(--display-text)] flex items-center justify-between px-1.5 bg-[var(--display-text)]/5 py-0.5 rounded border border-[var(--display-text)]/15',
+                'text-xs font-bold text-[var(--display-text)] flex items-center justify-between px-2 bg-[var(--display-surface)] py-0.5 rounded-lg border border-[var(--display-divider)]',
             },
-            React.createElement('span', { className: 'text-[var(--label-shift)]' }, `${activeLabel} =`),
+            React.createElement('span', { className: 'text-[var(--ui-accent)]' }, `${activeLabel} =`),
             React.createElement(
               'span',
               { className: 'truncate max-w-[200px] text-right font-sans' },
@@ -874,7 +874,7 @@ export const ratioModeModule: ModeModule = {
             'div',
             {
               className:
-                'text-[9.5px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20 flex justify-between items-center',
+                'text-[10px] text-[var(--display-muted)] pt-0.5 border-t border-[var(--display-divider)] flex justify-between items-center',
             },
             React.createElement('span', null, '[=]: Confirm/Solve'),
             React.createElement('span', null, '◄ ►: Move  [OPTN]: Type')
@@ -900,31 +900,31 @@ export const ratioModeModule: ModeModule = {
         'div',
         {
           className:
-            'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
+            'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]',
         },
         React.createElement(
           'div',
           {
             className:
-              'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)] flex justify-between items-center',
+              'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)] flex justify-between items-center',
           },
           React.createElement('span', null, headerTitle),
           React.createElement(
             'div',
-            { className: 'flex items-center gap-1.5 text-[9.5px]' },
+            { className: 'flex items-center gap-1.5 text-[10px]' },
             data.isFraction
               ? React.createElement(
                   'span',
                   {
                     className:
-                      'px-1 py-0.2 rounded bg-[var(--label-shift)]/20 text-[var(--label-shift)] font-semibold',
+                      'px-1.5 py-0.5 rounded bg-[var(--ui-accent-tonal)] text-[var(--ui-accent)] font-semibold',
                   },
                   showDec ? 'D' : 'S'
                 )
               : null,
             React.createElement(
               'span',
-              { className: 'text-[var(--label-shift)] font-bold tracking-wider' },
+              { className: 'text-[var(--display-muted)] font-normal tracking-wider' },
               'RATIO'
             )
           )
@@ -933,19 +933,19 @@ export const ratioModeModule: ModeModule = {
         // Solution Display Area
         React.createElement(
           'div',
-          { className: 'my-auto py-2 text-center flex flex-col items-center justify-center space-y-1' },
+          { className: 'my-auto py-1 text-right flex flex-col items-end justify-center space-y-1' },
           !isError
             ? React.createElement(
                 'div',
-                { className: 'text-xs text-[var(--label-shift)] font-semibold' },
+                { className: 'text-sm text-[var(--display-muted)] font-normal' },
                 'X ='
               )
             : null,
           React.createElement(
             'div',
             {
-              className: `font-bold tracking-wider text-[var(--display-text)] select-text px-2 break-all max-w-full ${
-                isError ? 'text-base sm:text-lg text-[var(--label-shift)]' : 'text-xl sm:text-2xl'
+              className: `tracking-tight select-text break-all max-w-full ${
+                isError ? 'text-base sm:text-lg font-bold text-[var(--ui-danger)]' : 'text-3xl sm:text-4xl font-light text-[var(--display-text)]'
               }`,
             },
             displayVal
@@ -953,7 +953,7 @@ export const ratioModeModule: ModeModule = {
           data.isFraction && !isError
             ? React.createElement(
                 'div',
-                { className: 'text-[10px] text-[var(--display-text)]/60' },
+                { className: 'text-[10px] text-[var(--display-muted)]' },
                 showDec ? `[S⇔D] Exact: ${data.resultExact}` : `[S⇔D] Dec: ${data.resultDec}`
               )
             : null
@@ -963,7 +963,7 @@ export const ratioModeModule: ModeModule = {
           'div',
           {
             className:
-              'text-[9.5px] text-[var(--display-text)]/60 pt-1 border-t border-[var(--display-text)]/20 flex justify-between items-center',
+              'text-[10px] text-[var(--display-muted)] pt-1 border-t border-[var(--display-divider)] flex justify-between items-center',
           },
           React.createElement(
             'span',

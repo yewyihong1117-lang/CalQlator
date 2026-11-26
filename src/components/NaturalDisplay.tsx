@@ -1,15 +1,108 @@
 import React, { useEffect, useRef } from 'react';
 import { MathNode, CursorPosition, getSlotNodes } from '../mathAst';
+import { formatDisplayNumberWithCommas } from '../displayFormat';
 import { IntegralSvg, RadicalHookSvg, HollowBoxSvg, OperatorSvg, SigmaSvg } from './MathGlyphs';
+
+/**
+ * Computes which single-digit token indices in a node list should display
+ * a trailing visual thousands separator comma without mutating AST indices.
+ */
+function computeCommaAfterIndices(slotNodes: MathNode[]): Set<number> {
+  const commaAfter = new Set<number>();
+  let i = 0;
+  while (i < slotNodes.length) {
+    const n = slotNodes[i];
+    if (n.type === 'token' && /^[0-9]$/.test(n.val)) {
+      const start = i;
+      while (
+        i < slotNodes.length &&
+        slotNodes[i].type === 'token' &&
+        /^[0-9]$/.test((slotNodes[i] as { type: 'token'; val: string }).val)
+      ) {
+        i++;
+      }
+      const intLen = i - start;
+      // Only add commas if not immediately preceded by '.' (fractional digits)
+      const prev = start > 0 ? slotNodes[start - 1] : null;
+      const isAfterDecimal = prev?.type === 'token' && (prev.val === '.' || prev.val.endsWith('.'));
+      if (intLen >= 4 && !isAfterDecimal) {
+        for (let k = start; k < i - 1; k++) {
+          const remaining = i - 1 - k;
+          if (remaining > 0 && remaining % 3 === 0) {
+            commaAfter.add(k);
+          }
+        }
+      }
+      // If followed by '.' and fractional digits, skip the fractional segment
+      if (i < slotNodes.length && slotNodes[i].type === 'token' && (slotNodes[i] as { type: 'token'; val: string }).val === '.') {
+        i++;
+        while (
+          i < slotNodes.length &&
+          slotNodes[i].type === 'token' &&
+          /^[0-9]$/.test((slotNodes[i] as { type: 'token'; val: string }).val)
+        ) {
+          i++;
+        }
+      }
+      continue;
+    }
+    i++;
+  }
+  return commaAfter;
+}
+
+/**
+ * Hit-tests a pointer clientX/target against rendered AST slot elements and calls onSetCursor.
+ */
+export function placeCursorAtClientPoint(
+  container: HTMLElement | null,
+  nodes: MathNode[],
+  clientX: number,
+  target: EventTarget | null,
+  onSetCursor: (slotId: string, offset: number) => void
+): void {
+  if (!container) return;
+
+  const targetEl = target instanceof Element ? (target.closest('[data-slot-id]') as HTMLElement | null) : null;
+  const rawSlotId = targetEl && container.contains(targetEl) ? targetEl.getAttribute('data-slot-id') : null;
+  const slotId = rawSlotId && getSlotNodes(nodes, rawSlotId) !== null ? rawSlotId : 'root';
+  const slotNodes = getSlotNodes(nodes, slotId) || nodes;
+
+  if (slotNodes.length === 0) {
+    onSetCursor(slotId, 0);
+    return;
+  }
+
+  const childEls = Array.from(container.querySelectorAll('[data-ast-slot]')).filter(
+    (el) => el.getAttribute('data-ast-slot') === slotId && el.hasAttribute('data-ast-index')
+  ) as HTMLElement[];
+
+  let targetOffset = slotNodes.length;
+  for (const el of childEls) {
+    const idx = Number(el.getAttribute('data-ast-index'));
+    if (Number.isNaN(idx)) continue;
+    const rect = el.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (clientX < midX) {
+      targetOffset = idx;
+      break;
+    }
+  }
+
+  onSetCursor(slotId, targetOffset);
+}
 
 interface NaturalDisplayProps {
   nodes: MathNode[];
   cursor?: CursorPosition;
   pendingDeleteTemplateId?: string | null;
   onSetCursor?: (slotId: string, offset: number) => void;
+  deferTapCursor?: boolean;
+  displayRef?: React.RefObject<HTMLDivElement | null>;
   fontSize?: number;
   readOnly?: boolean;
   inheritColor?: boolean;
+  align?: 'left' | 'right';
   className?: string;
 }
 
@@ -18,12 +111,21 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
   cursor,
   pendingDeleteTemplateId = null,
   onSetCursor,
+  deferTapCursor = false,
+  displayRef,
   fontSize,
   readOnly = false,
   inheritColor = false,
+  align = 'left',
   className = '',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const setContainerRefs = (el: HTMLDivElement | null) => {
+    containerRef.current = el;
+    if (displayRef) {
+      displayRef.current = el;
+    }
+  };
 
   // Auto-scroll horizontally only inside the display expression container to keep active cursor visible
   useEffect(() => {
@@ -54,7 +156,8 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       return (
         <span
           key={`cur_${slotId}_${offset}`}
-          className="active-lcd-cursor inline-block w-[2px] h-[1.1em] bg-current mx-[1px] animate-pulse rounded-full align-baseline"
+          data-testid="lcd-caret"
+          className="active-lcd-cursor lcd-caret-blink inline-block w-[2px] h-[1.14em] bg-[var(--ui-accent)] mx-[1px] rounded-full align-baseline"
         />
       );
     }
@@ -125,6 +228,9 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
         </span>
       );
     }
+    if (/^\d{4,}(\.\d+)?$/.test(val)) {
+      return formatDisplayNumberWithCommas(val);
+    }
     return val;
   };
 
@@ -155,23 +261,34 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
       );
     }
 
+    const commaAfterIndices = computeCommaAfterIndices(slotNodes);
     const elements: React.ReactNode[] = [];
     for (let i = 0; i <= slotNodes.length; i++) {
       elements.push(renderCursor(slotId, i));
       if (i < slotNodes.length) {
-        elements.push(renderNode(slotNodes[i], slotId, i, true));
+        elements.push(renderNode(slotNodes[i], slotId, i, true, commaAfterIndices.has(i)));
       }
     }
 
     return (
-      <span className="inline-flex items-baseline flex-nowrap whitespace-nowrap align-baseline">
+      <span
+        className={`inline-flex items-baseline flex-nowrap whitespace-nowrap align-baseline ${
+          slotId === 'root' && align === 'right' ? 'ml-auto' : ''
+        }`}
+      >
         {elements}
       </span>
     );
   };
 
   // Render individual math node (token, value, fraction, integral, derivative, sqrt, power, postfix, logBase)
-  const renderNode = (node: MathNode, parentSlotId: string, index: number, trackInSlot = true) => {
+  const renderNode = (
+    node: MathNode,
+    parentSlotId: string,
+    index: number,
+    trackInSlot = true,
+    appendComma = false
+  ) => {
     const isPendingDelete = !readOnly && pendingDeleteTemplateId === node.id;
     const pendingDeleteClass = isPendingDelete
       ? 'border border-dashed border-[var(--ui-danger)]'
@@ -191,6 +308,11 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
           }`}
         >
           {renderTokenContent(node.val)}
+          {appendComma && (
+            <span aria-hidden="true" className="select-none">
+              ,
+            </span>
+          )}
         </span>
       );
     }
@@ -205,7 +327,7 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
             readOnly ? '' : 'cursor-pointer hover:opacity-80 transition-opacity'
           }`}
         >
-          {node.display}
+          {formatDisplayNumberWithCommas(node.display)}
         </span>
       );
     }
@@ -355,7 +477,12 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
           {/* Base (atomic relative to outer slot navigation) */}
           <span className="inline-flex items-baseline">
             {node.base.length > 0 ? (
-              node.base.map((b, idx) => renderNode(b, `${node.id}_base`, idx, false))
+              (() => {
+                const baseCommas = computeCommaAfterIndices(node.base);
+                return node.base.map((b, idx) =>
+                  renderNode(b, `${node.id}_base`, idx, false, baseCommas.has(idx))
+                );
+              })()
             ) : (
               <span className="inline-flex items-center justify-center w-[0.95em] h-[1.05em] text-[0.88em] leading-none opacity-40">
                 <HollowBoxSvg className="w-[0.68em] h-[0.68em]" />
@@ -376,6 +503,7 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
     if (node.type === 'postfix') {
       const displayOp = node.op === '⁻¹' ? '−1' : node.op;
       const isSup = ['²', '³', '⁻¹'].includes(node.op);
+      const targetCommas = computeCommaAfterIndices(node.target);
       return (
         <span
           key={node.id}
@@ -384,7 +512,9 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
         >
           {/* Target Nodes (atomic relative to outer slot navigation) */}
           <span className="inline-flex items-baseline">
-            {node.target.map((t, idx) => renderNode(t, `${node.id}_target`, idx, false))}
+            {node.target.map((t, idx) =>
+              renderNode(t, `${node.id}_target`, idx, false, targetCommas.has(idx))
+            )}
           </span>
           {/* Postfix Operator Symbol */}
           <span
@@ -434,58 +564,29 @@ export const NaturalDisplay: React.FC<NaturalDisplayProps> = React.memo(({
 
   // Hit-test cursor placement against the structured AST node tree
   const handleContainerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (readOnly || !onSetCursor) return;
+    if (readOnly || deferTapCursor || !onSetCursor) return;
     e.preventDefault();
-    const container = containerRef.current;
-    if (!container) return;
-
-    const targetEl = e.target instanceof Element ? (e.target.closest('[data-slot-id]') as HTMLElement | null) : null;
-    const rawSlotId = targetEl && container.contains(targetEl) ? targetEl.getAttribute('data-slot-id') : null;
-    const slotId = rawSlotId && getSlotNodes(nodes, rawSlotId) !== null ? rawSlotId : 'root';
-    const slotNodes = getSlotNodes(nodes, slotId) || nodes;
-
-    if (slotNodes.length === 0) {
-      onSetCursor(slotId, 0);
-      return;
-    }
-
-    const childEls = Array.from(container.querySelectorAll('[data-ast-slot]')).filter(
-      (el) => el.getAttribute('data-ast-slot') === slotId && el.hasAttribute('data-ast-index')
-    ) as HTMLElement[];
-
-    let targetOffset = slotNodes.length;
-    for (const el of childEls) {
-      const idx = Number(el.getAttribute('data-ast-index'));
-      if (Number.isNaN(idx)) continue;
-      const rect = el.getBoundingClientRect();
-      const midX = rect.left + rect.width / 2;
-      if (e.clientX < midX) {
-        targetOffset = idx;
-        break;
-      }
-    }
-
-    onSetCursor(slotId, targetOffset);
+    placeCursorAtClientPoint(containerRef.current, nodes, e.clientX, e.target, onSetCursor);
   };
 
   const baseColorClass = inheritColor ? 'text-current' : 'text-[var(--display-text)]';
 
   return (
     <div
-      ref={containerRef}
+      ref={setContainerRefs}
       data-slot-id={readOnly ? undefined : 'root'}
-      onPointerDown={readOnly ? undefined : handleContainerPointerDown}
+      onPointerDown={readOnly || deferTapCursor ? undefined : handleContainerPointerDown}
       style={{
         fontSize: fontSize ? `${fontSize}px` : undefined,
         overflowX: 'auto',
         overflowY: 'hidden',
       }}
-      className={`w-full whitespace-nowrap font-sans tabular-nums ${baseColorClass} flex items-baseline no-scrollbar tracking-wide select-none ${
-        readOnly ? 'min-h-0 py-0.5' : 'cursor-text min-h-[40px] py-1'
+      className={`w-full whitespace-nowrap font-sans tabular-nums ${baseColorClass} flex items-center no-scrollbar tracking-wide select-none ${
+        readOnly ? 'min-h-0 py-0.5' : 'cursor-text min-h-[48px] py-0.5'
       } ${className}`}
     >
       {nodes.length === 0 ? (
-        <span className="opacity-40 flex items-baseline">
+        <span className={`flex items-baseline ${align === 'right' ? 'ml-auto' : ''}`}>
           0{renderCursor('root', 0)}
         </span>
       ) : (

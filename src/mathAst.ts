@@ -1198,6 +1198,93 @@ export function astToExpression(nodes: MathNode[]): string {
 }
 
 /**
+ * Resolve any `Ans` token nodes inside an AST into atomic `value` nodes
+ * so recorded history never displays a bare `Ans` expression.
+ */
+export function resolveAnsInAst(
+  nodes: MathNode[],
+  numericVal: number,
+  display: string,
+  exactResult?: string
+): MathNode[] {
+  const safeDisplay = display && display !== 'Ans' ? display : String(numericVal);
+  const needsParensWhenWrapped = numericVal < 0 || /[+\-×÷/]/.test(safeDisplay.slice(1));
+
+  const makeValueNodes = (wrapNegative: boolean): MathNode[] => {
+    const valNode: MathNode = {
+      type: 'value',
+      id: generateUniqueId('val'),
+      numericVal,
+      display: safeDisplay,
+      ...(exactResult !== undefined ? { exactResult } : {}),
+    };
+    if (wrapNegative && needsParensWhenWrapped) {
+      return [
+        { type: 'token', id: generateUniqueId('tok'), val: '(' },
+        valNode,
+        { type: 'token', id: generateUniqueId('tok'), val: ')' },
+      ];
+    }
+    return [valNode];
+  };
+
+  const mapList = (list: MathNode[], wrapNegative = false): MathNode[] => {
+    const out: MathNode[] = [];
+    for (const node of list) {
+      if (node.type === 'token' && node.val === 'Ans') {
+        out.push(...makeValueNodes(wrapNegative));
+      } else if (node.type === 'token' || node.type === 'value') {
+        out.push({ ...node });
+      } else if (node.type === 'frac') {
+        out.push({
+          ...node,
+          num: mapList(node.num, false),
+          den: mapList(node.den, false),
+        });
+      } else if (node.type === 'postfix') {
+        out.push({
+          ...node,
+          target: mapList(node.target, true),
+        });
+      } else if (node.type === 'power') {
+        out.push({
+          ...node,
+          base: mapList(node.base, true),
+          exp: mapList(node.exp, false),
+        });
+      } else if (node.type === 'int') {
+        out.push({
+          ...node,
+          integrand: mapList(node.integrand, false),
+          lower: mapList(node.lower, false),
+          upper: mapList(node.upper, false),
+        });
+      } else if (node.type === 'deriv') {
+        out.push({
+          ...node,
+          expr: mapList(node.expr, false),
+          at: mapList(node.at, false),
+        });
+      } else if (node.type === 'sqrt') {
+        out.push({
+          ...node,
+          content: mapList(node.content, false),
+        });
+      } else if (node.type === 'logBase') {
+        out.push({
+          ...node,
+          base: mapList(node.base, false),
+          arg: mapList(node.arg, false),
+        });
+      }
+    }
+    return out;
+  };
+
+  return mapList(nodes, false);
+}
+
+/**
  * Convert 2D Math AST to clean text display representation (for history tape)
  */
 export function astToDisplayText(nodes: MathNode[]): string {
@@ -1473,3 +1560,104 @@ export function parseStringToAst(exprStr: string): MathAstState {
     pendingDeleteTemplateId: null,
   };
 }
+
+function isTrailingIncompleteToken(node: MathNode): boolean {
+  if (node.type !== 'token') return false;
+  if (node.tokenType === 'OP_NCR' || node.tokenType === 'OP_NPR') return true;
+  const v = node.val;
+  if (
+    v === '+' ||
+    v === '-' ||
+    v === '−' ||
+    v === '×' ||
+    v === '*' ||
+    v === '÷' ||
+    v === '/' ||
+    v === '^' ||
+    v === ',' ||
+    v === '.' ||
+    v === '(' ||
+    v === '(-' ||
+    v === 'nPr' ||
+    v === 'nCr' ||
+    v.endsWith('(') ||
+    v.endsWith('.')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isOpenerToken(val: string): boolean {
+  return val === '(' || val === '(-' || val.endsWith('(');
+}
+
+function isSlotCompleteForPreview(slotNodes: MathNode[]): boolean {
+  if (slotNodes.length === 0) return false;
+  if (isTrailingIncompleteToken(slotNodes[slotNodes.length - 1])) return false;
+
+  let parenDepth = 0;
+  for (let i = 0; i < slotNodes.length; i++) {
+    const node = slotNodes[i];
+    if (node.type === 'token') {
+      if (isOpenerToken(node.val)) {
+        parenDepth++;
+        // Empty parentheses () or sin() are incomplete
+        const next = slotNodes[i + 1];
+        if (next && next.type === 'token' && next.val === ')') {
+          return false;
+        }
+      } else if (node.val === ')') {
+        parenDepth--;
+        if (parenDepth < 0) return false;
+      }
+    } else if (node.type === 'frac') {
+      if (!isSlotCompleteForPreview(node.num) || !isSlotCompleteForPreview(node.den)) return false;
+    } else if (node.type === 'power') {
+      if (!isSlotCompleteForPreview(node.base) || !isSlotCompleteForPreview(node.exp)) return false;
+    } else if (node.type === 'sqrt') {
+      if (!isSlotCompleteForPreview(node.content)) return false;
+    } else if (node.type === 'logBase') {
+      if (!isSlotCompleteForPreview(node.base) || !isSlotCompleteForPreview(node.arg)) return false;
+    } else if (node.type === 'int') {
+      if (
+        !isSlotCompleteForPreview(node.integrand) ||
+        !isSlotCompleteForPreview(node.lower) ||
+        !isSlotCompleteForPreview(node.upper)
+      ) {
+        return false;
+      }
+    } else if (node.type === 'deriv') {
+      if (!isSlotCompleteForPreview(node.expr) || !isSlotCompleteForPreview(node.at)) return false;
+    } else if (node.type === 'postfix') {
+      if (!isSlotCompleteForPreview(node.target)) return false;
+    }
+  }
+
+  return parenDepth === 0;
+}
+
+/**
+ * Returns true only when the AST has no empty template slots, balanced parentheses,
+ * and no trailing incomplete operators or decimal points.
+ */
+export function isAstCompleteForPreview(nodes: MathNode[]): boolean {
+  return isSlotCompleteForPreview(nodes);
+}
+
+/**
+ * Returns true when the AST represents an actual computation, template, function,
+ * constant, or variable — avoiding echoing a bare literal number under itself while typing.
+ */
+export function hasComputableOperation(nodes: MathNode[]): boolean {
+  if (nodes.length === 0) return false;
+  if (nodes.length === 1 && nodes[0].type === 'value') {
+    return Boolean(nodes[0].exactResult);
+  }
+  for (const node of nodes) {
+    if (node.type !== 'token') return true;
+    if (!/^[0-9.]+$/.test(node.val)) return true;
+  }
+  return false;
+}
+

@@ -365,12 +365,12 @@ export const baseModeModule: ModeModule = {
       const page = BASE_SUBMENU_PAGES[pageIdx];
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'flex justify-between items-center border-b border-[var(--display-text)]/20 pb-1 text-xs font-bold text-[var(--label-shift)]' },
+          { className: 'flex justify-between items-center border-b border-[var(--display-divider)] pb-1 text-xs font-bold text-[var(--ui-accent)]' },
           React.createElement('span', null, page.title || 'Base-N Menu'),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70 font-normal' }, `Page ${pageIdx + 1}/${BASE_SUBMENU_PAGES.length} ▲▼`)
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, `Page ${pageIdx + 1}/${BASE_SUBMENU_PAGES.length} ▲▼`)
         ),
         React.createElement(
           'div',
@@ -378,15 +378,15 @@ export const baseModeModule: ModeModule = {
           page.items.map((it) =>
             React.createElement(
               'div',
-              { key: it.id, className: 'flex items-center space-x-1.5' },
-              React.createElement('span', { className: 'bg-[var(--display-text)]/15 text-[var(--label-shift)] border border-[var(--display-text)]/30 rounded px-1.5 py-0.5 text-[10px] font-bold' }, it.key),
-              React.createElement('span', { className: 'font-semibold text-[var(--display-text)]' }, it.name)
+              { key: it.id, className: 'flex items-center space-x-1.5 px-2 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' },
+              React.createElement('span', { className: 'text-[var(--ui-accent)] text-[10px] font-bold' }, `${it.key}:`),
+              React.createElement('span', { className: 'font-semibold text-[var(--display-text)] truncate' }, it.name)
             )
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' },
+          { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' },
           '[▲/▼] Page  [AC] Return'
         )
       );
@@ -399,26 +399,26 @@ export const baseModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+      { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
       React.createElement(
         'div',
-        { className: 'flex justify-between text-xs text-[var(--label-shift)] font-semibold border-b border-[var(--display-text)]/20 pb-1' },
+        { className: 'flex justify-between text-xs text-[var(--ui-accent)] font-semibold border-b border-[var(--display-divider)] pb-1' },
         React.createElement('span', null, `${base} Mode`),
-        React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70 font-normal' }, '[x²]Dec [x□]Hex [log]Bin [ln]Oct')
+        React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, '[x²]Dec [x□]Hex [log]Bin [ln]Oct')
       ),
       React.createElement(
         'div',
-        { className: 'text-sm text-[var(--display-text)] min-h-[1.5rem] break-all my-auto tracking-wide' },
-        expr || React.createElement('span', { className: 'text-[var(--display-text)]/40' }, '0')
+        { className: 'text-right text-lg text-[var(--display-muted)] min-h-[1.5rem] break-all my-auto tracking-wide' },
+        expr || React.createElement('span', { className: 'text-[var(--display-muted-pale)]' }, '0')
       ),
       React.createElement(
         'div',
-        { className: 'flex items-baseline justify-end pt-0.5 border-t border-[var(--display-text)]/20' },
-        React.createElement('span', { className: 'text-xs text-[var(--label-shift)] font-bold mr-2' }, base),
+        { className: 'flex items-baseline justify-end pt-1 border-t border-[var(--display-divider)]' },
+        React.createElement('span', { className: 'text-xs text-[var(--ui-accent)] font-bold mr-2' }, base),
         React.createElement(
           'span',
-          { 
-            className: 'font-sans text-xl sm:text-2xl font-bold tracking-wider text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2'
+          {
+            className: 'font-sans text-2xl sm:text-3xl font-light tracking-wide text-[var(--display-text)] select-text overflow-x-auto no-scrollbar whitespace-nowrap pl-2'
           },
           res
         )

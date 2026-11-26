@@ -5,90 +5,79 @@ import {
   SPRING_CONFIGS,
   SPRING_TOKENS,
 } from './spring';
+import { triggerHaptic } from '../audioFeedback';
 
 /**
- * 0 = Closed (HistorySheet tucked above top edge of calculator)
- * 1 = Expanded (HistorySheet covers full calculator screen like a notification drawer)
+ * 0 = CLOSED (Calculator display active)
+ * 1 = FULL   (Full-screen history list)
  */
-export type HistorySnapState = 0 | 1;
+export type HistoryDetent = 0 | 1;
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
 }
 
-export function sheetOffsetYAtProgress(progress: number, sheetH: number): number {
-  const sheetT = clamp(progress, 0, 1.04);
-  return -(1 - sheetT) * Math.max(240, sheetH);
-}
-
-export function sheetOpacityAtProgress(progress: number): number {
-  const sheetT = clamp(progress, 0, 1);
-  return sheetT <= 0 ? 0 : clamp(sheetT * 8, 0, 1);
-}
-
 interface ActiveSnapTrack {
   fromP: number;
-  toP: HistorySnapState;
+  toP: HistoryDetent;
   startTime: number;
   duration: number;
   reduced: boolean;
-  anims: Animation[];
+  rafId: number;
 }
 
 interface UseHistorySheetMotionOptions {
   enabled: boolean;
   mainRef: React.RefObject<HTMLElement | null>;
-  historySheetRef: React.RefObject<HTMLDivElement | null>;
-  onExpandedChange?: (expanded: boolean) => void;
+  fullSheetRef: React.RefObject<HTMLDivElement | null>;
+  onDetentChange?: (detent: HistoryDetent) => void;
 }
 
 export function useHistorySheetMotion({
   enabled,
   mainRef,
-  historySheetRef,
-  onExpandedChange,
+  fullSheetRef,
+  onDetentChange,
 }: UseHistorySheetMotionOptions) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const snapStateRef = useRef<HistorySnapState>(0);
+  const [detent, setDetent] = useState<HistoryDetent>(0);
+  const detentRef = useRef<HistoryDetent>(0);
   const progressRef = useRef<number>(0);
   const animTokenRef = useRef<number>(0);
   const activeSnapRef = useRef<ActiveSnapTrack | null>(null);
-  const mainHRef = useRef<number>(844);
-  const handledPointerTapAtRef = useRef<number>(0);
+
+  const dimsRef = useRef({ mainH: 844 });
 
   const dragRef = useRef<{
     pointerId: number;
+    startX: number;
     startY: number;
     startP: number;
     lastY: number;
     lastTime: number;
     velocityY: number;
-    moved: boolean;
-    source: 'top' | 'sheet';
-    startedOnGrab: boolean;
-    startedOnCloseHandle: boolean;
+    axis: 'pending' | 'y' | 'cancelled';
+    source: 'display' | 'full';
   } | null>(null);
 
   const applyProgressToDom = useCallback(
     (p: number, isMoving: boolean) => {
-      const sheetEl = historySheetRef.current;
-      if (!sheetEl) return;
+      const { mainH } = dimsRef.current;
+      const fullEl = fullSheetRef.current;
+      if (!fullEl) return;
 
-      const sheetH = Math.max(240, mainHRef.current);
-      const sheetY = sheetOffsetYAtProgress(p, sheetH);
-      const sheetOp = sheetOpacityAtProgress(p);
-      const showSheet = p > 0.002 || (isMoving && p > 0);
+      const t = clamp(p, 0, 1.04);
+      const showFull = p > 0.004 || (isMoving && p > 0);
+      const fullY = -(1 - t) * Math.max(320, mainH);
+      const fullOp = t <= 0 ? 0 : clamp(t * 4.5, 0, 1);
 
-      sheetEl.style.willChange = isMoving ? 'transform, opacity' : '';
-      sheetEl.style.visibility = showSheet ? 'visible' : 'hidden';
-      sheetEl.style.pointerEvents = !isMoving && p >= 0.98 ? 'auto' : 'none';
-      sheetEl.style.transform =
-        !isMoving && Math.abs(sheetY) < 0.1
-          ? ''
-          : `translate3d(0, ${sheetY.toFixed(2)}px, 0)`;
-      sheetEl.style.opacity = sheetOp >= 0.999 ? '' : sheetOp.toFixed(3);
+      fullEl.style.willChange = isMoving ? 'transform, opacity' : '';
+      fullEl.style.visibility = showFull ? 'visible' : 'hidden';
+      fullEl.style.pointerEvents = !isMoving && p >= 0.96 ? 'auto' : 'none';
+      fullEl.style.transform =
+        !isMoving && Math.abs(fullY) < 0.1 ? '' : `translate3d(0, ${fullY.toFixed(2)}px, 0)`;
+      fullEl.style.opacity = fullOp >= 0.999 ? '' : fullOp.toFixed(3);
     },
-    [historySheetRef]
+    [fullSheetRef]
   );
 
   const getCurrentProgress = useCallback((): number => {
@@ -104,14 +93,10 @@ export function useHistorySheetMotion({
     return track.fromP + (track.toP - track.fromP) * t;
   }, []);
 
-  const cancelRunningAnims = useCallback(() => {
+  const cancelRunningSnap = useCallback(() => {
     const track = activeSnapRef.current;
     if (track) {
-      for (const anim of track.anims) {
-        try {
-          anim.cancel();
-        } catch {}
-      }
+      if (track.rafId) cancelAnimationFrame(track.rafId);
       activeSnapRef.current = null;
     }
   }, []);
@@ -119,9 +104,7 @@ export function useHistorySheetMotion({
   useLayoutEffect(() => {
     const measure = () => {
       const main = mainRef.current;
-      if (main && main.clientHeight > 0) {
-        mainHRef.current = main.clientHeight;
-      }
+      if (main && main.clientHeight > 0) dimsRef.current.mainH = main.clientHeight;
       if (!activeSnapRef.current && !dragRef.current) {
         applyProgressToDom(progressRef.current, false);
       }
@@ -130,9 +113,9 @@ export function useHistorySheetMotion({
     measure();
 
     let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined' && mainRef.current) {
+    if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(measure);
-      ro.observe(mainRef.current);
+      if (mainRef.current) ro.observe(mainRef.current);
     }
     window.addEventListener('resize', measure, { passive: true });
     return () => {
@@ -141,149 +124,92 @@ export function useHistorySheetMotion({
     };
   }, [mainRef, applyProgressToDom]);
 
-  const snapToExpanded = useCallback(
-    (expanded: boolean, immediate = false) => {
-      const targetState: HistorySnapState = expanded ? 1 : 0;
+  const snapToDetent = useCallback(
+    (targetDetent: HistoryDetent, immediate = false, playHaptic = true) => {
       const fromP = getCurrentProgress();
-      cancelRunningAnims();
+      cancelRunningSnap();
       const token = ++animTokenRef.current;
+      const prevDetent = detentRef.current;
+
+      detentRef.current = targetDetent;
+      setDetent(targetDetent);
+      if (targetDetent !== prevDetent) {
+        if (playHaptic) triggerHaptic('dpad');
+        onDetentChange?.(targetDetent);
+      }
+
+      if (immediate || Math.abs(targetDetent - fromP) < 0.002) {
+        progressRef.current = targetDetent;
+        applyProgressToDom(targetDetent, false);
+        return;
+      }
+
       const reduced = prefersReducedMotion();
+      const duration = reduced ? SPRING_TOKENS.reducedMotion.duration : SPRING_TOKENS.spatial.duration;
+      const startTime = performance.now();
 
-      snapStateRef.current = targetState;
-      setIsExpanded(expanded);
-      onExpandedChange?.(expanded);
+      const track: ActiveSnapTrack = {
+        fromP,
+        toP: targetDetent,
+        startTime,
+        duration,
+        reduced,
+        rafId: 0,
+      };
+      activeSnapRef.current = track;
 
-      if (immediate || Math.abs(targetState - fromP) < 0.002) {
-        progressRef.current = targetState;
-        applyProgressToDom(targetState, false);
-        return;
-      }
-
-      const sheetEl = historySheetRef.current;
-      if (!sheetEl) {
-        progressRef.current = targetState;
-        return;
-      }
-
-      const sheetH = Math.max(240, mainHRef.current);
-      sheetEl.style.visibility = 'visible';
-
-      const anims: Animation[] = [];
-
-      if (reduced) {
-        const duration = SPRING_TOKENS.reducedMotion.duration;
-        const easing = SPRING_TOKENS.reducedMotion.easing;
-        sheetEl.style.willChange = 'opacity';
-        sheetEl.style.transform = '';
-        anims.push(
-          sheetEl.animate(
-            [
-              { opacity: sheetOpacityAtProgress(fromP) },
-              { opacity: sheetOpacityAtProgress(targetState) },
-            ],
-            { duration, easing, fill: 'forwards' }
-          )
-        );
-        activeSnapRef.current = {
-          fromP,
-          toP: targetState,
-          startTime: performance.now(),
-          duration,
-          reduced: true,
-          anims,
-        };
-      } else {
-        const duration = SPRING_TOKENS.spatial.duration;
-        const samples = 24;
-        const frames: Keyframe[] = [];
-        for (let i = 0; i <= samples; i++) {
-          const frac = i / samples;
-          const springT =
-            i === 0
-              ? 0
-              : i === samples
-              ? 1
-              : evaluateSpringProgress(SPRING_CONFIGS.spatial, (frac * duration) / 1000);
-          const p = fromP + (targetState - fromP) * springT;
-          const y = sheetOffsetYAtProgress(p, sheetH);
-          const op = sheetOpacityAtProgress(p);
-          frames.push({
-            offset: frac,
-            transform: `translate3d(0, ${y.toFixed(2)}px, 0)`,
-            opacity: op,
-          });
-        }
-        sheetEl.style.willChange = 'transform, opacity';
-        anims.push(
-          sheetEl.animate(frames, {
-            duration,
-            easing: 'linear',
-            fill: 'forwards',
-          })
-        );
-        activeSnapRef.current = {
-          fromP,
-          toP: targetState,
-          startTime: performance.now(),
-          duration,
-          reduced: false,
-          anims,
-        };
-      }
-
-      anims[0].finished
-        .then(() => {
-          if (animTokenRef.current !== token) return;
+      const step = () => {
+        if (animTokenRef.current !== token) return;
+        const elapsed = performance.now() - startTime;
+        if (elapsed >= duration) {
           activeSnapRef.current = null;
-          progressRef.current = targetState;
-          applyProgressToDom(targetState, false);
-          for (const anim of anims) {
-            try {
-              anim.cancel();
-            } catch {}
-          }
-        })
-        .catch(() => {
-          // Cancelled by subsequent drag or snap
-        });
+          progressRef.current = targetDetent;
+          applyProgressToDom(targetDetent, false);
+          return;
+        }
+        const t = reduced
+          ? clamp(elapsed / duration, 0, 1)
+          : evaluateSpringProgress(SPRING_CONFIGS.spatial, elapsed / 1000);
+        const p = fromP + (targetDetent - fromP) * t;
+        progressRef.current = p;
+        applyProgressToDom(p, true);
+        track.rafId = requestAnimationFrame(step);
+      };
+
+      track.rafId = requestAnimationFrame(step);
     },
-    [applyProgressToDom, cancelRunningAnims, getCurrentProgress, historySheetRef, onExpandedChange]
+    [applyProgressToDom, cancelRunningSnap, getCurrentProgress, onDetentChange]
   );
 
   const handleDragStart = useCallback(
-    (e: React.PointerEvent, source: 'top' | 'sheet') => {
-      if (source === 'top' && !enabled) return;
+    (e: React.PointerEvent, source: 'display' | 'full') => {
+      if (source === 'display' && !enabled) return;
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+
       const target = e.target as HTMLElement | null;
-      if (source === 'sheet' && target?.closest('button')) {
-        return;
-      }
-      if (source === 'top' && target?.closest('button[aria-label="Settings and Modes"]')) {
-        return;
+      if (source === 'full') {
+        if (target?.closest('input')) return;
+        // If dragging inside the scrollable history list and it isn't at the top, let list scroll naturally
+        const scroller = target?.closest('[data-testid="history-full-virtual-list"]') as HTMLElement | null;
+        if (scroller && scroller.scrollTop > 2 && !target?.closest('[data-testid="history-sheet-top-bar"]')) {
+          return;
+        }
       }
 
       const startP = getCurrentProgress();
-      animTokenRef.current++;
-      cancelRunningAnims();
-      progressRef.current = startP;
-
       dragRef.current = {
         pointerId: e.pointerId,
+        startX: e.clientX,
         startY: e.clientY,
         startP,
         lastY: e.clientY,
         lastTime: performance.now(),
         velocityY: 0,
-        moved: false,
+        axis: 'pending',
         source,
-        startedOnGrab: Boolean(target?.closest('[data-testid="history-grab-handle"]')),
-        startedOnCloseHandle: Boolean(
-          target?.closest('[data-testid="history-sheet-close-handle"], [data-testid="history-sheet-top-handle"]')
-        ),
       };
-
-      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     },
-    [cancelRunningAnims, enabled, getCurrentProgress]
+    [enabled, getCurrentProgress]
   );
 
   const handleDragMove = useCallback(
@@ -291,11 +217,32 @@ export function useHistorySheetMotion({
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== e.pointerId) return;
 
-      const totalDy = e.clientY - drag.startY;
-      if (!drag.moved && Math.abs(totalDy) > 6) {
-        drag.moved = true;
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+
+      if (drag.axis === 'cancelled') return;
+
+      if (drag.axis === 'pending') {
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+          drag.axis = 'cancelled';
+          dragRef.current = null;
+          return;
+        }
+        const wantsDown = drag.source === 'display' && dy > 14 && Math.abs(dy) > Math.abs(dx) * 1.2;
+        const wantsUp = drag.source === 'full' && dy < -14 && Math.abs(dy) > Math.abs(dx) * 1.2;
+        if (!wantsDown && !wantsUp) return;
+
+        drag.axis = 'y';
+        animTokenRef.current++;
+        cancelRunningSnap();
+        drag.startP = progressRef.current;
+        drag.startY = e.clientY;
+        drag.lastY = e.clientY;
+        drag.lastTime = performance.now();
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        } catch {}
       }
-      if (!drag.moved) return;
 
       const now = performance.now();
       const dt = Math.max(1, now - drag.lastTime);
@@ -304,14 +251,20 @@ export function useHistorySheetMotion({
       drag.lastY = e.clientY;
       drag.lastTime = now;
 
-      const sheetSpanPx = Math.max(240, mainHRef.current);
-      const rawP = drag.startP + totalDy / sheetSpanPx;
-      const nextP = rawP > 1 ? 1 + (rawP - 1) * 0.15 : clamp(rawP, 0, 1.04);
+      const span = Math.max(260, dimsRef.current.mainH * 0.62);
+      const effectiveDy = e.clientY - drag.startY;
+      const rawP = drag.startP + effectiveDy / span;
+      const nextP =
+        rawP > 1
+          ? 1 + Math.min(0.04, (rawP - 1) * 0.12)
+          : rawP < 0
+          ? Math.max(-0.04, rawP * 0.12)
+          : rawP;
 
       progressRef.current = nextP;
       applyProgressToDom(nextP, true);
     },
-    [applyProgressToDom]
+    [applyProgressToDom, cancelRunningSnap]
   );
 
   const handleDragEnd = useCallback(
@@ -320,46 +273,35 @@ export function useHistorySheetMotion({
       if (!drag || drag.pointerId !== e.pointerId) return;
       dragRef.current = null;
 
+      if (drag.axis !== 'y') return;
+
       try {
         (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
       } catch {}
 
-      if (!drag.moved) {
-        if (drag.source === 'sheet' && drag.startedOnCloseHandle) {
-          handledPointerTapAtRef.current = performance.now();
-          snapToExpanded(false);
-        } else if (drag.source === 'top' && drag.startedOnGrab) {
-          handledPointerTapAtRef.current = performance.now();
-          snapToExpanded(true);
-        }
-        return;
-      }
-
-      const currentP = progressRef.current;
+      const p = clamp(progressRef.current, 0, 1);
       const vy = drag.velocityY;
-      let shouldExpand: boolean;
+      let target: HistoryDetent;
 
-      if (Math.abs(vy) > 0.3) {
-        shouldExpand = vy > 0;
+      if (vy > 0.35) {
+        target = 1;
+      } else if (vy < -0.35) {
+        target = 0;
       } else {
-        shouldExpand = currentP >= 0.35;
+        target = p >= 0.32 ? 1 : 0;
       }
 
-      snapToExpanded(shouldExpand);
+      snapToDetent(target);
     },
-    [snapToExpanded]
+    [snapToDetent]
   );
 
-  const wasRecentPointerTap = useCallback(() => {
-    return performance.now() - handledPointerTapAtRef.current < 120;
-  }, []);
-
   return {
-    isExpanded,
-    snapToExpanded,
+    detent,
+    isExpanded: detent === 1,
+    snapToDetent,
     handleDragStart,
     handleDragMove,
     handleDragEnd,
-    wasRecentPointerTap,
   };
 }

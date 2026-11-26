@@ -14,8 +14,8 @@
     --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
     --font-math: "Times New Roman", Tinos, "Liberation Serif", Times, serif;
 
-    /* Theme CSS Variables (Default Theme: Authentic Casio ClassWiz) */
-    --bg: #0E0E12;
+    /* Theme CSS Variables (Default Theme: Pure Black ColorOS Display + Hardware Keypad) */
+    --bg: #000000;
     --key-fn: #1c1c24;
     --key-fn-text: #E2E8F0;
     --key-num: #ECECF0;
@@ -28,11 +28,15 @@
     --label-alpha: #E6007E;
     --label-alpha-active-text: #FFFFFF;
     --label-base: #22D3EE;
-    --display-bg: #0c1417;
-    --display-text: #A7F3D0;
-    --display-screen-gradient: linear-gradient(to bottom, #111e22 0%, #0c1619 60%, #081013 100%);
-    --display-dot-color: #162B28;
-    --display-glow: rgba(110, 231, 183, 0.35);
+    --display-bg: #000000;
+    --display-text: #FFFFFF;
+    --display-muted: #8E8E93;
+    --display-muted-pale: rgba(255, 255, 255, 0.36);
+    --display-surface: #141416;
+    --display-divider: rgba(255, 255, 255, 0.12);
+    --display-screen-gradient: none;
+    --display-dot-color: #161618;
+    --display-glow: rgba(255, 255, 255, 0.18);
 
     /* Material 3 Expressive UI Surfaces & Single Accent (Default — 100% Opaque, No Glass) */
     --ui-accent: #E5A93C;
@@ -45,13 +49,13 @@
     --m3-on-surface: #E2E8F0;
     --m3-on-surface-variant: #94A3B8;
     --m3-outline-variant: #2A2A36;
-    --menu-card-bg: color-mix(in srgb, var(--display-bg) 82%, var(--display-text) 18%);
+    --menu-card-bg: #141416;
     --luminous-core: rgba(229, 169, 60, 0.34);
     --luminous-mid: rgba(229, 169, 60, 0.12);
     --static-glow-equals: 0 0 12px rgba(229, 169, 60, 0.28);
     --static-glow-shift: 0 0 12px rgba(229, 169, 60, 0.45);
     --static-glow-alpha: 0 0 12px rgba(230, 0, 126, 0.45);
-    --static-glow-card: 0 0 12px rgba(167, 243, 208, 0.32);
+    --static-glow-card: 0 0 12px rgba(255, 255, 255, 0.22);
 
     /* Adaptive Viewport Scaling for Compact (640px) through Tall (932px+) Phones */
     --vh-extra: clamp(0px, calc(100dvh - 660px), 300px);
@@ -62,9 +66,11 @@
     --keypad-split-gap: calc(4px + var(--vh-extra) * 0.04);
     --display-keypad-gap: calc(4px + var(--vh-extra) * 0.045);
 
-    /* Display 2-Tier Type Scale (Active Input & Result) */
-    --fs-input: clamp(21px, min(6vw, 3.2dvh), 29px);
-    --fs-result: clamp(28px, min(8.2vw, 4.5dvh), 40px);
+    /* ColorOS Display 2-Tier Type Scale (Active Large & Muted Small) */
+    --fs-display-large: clamp(32px, min(10vw, 5.4dvh), 48px);
+    --fs-display-small: clamp(20px, min(5.6vw, 3.0dvh), 26px);
+    --fs-input: var(--fs-display-large);
+    --fs-result: var(--fs-display-large);
   }
 
   /* Icy Theme */
@@ -82,9 +88,13 @@
     --label-alpha: #F08CFF;
     --label-alpha-active-text: #0B0E1A;
     --label-base: #8FE3FF;
-    --display-bg: #0B0E1A;
+    --display-bg: #0E0B16;
     --display-text: #A8EEFF;
-    --display-screen-gradient: linear-gradient(to bottom, #151329 0%, #0E0B1A 60%, #07060F 100%);
+    --display-muted: color-mix(in srgb, #A8EEFF 56%, transparent);
+    --display-muted-pale: color-mix(in srgb, #A8EEFF 32%, transparent);
+    --display-surface: #181429;
+    --display-divider: color-mix(in srgb, #A8EEFF 16%, transparent);
+    --display-screen-gradient: none;
     --display-dot-color: #1A2438;
     --display-glow: rgba(168, 238, 255, 0.4);
 
@@ -99,7 +109,7 @@
     --m3-on-surface: #EDE7FF;
     --m3-on-surface-variant: #A8A0C2;
     --m3-outline-variant: #2D2744;
-    --menu-card-bg: color-mix(in srgb, var(--display-bg) 82%, var(--display-text) 18%);
+    --menu-card-bg: #181429;
     --luminous-core: rgba(143, 227, 255, 0.36);
     --luminous-mid: rgba(143, 227, 255, 0.14);
     --static-glow-equals: 0 0 14px rgba(143, 227, 255, 0.4);
@@ -138,11 +148,9 @@
   }
 }
 
-/* Minimalist Flat High-Contrast LCD Screen Surface */
+/* Borderless Pure Display Surface (ColorOS style, zero card/border) */
 .lcd-screen-bg {
   background-color: var(--display-bg);
-  border-radius: 20px;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .lcd-dot-text {
@@ -159,35 +167,81 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Calculate Mode Display Layout */
+/* Opacity-only blinking caret animation */
+@keyframes lcd-caret-blink {
+  0%, 48% {
+    opacity: 1;
+  }
+  52%, 100% {
+    opacity: 0.14;
+  }
+}
+
+.lcd-caret-blink {
+  animation: lcd-caret-blink 1.05s steps(2, start) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lcd-caret-blink {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ColorOS Calculate Mode Display Layout */
 .display-workspace {
+  position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   width: 100%;
   height: 100%;
   min-height: 0;
-  gap: 4px;
   overflow: hidden;
 }
 
-.calc-active-input-line {
-  flex: 1 1 auto;
+.calc-peek-zone {
+  flex: 0 0 auto;
   width: 100%;
-  min-height: 52px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.calc-main-stage {
+  flex: 1 1 0%;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.calc-current-line-dock {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+}
+
+.calc-active-input-line {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
   overflow-x: hidden;
-  overflow-y: auto;
-  padding: 4px 0;
-  font-size: var(--fs-input);
-  line-height: 1.25;
+  overflow-y: visible;
+  padding: 2px 0;
+  line-height: 1.2;
 }
 
 .calc-active-input-inner {
-  margin-top: auto;
-  margin-bottom: auto;
   width: 100%;
   min-width: 0;
 }
@@ -195,16 +249,13 @@
 .calc-active-result-line {
   flex: 0 0 auto;
   width: 100%;
-  height: clamp(46px, 6.2dvh, 62px);
-  min-height: 46px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
-  font-size: var(--fs-result);
-  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;

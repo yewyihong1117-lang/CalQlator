@@ -230,12 +230,12 @@ export const statModeModule: ModeModule = {
       const page = STAT_SUBMENU_PAGES[0];
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'flex justify-between items-center border-b border-[var(--display-text)]/20 pb-1 text-xs font-bold text-[var(--label-shift)]' },
+          { className: 'flex justify-between items-center border-b border-[var(--display-divider)] pb-1 text-xs font-bold text-[var(--ui-accent)]' },
           React.createElement('span', null, page.title || 'Statistics Menu'),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70 font-normal' }, 'Page 1/1')
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, 'Page 1/1')
         ),
         React.createElement(
           'div',
@@ -243,15 +243,15 @@ export const statModeModule: ModeModule = {
           page.items.map((it) =>
             React.createElement(
               'div',
-              { key: it.id, className: 'flex items-center space-x-1.5' },
-              React.createElement('span', { className: 'bg-[var(--display-text)]/15 text-[var(--label-shift)] border border-[var(--display-text)]/30 rounded px-1.5 py-0.5 text-[10px] font-bold' }, it.key),
-              React.createElement('span', { className: 'font-semibold text-[var(--display-text)]' }, it.name)
+              { key: it.id, className: 'flex items-center space-x-1.5 px-2 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' },
+              React.createElement('span', { className: 'text-[var(--ui-accent)] text-[10px] font-bold' }, `${it.key}:`),
+              React.createElement('span', { className: 'font-semibold text-[var(--display-text)] truncate' }, it.name)
             )
           )
         ),
         React.createElement(
           'div',
-          { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' },
+          { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' },
           '[AC] Return'
         )
       );
@@ -261,16 +261,16 @@ export const statModeModule: ModeModule = {
     if (modeState.screen === 'SELECT_TYPE') {
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
-        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Select Stat Type:'),
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
+        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)]' }, 'Select Stat Type:'),
         React.createElement(
           'div',
-          { className: 'space-y-1 text-xs my-auto' },
-          React.createElement('div', null, React.createElement('span', { className: 'font-bold mr-1.5 text-[var(--label-shift)]' }, '1:'), '1-Variable'),
-          React.createElement('div', null, React.createElement('span', { className: 'font-bold mr-1.5 text-[var(--label-shift)]' }, '2:'), 'y = a + bx'),
-          React.createElement('div', null, React.createElement('span', { className: 'font-bold mr-1.5 text-[var(--label-shift)]' }, '3:'), 'y = a + bx + cx²')
+          { className: 'space-y-1.5 text-xs my-auto' },
+          React.createElement('div', { className: 'px-2.5 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' }, React.createElement('span', { className: 'font-bold mr-1.5 text-[var(--ui-accent)]' }, '1:'), '1-Variable'),
+          React.createElement('div', { className: 'px-2.5 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' }, React.createElement('span', { className: 'font-bold mr-1.5 text-[var(--ui-accent)]' }, '2:'), 'y = a + bx'),
+          React.createElement('div', { className: 'px-2.5 py-1.5 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' }, React.createElement('span', { className: 'font-bold mr-1.5 text-[var(--ui-accent)]' }, '3:'), 'y = a + bx + cx²')
         ),
-        React.createElement('div', { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' }, '[1] Select  [AC] Return')
+        React.createElement('div', { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' }, '[1] Select  [AC] Return')
       );
     }
 
@@ -280,30 +280,30 @@ export const statModeModule: ModeModule = {
       if (!stats) {
         return React.createElement(
           'div',
-          { className: 'p-2 font-sans text-xs text-[var(--display-text)]/70' },
+          { className: 'p-2 font-sans text-xs text-[var(--display-muted)]' },
           'No Data Available. Press [AC] to enter data.'
         );
       }
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
         React.createElement(
           'div',
-          { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 flex justify-between text-[var(--label-shift)]' },
+          { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 flex justify-between text-[var(--ui-accent)]' },
           React.createElement('span', null, '1-Variable Statistics'),
-          React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70 font-normal' }, `n=${stats.n}`)
+          React.createElement('span', { className: 'text-[10px] text-[var(--display-muted)] font-normal' }, `n=${stats.n}`)
         ),
         React.createElement(
           'div',
-          { className: 'grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] my-auto' },
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'x̄ = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.meanX)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'Σx = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.sumX)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'sx = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.sx)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'minX = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.minX)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'med = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.med)),
-          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--label-shift)] font-semibold' }, 'maxX = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)] tracking-wider' }, stats.maxX))
+          { className: 'grid grid-cols-2 gap-x-3 gap-y-1 text-xs my-auto' },
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--ui-accent)] font-semibold' }, 'x̄ = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, stats.meanX)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--ui-accent)] font-semibold' }, 'Σx = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, stats.sumX)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--ui-accent)] font-semibold' }, 'sx = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, stats.sx)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--ui-accent)] font-semibold' }, 'minX = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, stats.minX)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--ui-accent)] font-semibold' }, 'med = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, stats.med)),
+          React.createElement('div', null, React.createElement('span', { className: 'text-[var(--ui-accent)] font-semibold' }, 'maxX = '), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, stats.maxX))
         ),
-        React.createElement('div', { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' }, '[AC] Return to Table')
+        React.createElement('div', { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' }, '[AC] Return to Table')
       );
     }
 
@@ -313,22 +313,22 @@ export const statModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-2 font-sans select-none text-[var(--display-text)]' },
+      { className: 'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]' },
       React.createElement(
         'div',
-        { className: 'flex justify-between items-center text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' },
+        { className: 'flex justify-between items-center text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)]' },
         React.createElement('span', null, 'STAT Data Table'),
-        React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-text)]/70' }, '[OPTN] Calc Stats')
+        React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)]' }, '[OPTN] Calc Stats')
       ),
       React.createElement(
         'div',
-        { className: 'overflow-y-auto max-h-[85px] my-1 text-xs border border-[var(--display-text)]/30 rounded bg-[var(--display-text)]/5' },
+        { className: 'overflow-y-auto max-h-[96px] my-1 text-xs border border-[var(--display-divider)] rounded-xl bg-[var(--display-surface)]' },
         React.createElement(
           'table',
           { className: 'w-full text-left' },
           React.createElement(
             'thead',
-            { className: 'bg-[var(--display-text)]/15 text-[10px] uppercase font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20' },
+            { className: 'bg-[var(--display-bg)] text-[10px] uppercase font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)]' },
             React.createElement(
               'tr',
               null,
@@ -339,33 +339,33 @@ export const statModeModule: ModeModule = {
           ),
           React.createElement(
             'tbody',
-            { className: 'divide-y divide-[var(--display-text)]/15 text-[11px]' },
+            { className: 'divide-y divide-[var(--display-divider)] text-[11px]' },
             list.map((val, idx) =>
               React.createElement(
                 'tr',
-                { key: idx, className: idx === list.length - 1 ? 'bg-[var(--display-text)]/20 font-bold' : '' },
-                React.createElement('td', { className: 'px-2 py-0.5 text-[var(--display-text)]/60' }, idx + 1),
+                { key: idx, className: idx === list.length - 1 ? 'bg-[var(--ui-accent-tonal)] font-bold' : '' },
+                React.createElement('td', { className: 'px-2 py-0.5 text-[var(--display-muted)]' }, idx + 1),
                 React.createElement('td', { className: 'px-2 py-0.5 font-bold text-[var(--display-text)]' }, val),
-                React.createElement('td', { className: 'px-2 py-0.5 text-right text-[var(--display-text)]/60' }, 1)
+                React.createElement('td', { className: 'px-2 py-0.5 text-right text-[var(--display-muted)]' }, 1)
               )
             ),
             React.createElement(
               'tr',
-              { className: 'bg-[var(--display-text)]/10' },
-              React.createElement('td', { className: 'px-2 py-0.5 text-[var(--display-text)]/50' }, list.length + 1),
+              { className: 'bg-[var(--display-bg)]/40' },
+              React.createElement('td', { className: 'px-2 py-0.5 text-[var(--display-muted-pale)]' }, list.length + 1),
               React.createElement(
                 'td',
                 { className: 'px-2 py-0.5 font-bold text-[var(--display-text)]' },
                 buf ? `${buf}_` : 'Input...'
               ),
-              React.createElement('td', { className: 'px-2 py-0.5 text-right text-[var(--display-text)]/50' }, 1)
+              React.createElement('td', { className: 'px-2 py-0.5 text-right text-[var(--display-muted-pale)]' }, 1)
             )
           )
         )
       ),
       React.createElement(
         'div',
-        { className: 'flex justify-between items-center text-[10px] text-[var(--display-text)]/60 pt-0.5 border-t border-[var(--display-text)]/20' },
+        { className: 'flex justify-between items-center text-[10px] text-[var(--display-muted)] pt-0.5 border-t border-[var(--display-divider)]' },
         React.createElement('span', null, 'Type number, press [=]'),
         React.createElement('span', null, '[OPTN] 3 to calculate')
       )

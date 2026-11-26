@@ -192,15 +192,15 @@ export const tableModeModule: ModeModule = {
       const expr = modeState.data.fExpr || '';
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
-        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Table: Define f(x)'),
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
+        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)]' }, 'Table: Define f(x)'),
         React.createElement(
           'div',
-          { className: 'my-auto text-sm' },
-          React.createElement('span', { className: 'font-bold mr-2 text-[var(--label-shift)]' }, 'f(x)='),
-          React.createElement('span', { className: 'border-b border-[var(--display-text)]/40 font-semibold text-[var(--display-text)] tracking-wide' }, expr || ' ')
+          { className: 'my-auto text-base flex items-baseline gap-2' },
+          React.createElement('span', { className: 'font-bold text-[var(--ui-accent)]' }, 'f(x) ='),
+          React.createElement('span', { className: 'flex-1 border-b border-[var(--display-divider)] pb-0.5 font-normal text-[var(--display-text)] tracking-wide text-right' }, expr || React.createElement('span', { className: 'text-[var(--display-muted-pale)]' }, '_'))
         ),
-        React.createElement('div', { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' }, 'Enter expression, press [=]')
+        React.createElement('div', { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' }, 'Enter expression, press [=]')
       );
     }
 
@@ -209,15 +209,15 @@ export const tableModeModule: ModeModule = {
       const expr = modeState.data.gExpr || '';
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
-        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Table: Define g(x) (Optional)'),
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
+        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)]' }, 'Table: Define g(x) (Optional)'),
         React.createElement(
           'div',
-          { className: 'my-auto text-sm' },
-          React.createElement('span', { className: 'font-bold mr-2 text-[var(--label-shift)]' }, 'g(x)='),
-          React.createElement('span', { className: 'border-b border-[var(--display-text)]/40 font-semibold text-[var(--display-text)] tracking-wide' }, expr || ' ')
+          { className: 'my-auto text-base flex items-baseline gap-2' },
+          React.createElement('span', { className: 'font-bold text-[var(--ui-accent)]' }, 'g(x) ='),
+          React.createElement('span', { className: 'flex-1 border-b border-[var(--display-divider)] pb-0.5 font-normal text-[var(--display-text)] tracking-wide text-right' }, expr || React.createElement('span', { className: 'text-[var(--display-muted-pale)]' }, '_'))
         ),
-        React.createElement('div', { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' }, 'Press [=] to continue')
+        React.createElement('div', { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' }, 'Press [=] to continue')
       );
     }
 
@@ -225,16 +225,16 @@ export const tableModeModule: ModeModule = {
     if (modeState.screen === 'RANGE') {
       return React.createElement(
         'div',
-        { className: 'flex flex-col h-full justify-between p-2 font-sans text-[var(--display-text)] select-none' },
-        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-text)]/20 pb-1 text-[var(--label-shift)]' }, 'Table Range'),
+        { className: 'flex flex-col h-full justify-between py-1 font-sans text-[var(--display-text)] bg-[var(--display-bg)] select-none' },
+        React.createElement('div', { className: 'text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)]' }, 'Table Range'),
         React.createElement(
           'div',
-          { className: 'space-y-1 text-xs my-auto' },
-          React.createElement('div', null, 'Start: ', React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeStart ?? 1)),
-          React.createElement('div', null, 'End: ', React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeEnd ?? 5)),
-          React.createElement('div', null, 'Step: ', React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeStep ?? 1))
+          { className: 'space-y-1.5 text-xs my-auto' },
+          React.createElement('div', { className: 'flex justify-between px-2.5 py-1 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' }, React.createElement('span', { className: 'text-[var(--display-muted)]' }, 'Start'), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeStart ?? 1)),
+          React.createElement('div', { className: 'flex justify-between px-2.5 py-1 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' }, React.createElement('span', { className: 'text-[var(--display-muted)]' }, 'End'), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeEnd ?? 5)),
+          React.createElement('div', { className: 'flex justify-between px-2.5 py-1 rounded-xl bg-[var(--display-surface)] border border-[var(--display-divider)]' }, React.createElement('span', { className: 'text-[var(--display-muted)]' }, 'Step'), React.createElement('span', { className: 'font-sans font-bold text-[var(--display-text)]' }, modeState.data.rangeStep ?? 1))
         ),
-        React.createElement('div', { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-1 border-t border-[var(--display-text)]/20' }, 'Press [=] to generate table')
+        React.createElement('div', { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' }, 'Press [=] to generate table')
       );
     }
 
@@ -244,52 +244,52 @@ export const tableModeModule: ModeModule = {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col h-full justify-between p-1.5 font-sans select-none text-[var(--display-text)]' },
+      { className: 'flex flex-col h-full justify-between py-1 font-sans select-none text-[var(--display-text)] bg-[var(--display-bg)]' },
       React.createElement(
         'div',
-        { className: 'flex justify-between items-center text-xs font-bold border-b border-[var(--display-text)]/20 pb-0.5 text-[var(--label-shift)]' },
+        { className: 'flex justify-between items-center text-xs font-bold border-b border-[var(--display-divider)] pb-1 text-[var(--ui-accent)]' },
         React.createElement('span', null, `f(x)=${modeState.data.fExpr || 'x'}`),
-        React.createElement('span', { className: 'text-[10px] text-[var(--display-text)]/70' }, '[AC] Edit')
+        React.createElement('span', { className: 'text-[10px] font-normal text-[var(--display-muted)]' }, '[AC] Edit')
       ),
       React.createElement(
         'div',
-        { className: 'overflow-y-auto max-h-[90px] text-xs border border-[var(--display-text)]/30 rounded bg-[var(--display-text)]/5 my-0.5' },
+        { className: 'overflow-y-auto max-h-[112px] text-xs border border-[var(--display-divider)] rounded-xl bg-[var(--display-surface)] my-1' },
         React.createElement(
           'table',
           { className: 'w-full text-left' },
           React.createElement(
             'thead',
-            { className: 'bg-[var(--display-text)]/15 text-[10px] uppercase font-bold text-[var(--label-shift)] border-b border-[var(--display-text)]/20' },
+            { className: 'bg-[var(--display-bg)] text-[10px] uppercase font-bold text-[var(--ui-accent)] border-b border-[var(--display-divider)]' },
             React.createElement(
               'tr',
               null,
-              React.createElement('th', { className: 'px-1.5 py-0.5 w-8' }, 'No.'),
-              React.createElement('th', { className: 'px-1.5 py-0.5' }, 'x'),
-              React.createElement('th', { className: 'px-1.5 py-0.5' }, 'f(x)'),
-              React.createElement('th', { className: 'px-1.5 py-0.5' }, 'g(x)')
+              React.createElement('th', { className: 'px-2 py-0.5 w-8' }, 'No.'),
+              React.createElement('th', { className: 'px-2 py-0.5' }, 'x'),
+              React.createElement('th', { className: 'px-2 py-0.5' }, 'f(x)'),
+              React.createElement('th', { className: 'px-2 py-0.5' }, 'g(x)')
             )
           ),
           React.createElement(
             'tbody',
-            { className: 'divide-y divide-[var(--display-text)]/15 text-[11px]' },
+            { className: 'divide-y divide-[var(--display-divider)] text-[11px]' },
             rows.map((r: any, idx: number) =>
               React.createElement(
                 'tr',
-                { key: idx, className: idx === scroll ? 'bg-[var(--display-text)]/20 font-bold' : '' },
-                React.createElement('td', { className: 'px-1.5 py-0.5 text-[var(--display-text)]/60' }, r.no),
-                React.createElement('td', { className: 'px-1.5 py-0.5 text-[var(--display-text)] font-semibold' }, r.x),
+                { key: idx, className: idx === scroll ? 'bg-[var(--ui-accent-tonal)] font-bold' : '' },
+                React.createElement('td', { className: 'px-2 py-0.5 text-[var(--display-muted)]' }, r.no),
+                React.createElement('td', { className: 'px-2 py-0.5 text-[var(--display-text)] font-semibold' }, r.x),
                 React.createElement(
-                  'td', 
-                  { 
-                    className: 'px-1.5 py-0.5 font-bold text-[var(--display-text)] tracking-wide'
-                  }, 
+                  'td',
+                  {
+                    className: 'px-2 py-0.5 font-bold text-[var(--display-text)] tracking-wide'
+                  },
                   r.fx
                 ),
                 React.createElement(
-                  'td', 
-                  { 
-                    className: 'px-1.5 py-0.5 font-bold text-[var(--display-text)] tracking-wide'
-                  }, 
+                  'td',
+                  {
+                    className: 'px-2 py-0.5 font-bold text-[var(--display-text)] tracking-wide'
+                  },
                   r.gx
                 )
               )
@@ -299,7 +299,7 @@ export const tableModeModule: ModeModule = {
       ),
       React.createElement(
         'div',
-        { className: 'text-[9px] text-[var(--display-text)]/60 text-right pt-0.5 border-t border-[var(--display-text)]/20' },
+        { className: 'text-[10px] text-[var(--display-muted)] text-right pt-1 border-t border-[var(--display-divider)]' },
         '[▲/▼] Scroll'
       )
     );
