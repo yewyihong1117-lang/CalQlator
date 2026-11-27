@@ -10,7 +10,7 @@ import {
 import { 
   AngleMode, DisplayFormat, HistoryItem,
   evaluateMathExpression, evaluateMathAst, formatResult,
-  toEngineering, decimalToDms, primeFactorization,
+  toEngineering, primeFactorization,
   solveEquation,
   SCIENTIFIC_CONSTANTS, METRIC_CONVERSIONS,
   MENU_PAGES, ALL_MENU_ITEMS, MenuItem,
@@ -34,6 +34,7 @@ import {
   astToExpression, astToDisplayText, parseStringToAst, resolveAnsInAst,
   isAstCompleteForPreview, hasComputableOperation, TokenType
 } from './mathAst';
+import { shouldAutoInsertAns } from './autoAns';
 import { NaturalDisplay, placeCursorAtClientPoint } from './components/NaturalDisplay';
 import { formatDisplayNumberWithCommas, formatHistoryLine } from './displayFormat';
 import {
@@ -1732,6 +1733,26 @@ export default function App() {
     }
   };
 
+  // Post-evaluation AST transition driven by the single AUTO_ANS_KEY_CLASS lookup table
+  const prepareAstForPostEvalKey = (lookupKey: string, tokenType?: TokenType): MathAstState => {
+    const isJustEvaluated = editorMode === 'PHONE' ? justCommitted : isCalculated;
+    if (!isJustEvaluated) {
+      return astState;
+    }
+
+    if (editorMode === 'CLASSIC') {
+      commitPendingHistory();
+    }
+    setJustCommitted(false);
+    setIsCalculated(false);
+    setSdCycleState(0);
+    setEngStep(0);
+
+    return shouldAutoInsertAns(lookupKey, tokenType)
+      ? parseStringToAst('Ans')
+      : createInitialAstState();
+  };
+
   // Insert general token (Numbers, Variables, Functions)
   const handleToken = (tokenVal: string, keyType: HapticKeyType = 'num', tokenType?: TokenType) => {
     if (isPoweredOff) return;
@@ -1756,74 +1777,30 @@ export default function App() {
 
     pushUndoState(astState);
 
-    let currentState = astState;
-    const isBinaryOrPostfix =
-      [
-        '+', '-', '×', '÷', '^', '²', '³', '⁻¹', '!', '%', '°',
-        'P', 'C', 'nPr', 'nCr'
-      ].includes(tokenVal) ||
-      tokenType === 'OP_NPR' ||
-      tokenType === 'OP_NCR';
-    const isFunctionCall = tokenVal.endsWith('(') && tokenVal !== '(' && tokenVal !== '(-';
-
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState =
-          isBinaryOrPostfix || isFunctionCall
-            ? parseStringToAst('Ans')
-            : createInitialAstState();
-        setJustCommitted(false);
-        setIsCalculated(false);
-        setSdCycleState(0);
-        setEngStep(0);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState =
-        isBinaryOrPostfix || isFunctionCall
-          ? parseStringToAst('Ans')
-          : createInitialAstState();
-      setIsCalculated(false);
-      setSdCycleState(0);
-      setEngStep(0);
-    }
-
+    const currentState = prepareAstForPostEvalKey(tokenVal, tokenType);
     setAstState(insertToken(currentState, tokenVal, tokenType));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
   };
 
-  // Natural Display: Fraction Key (■/□)
-  const handleFractionKey = () => {
+  // Natural Display: Fraction Template (■/□) or Divide Binary Operator (÷)
+  const handleFractionKey = (keyId: '■/□' | '÷' = '■/□') => {
     if (isPoweredOff || displayMenu !== 'NONE') return;
     playKeyClick('func');
     setKeystrokes((k) => k + 1);
 
     if (modeState.mode !== 'CALC') {
-      const handled = currentModeModule.handleKey('■/□', modeContext) || currentModeModule.handleKey('/', modeContext);
+      const handled =
+        currentModeModule.handleKey(keyId, modeContext) ||
+        currentModeModule.handleKey('■/□', modeContext) ||
+        currentModeModule.handleKey('/', modeContext);
       if (handled) return;
     }
 
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-        setSdCycleState(0);
-        setEngStep(0);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-      setSdCycleState(0);
-      setEngStep(0);
-    }
-
+    const currentState = prepareAstForPostEvalKey(keyId);
     setAstState(insertFraction(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -1837,19 +1814,7 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-    }
-
+    const currentState = prepareAstForPostEvalKey('∫dx');
     setAstState(insertIntegral(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -1863,19 +1828,7 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-    }
-
+    const currentState = prepareAstForPostEvalKey('d/dx');
     setAstState(insertDerivative(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -1895,19 +1848,7 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-    }
-
+    const currentState = prepareAstForPostEvalKey('√');
     setAstState(insertSqrt(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -1927,23 +1868,7 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-        setSdCycleState(0);
-        setEngStep(0);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-      setSdCycleState(0);
-      setEngStep(0);
-    }
-
+    const currentState = prepareAstForPostEvalKey('^');
     setAstState(insertPower(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -1964,19 +1889,8 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-    }
-
+    const keyId = baseTokens.join('') === '10' ? '10^□' : 'e^□';
+    const currentState = prepareAstForPostEvalKey(keyId);
     setAstState(insertConstantPower(currentState, baseTokens));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -1996,19 +1910,7 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-    }
-
+    const currentState = prepareAstForPostEvalKey('×10^x');
     setAstState(insertScientificTenPower(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -2028,23 +1930,7 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-        setSdCycleState(0);
-        setEngStep(0);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-      setSdCycleState(0);
-      setEngStep(0);
-    }
-
+    const currentState = prepareAstForPostEvalKey(op);
     setAstState(insertPostfix(currentState, op));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -2058,19 +1944,7 @@ export default function App() {
     if (errorMessage) setErrorMessage(null);
     pushUndoState(astState);
 
-    let currentState = astState;
-    if (editorMode === 'PHONE') {
-      if (justCommitted) {
-        currentState = parseStringToAst('Ans');
-        setJustCommitted(false);
-        setIsCalculated(false);
-      }
-    } else if (isCalculated) {
-      commitPendingHistory();
-      currentState = parseStringToAst('Ans');
-      setIsCalculated(false);
-    }
-
+    const currentState = prepareAstForPostEvalKey('log_□');
     setAstState(insertLogBase(currentState));
     if (shiftActive) setShiftActive(false);
     if (alphaActive) setAlphaActive(false);
@@ -3228,7 +3102,7 @@ export default function App() {
                 <span></span>
               </div>
               <button
-                onClick={() => handleSmartKey(() => handleFractionKey(), () => handleFractionKey())}
+                onClick={() => handleSmartKey(() => handleFractionKey('■/□'), () => handleFractionKey('■/□'))}
                 aria-label="Fraction key"
                 className="w-full h-[var(--key-fn-h)] min-h-[40px] min-w-[44px] rounded-md key-hardware-charcoal text-slate-200 flex items-center justify-center text-xs"
               >
@@ -3374,13 +3248,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => {
-                    if (isCalculated) {
-                      setResult(decimalToDms(rawNumericVal));
-                    } else {
-                      handlePostfixKey('°');
-                    }
-                  },
+                  () => handlePostfixKey('°'),
                   () => handlePrimeFactorization(),
                   () => handleVariableOperation('B'),
                   "° ' \""
@@ -3775,7 +3643,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => handleSmartKey(
-                  () => handleFractionKey(),
+                  () => handleFractionKey('÷'),
                   () => handleToken('C', 'func', 'OP_NCR')
                 )}
                 aria-label="Divide key"
