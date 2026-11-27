@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  Power, Sparkles
+  Clock, Power, Settings, Sparkles
 } from 'lucide-react';
 import { 
   AngleMode, DisplayFormat, HistoryItem,
@@ -155,6 +155,8 @@ interface DisplayWorkspaceProps {
   peekEntries: MergedHistoryEntry[];
   onInsertHistoryEntryResult: (entry: MergedHistoryEntry) => void;
   onLongPressHistoryEntry: (entry: MergedHistoryEntry, rect: DOMRect) => void;
+  onOpenHistory: () => void;
+  onOpenSettings: () => void;
 }
 
 const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
@@ -171,7 +173,11 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
   peekEntries,
   onInsertHistoryEntryResult,
   onLongPressHistoryEntry,
+  onOpenHistory,
+  onOpenSettings,
 }) => {
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const [maxPeekLines, setMaxPeekLines] = useState<0 | 1 | 2>(2);
   const activeInputContainerRef = useRef<HTMLDivElement>(null);
   const activeInputWrapperRef = useRef<HTMLDivElement>(null);
   const exprScrollRef = useRef<HTMLDivElement>(null);
@@ -206,7 +212,19 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
   const histPointerStartRef = useRef<{ x: number; y: number; fired: boolean }>({ x: 0, y: 0, fired: false });
 
   useEffect(() => {
+    const el = workspaceRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const updateLines = () => {
+      const h = el.clientHeight;
+      if (h >= 242) setMaxPeekLines(2);
+      else if (h >= 194) setMaxPeekLines(1);
+      else setMaxPeekLines(0);
+    };
+    updateLines();
+    const ro = new ResizeObserver(updateLines);
+    ro.observe(el);
     return () => {
+      ro.disconnect();
       if (exprPointerRef.current.timerId !== null) {
         window.clearTimeout(exprPointerRef.current.timerId);
       }
@@ -288,8 +306,11 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
     }
   }, [isCalculated, errorMessage]);
 
-  // Display top 2 history entries oldest-on-top, newest-on-bottom
-  const inlineHistory = useMemo(() => [...peekEntries].reverse(), [peekEntries]);
+  // Display up to 2 history entries oldest-on-top, newest-on-bottom (adaptive to display height)
+  const inlineHistory = useMemo(
+    () => [...peekEntries.slice(0, maxPeekLines)].reverse(),
+    [peekEntries, maxPeekLines]
+  );
 
   const cancelExprTimer = () => {
     if (exprPointerRef.current.timerId !== null) {
@@ -381,12 +402,46 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
   };
 
   return (
-    <div data-testid="display-workspace" className="display-workspace select-none">
-      {/* 1. TOP HISTORY LINES (Last 2 completed calculations, older lines paler, >=48dp tappable) */}
+    <div ref={workspaceRef} data-testid="display-workspace" className="display-workspace select-none">
+      {/* 0. TOP ROW NAVIGATION BUTTONS: History (clock, top-left) & Settings (gear, top-right) */}
+      <div
+        data-testid="display-top-nav"
+        className="w-full shrink-0 flex items-center justify-between"
+      >
+        <button
+          type="button"
+          data-testid="display-history-btn"
+          onClick={() => {
+            playKeyClick('action');
+            triggerHaptic('action');
+            onOpenHistory();
+          }}
+          aria-label="History"
+          className="min-w-[48px] min-h-[48px] w-12 h-12 flex items-center justify-center rounded-xl text-[var(--display-muted)] active:text-[var(--display-text)] focus-visible:text-[var(--display-text)] cursor-pointer transition-colors"
+        >
+          <Clock className="w-5 h-5" />
+        </button>
+
+        <button
+          type="button"
+          data-testid="display-settings-btn"
+          onClick={() => {
+            playKeyClick('action');
+            triggerHaptic('action');
+            onOpenSettings();
+          }}
+          aria-label="Settings"
+          className="min-w-[48px] min-h-[48px] w-12 h-12 flex items-center justify-center rounded-xl text-[var(--display-muted)] active:text-[var(--display-text)] focus-visible:text-[var(--display-text)] cursor-pointer transition-colors"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* 1. TOP HISTORY LINES (Last 2 completed calculations, older lines paler, >=48dp tappable, no tooltips) */}
       {inlineHistory.length > 0 && (
         <div
           data-testid="history-peek-zone"
-          className="calc-peek-zone pt-1"
+          className="calc-peek-zone"
         >
           {inlineHistory.map((entry, idx) => {
             const isOlder = inlineHistory.length > 1 && idx === 0;
@@ -434,7 +489,7 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
                     histHoldTimerRef.current = null;
                   }
                 }}
-                title="Tap to insert result · Hold for options"
+                aria-label={`Insert result ${entry.primary.result}`}
                 className={`w-full min-h-[48px] px-1 flex items-center justify-end text-right rounded-lg cursor-pointer transition-opacity active:opacity-60 ${
                   isOlder ? 'text-[var(--display-muted-pale)]' : 'text-[var(--display-muted)]'
                 }`}
@@ -519,7 +574,7 @@ const DisplayWorkspace: React.FC<DisplayWorkspaceProps> = React.memo(({
                       triggerHaptic('action');
                       onCopyResult(rawActiveResult);
                     }}
-                    title="Tap to copy result"
+                    aria-label={`Copy result ${rawActiveResult}`}
                     style={{ fontSize: activeResFontSize ? `${activeResFontSize}px` : undefined }}
                     className={`w-full min-h-[48px] flex items-center justify-end text-right cursor-pointer select-text transition-opacity active:opacity-70 ${
                       isCalculated
@@ -2103,6 +2158,12 @@ export default function App() {
           setSetupRowIndex(3);
           setSetupPageIndex((p) => (p - 1 + SETUP_PAGES.length) % SETUP_PAGES.length);
         }
+      } else if (direction === 'RIGHT') {
+        setSetupRowIndex(0);
+        setSetupPageIndex((p) => (p + 1) % SETUP_PAGES.length);
+      } else if (direction === 'LEFT') {
+        setSetupRowIndex(0);
+        setSetupPageIndex((p) => (p - 1 + SETUP_PAGES.length) % SETUP_PAGES.length);
       }
       return;
     }
@@ -2477,10 +2538,12 @@ export default function App() {
           style={{
             paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
             paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
-            paddingTop: 'max(8px, env(safe-area-inset-top, 8px))',
+            paddingTop: 'max(24px, env(safe-area-inset-top, 24px))',
             paddingBottom: '6px',
+            touchAction: 'none',
+            overscrollBehavior: 'none',
           }}
-          className="flex-1 w-full min-h-[160px] lcd-screen-bg flex flex-col justify-between relative select-none"
+          className="flex-1 w-full min-h-[160px] lcd-screen-bg flex flex-col justify-between relative select-none touch-none overscroll-none"
         >
           <CopiedToast visible={copiedToastVisible} />
 
@@ -2540,6 +2603,8 @@ export default function App() {
                           onLongPressHistoryEntry={(entry, rect) => {
                             setContextMenuEntry({ entry, rect });
                           }}
+                          onOpenHistory={() => setHistoryDetent(1)}
+                          onOpenSettings={() => setIsSettingsModalOpen(true)}
                         />
                       </div>
                     )
@@ -3015,7 +3080,12 @@ export default function App() {
                 onClick={() => {
                   playKeyClick('action');
                   if (shiftActive) {
-                    setDisplayMenu((prev) => (prev === 'SETUP' ? 'NONE' : 'SETUP'));
+                    setDisplayMenu((prev) => {
+                      if (prev === 'SETUP') return 'NONE';
+                      setSetupPageIndex(0);
+                      setSetupRowIndex(0);
+                      return 'SETUP';
+                    });
                     setShiftActive(false);
                   } else if (displayMenu === 'MENU') {
                     closeInDisplayMenu('NONE');

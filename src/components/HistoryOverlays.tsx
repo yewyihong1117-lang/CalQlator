@@ -306,7 +306,7 @@ export const CopiedToast: React.FC<CopiedToastProps> = ({ visible, label = 'Copi
       data-testid="copied-toast"
       role="status"
       aria-live="polite"
-      className="absolute top-3 left-1/2 -translate-x-1/2 z-50 px-4 py-1.5 rounded-full bg-[var(--display-surface)] border border-[var(--display-divider)] text-xs font-semibold text-[var(--display-text)] shadow-lg pointer-events-none select-none"
+      className="absolute top-[max(24px,env(safe-area-inset-top,24px))] left-1/2 -translate-x-1/2 z-50 px-4 py-1.5 rounded-full bg-[var(--display-surface)] border border-[var(--display-divider)] text-xs font-semibold text-[var(--display-text)] shadow-lg pointer-events-none select-none"
     >
       {label}
     </div>
@@ -354,7 +354,7 @@ export const HistoryUndoSnackbar: React.FC<HistoryUndoSnackbarProps> = ({
       data-testid="history-undo-snackbar"
       role="status"
       aria-live="polite"
-      className="absolute bottom-3 left-3 right-3 z-50 min-h-[48px] px-3.5 py-1.5 rounded-2xl bg-[var(--display-surface)] border border-[var(--ui-accent)]/45 shadow-xl flex items-center justify-between gap-2 text-xs text-[var(--display-text)]"
+      className="absolute bottom-[max(24px,env(safe-area-inset-bottom,24px))] left-3 right-3 z-50 min-h-[48px] px-3.5 py-1.5 rounded-2xl bg-[var(--display-surface)] border border-[var(--ui-accent)]/45 shadow-xl flex items-center justify-between gap-2 text-xs text-[var(--display-text)]"
     >
       <span className="font-medium truncate">{message}</span>
       <div className="flex items-center gap-1 shrink-0">

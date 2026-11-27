@@ -75,10 +75,10 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
       }}
       className="absolute inset-0 z-40 bg-[var(--display-bg)] text-[var(--display-text)] flex flex-col overflow-hidden"
     >
-      {/* Top Bar & Swipe-Up Handle */}
+      {/* Top Bar */}
       <div
         data-testid="history-sheet-top-bar"
-        className="px-4 pt-[max(10px,env(safe-area-inset-top,10px))] pb-2.5 border-b border-[var(--display-divider)] bg-[var(--display-bg)] flex flex-col gap-2 touch-none shrink-0"
+        className="px-4 pt-[max(24px,env(safe-area-inset-top,24px))] pb-2.5 border-b border-[var(--display-divider)] bg-[var(--display-bg)] flex flex-col gap-2 shrink-0"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -114,10 +114,9 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
                 onOpenSettings();
               }}
               aria-label="Settings and Modes"
-              title="Settings"
-              className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-xl text-[var(--display-muted)] hover:text-[var(--display-text)] hover:bg-[var(--display-surface)] cursor-pointer"
+              className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-xl text-[var(--display-muted)] active:text-[var(--display-text)] focus-visible:text-[var(--display-text)] cursor-pointer transition-colors"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-5 h-5" />
             </button>
             <button
               type="button"
@@ -127,10 +126,9 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
                 onClose();
               }}
               aria-label="Close history"
-              title="Close history"
-              className="min-w-[48px] min-h-[48px] -mr-2 flex items-center justify-center rounded-xl text-[var(--display-muted)] hover:text-[var(--display-text)] hover:bg-[var(--display-surface)] cursor-pointer"
+              className="min-w-[48px] min-h-[48px] -mr-2 flex items-center justify-center rounded-xl text-[var(--display-muted)] active:text-[var(--display-text)] focus-visible:text-[var(--display-text)] cursor-pointer transition-colors"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -152,7 +150,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="Clear search"
-              className="absolute right-0 min-w-[48px] min-h-[48px] flex items-center justify-center rounded-xl text-[var(--display-muted)] hover:text-[var(--display-text)] cursor-pointer"
+              className="absolute right-0 min-w-[48px] min-h-[48px] flex items-center justify-center rounded-xl text-[var(--display-muted)] active:text-[var(--display-text)] cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -175,22 +173,23 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
           emptySubtitle={
             searchQuery.trim()
               ? 'Try another search term'
-              : 'Tap any line to insert result · Swipe up to close'
+              : 'Tap any line to insert result into expression'
           }
           testId="history-full-virtual-list"
         />
       </div>
 
-      {/* Bottom Swipe-Up Hint Bar */}
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Swipe up or tap to close history"
-        className="shrink-0 w-full min-h-[48px] flex flex-col items-center justify-center gap-1 border-t border-[var(--display-divider)] bg-[var(--display-bg)] cursor-pointer"
-      >
-        <span className="w-[36px] h-[4px] rounded-full bg-[var(--display-muted)]/60" />
-        <span className="text-[10px] text-[var(--display-muted)]">Swipe up to close</span>
-      </button>
+      {/* Bottom Close Bar (>=24px clear of bottom screen edge) */}
+      <div className="shrink-0 w-full pb-[max(24px,env(safe-area-inset-bottom,24px))] border-t border-[var(--display-divider)] bg-[var(--display-bg)]">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close history"
+          className="w-full min-h-[48px] flex items-center justify-center text-xs font-medium text-[var(--display-muted)] active:text-[var(--display-text)] cursor-pointer transition-colors"
+        >
+          Close history
+        </button>
+      </div>
     </div>
   );
 };

@@ -67,7 +67,7 @@ export function useHistorySheetMotion({
 
       const t = clamp(p, 0, 1.04);
       const showFull = p > 0.004 || (isMoving && p > 0);
-      const fullY = -(1 - t) * Math.max(320, mainH);
+      const fullY = (1 - t) * Math.max(320, mainH);
       const fullOp = t <= 0 ? 0 : clamp(t * 4.5, 0, 1);
 
       fullEl.style.willChange = isMoving ? 'transform, opacity' : '';
@@ -183,18 +183,15 @@ export function useHistorySheetMotion({
 
   const handleDragStart = useCallback(
     (e: React.PointerEvent, source: 'display' | 'full') => {
-      if (source === 'display' && !enabled) return;
+      if (source !== 'display' || !enabled) return;
       if (e.button !== 0 && e.pointerType === 'mouse') return;
 
+      // Require touch to begin at least 80px below top edge and 24px above bottom edge
+      const winH = typeof window !== 'undefined' ? window.innerHeight : 9999;
+      if (e.clientY < 80 || e.clientY > winH - 24) return;
+
       const target = e.target as HTMLElement | null;
-      if (source === 'full') {
-        if (target?.closest('input')) return;
-        // If dragging inside the scrollable history list and it isn't at the top, let list scroll naturally
-        const scroller = target?.closest('[data-testid="history-full-virtual-list"]') as HTMLElement | null;
-        if (scroller && scroller.scrollTop > 2 && !target?.closest('[data-testid="history-sheet-top-bar"]')) {
-          return;
-        }
-      }
+      if (target?.closest('button')) return;
 
       const startP = getCurrentProgress();
       dragRef.current = {
@@ -228,9 +225,9 @@ export function useHistorySheetMotion({
           dragRef.current = null;
           return;
         }
-        const wantsDown = drag.source === 'display' && dy > 14 && Math.abs(dy) > Math.abs(dx) * 1.2;
-        const wantsUp = drag.source === 'full' && dy < -14 && Math.abs(dy) > Math.abs(dx) * 1.2;
-        if (!wantsDown && !wantsUp) return;
+        // Only swipe UP on display opens History; swipe-down is completely disabled
+        const wantsUpOpen = drag.source === 'display' && dy < -14 && Math.abs(dy) > Math.abs(dx) * 1.2;
+        if (!wantsUpOpen) return;
 
         drag.axis = 'y';
         animTokenRef.current++;
@@ -251,9 +248,9 @@ export function useHistorySheetMotion({
       drag.lastY = e.clientY;
       drag.lastTime = now;
 
-      const span = Math.max(260, dimsRef.current.mainH * 0.62);
+      const span = Math.max(240, dimsRef.current.mainH * 0.52);
       const effectiveDy = e.clientY - drag.startY;
-      const rawP = drag.startP + effectiveDy / span;
+      const rawP = drag.startP + (-effectiveDy) / span;
       const nextP =
         rawP > 1
           ? 1 + Math.min(0.04, (rawP - 1) * 0.12)
@@ -283,12 +280,12 @@ export function useHistorySheetMotion({
       const vy = drag.velocityY;
       let target: HistoryDetent;
 
-      if (vy > 0.35) {
+      if (vy < -0.35) {
         target = 1;
-      } else if (vy < -0.35) {
+      } else if (vy > 0.35) {
         target = 0;
       } else {
-        target = p >= 0.32 ? 1 : 0;
+        target = p >= 0.25 ? 1 : 0;
       }
 
       snapToDetent(target);
